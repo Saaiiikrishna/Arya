@@ -1,0 +1,296 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── ENUMS ───────────────────────────────────────────────
+
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+  MODERATOR
+}
+
+enum QuestionType {
+  TEXT
+  TEXTAREA
+  NUMBER
+  SELECT
+  MULTISELECT
+  BOOLEAN
+  DATE
+  EMAIL
+  PHONE
+  URL
+}
+
+enum PhaseTag {
+  INITIAL
+  ADDITIONAL
+}
+
+enum CriteriaOperator {
+  EQ
+  NEQ
+  GT
+  LT
+  GTE
+  LTE
+  IN
+  NOT_IN
+  CONTAINS
+  NOT_CONTAINS
+}
+
+enum ApplicantStatus {
+  PENDING
+  ELIGIBLE
+  INELIGIBLE
+  ACTIVE
+  REMOVED
+  CONSENTED
+  FINALIZED
+}
+
+enum BatchStatus {
+  FILLING
+  SCREENING
+  TEAM_FORMATION
+  PROCESSING
+  PENDING_CONSENT
+  FINALIZED
+  PRODUCTION
+}
+
+enum NotificationType {
+  EMAIL
+  IN_APP
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum DocumentType {
+  CONSENT
+  AGREEMENT
+  OTHER
+}
+
+enum DocumentStatus {
+  PENDING
+  UPLOADED
+  VERIFIED
+}
+
+// ─── MODELS ──────────────────────────────────────────────
+
+model Admin {
+  id           String    @id @default(uuid()) @db.Uuid
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  firstName    String    @map("first_name")
+  lastName     String    @map("last_name")
+  role         AdminRole @default(ADMIN)
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@map("admins")
+}
+
+model Question {
+  id         String       @id @default(uuid()) @db.Uuid
+  label      String
+  helpText   String?      @map("help_text")
+  type       QuestionType
+  options    Json?        // For SELECT/MULTISELECT: [{ value: string, label: string }]
+  sortOrder  Int          @default(0) @map("sort_order")
+  isRequired Boolean      @default(true) @map("is_required")
+  isActive   Boolean      @default(true) @map("is_active")
+  category   String?
+  phaseTag   PhaseTag     @default(INITIAL) @map("phase_tag")
+  validation Json?        // { min, max, pattern, etc. }
+  createdAt  DateTime     @default(now()) @map("created_at")
+  updatedAt  DateTime     @updatedAt @map("updated_at")
+
+  answers             Answer[]
+  eligibilityCriteria EligibilityCriteria[]
+
+  @@index([phaseTag, isActive])
+  @@index([sortOrder])
+  @@map("questions")
+}
+
+model EligibilityCriteria {
+  id         String           @id @default(uuid()) @db.Uuid
+  questionId String           @map("question_id") @db.Uuid
+  operator   CriteriaOperator
+  value      Json             // The value to compare against
+  weight     Float            @default(1.0) // Weight for team matching scoring
+  isActive   Boolean          @default(true) @map("is_active")
+  createdAt  DateTime         @default(now()) @map("created_at")
+  updatedAt  DateTime         @updatedAt @map("updated_at")
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([questionId])
+  @@map("eligibility_criteria")
+}
+
+model Applicant {
+  id             String          @id @default(uuid()) @db.Uuid
+  email          String          @unique
+  firstName      String          @map("first_name")
+  lastName       String          @map("last_name")
+  phone          String?
+  status         ApplicantStatus @default(PENDING)
+  batchId        String?         @map("batch_id") @db.Uuid
+  teamId         String?         @map("team_id") @db.Uuid
+  consentGiven   Boolean         @default(false) @map("consent_given")
+  consentDocUrl  String?         @map("consent_doc_url")
+  accessToken    String          @unique @map("access_token") @db.Uuid // Unique token for user-specific links
+  appliedAt      DateTime        @default(now()) @map("applied_at")
+  movedAt        DateTime?       @map("moved_at") // When moved between batches
+  removedAt      DateTime?       @map("removed_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+
+  batch         Batch?         @relation(fields: [batchId], references: [id])
+  team          Team?          @relation(fields: [teamId], references: [id])
+  answers       Answer[]
+  notifications Notification[]
+  documents     Document[]
+
+  @@index([status])
+  @@index([batchId])
+  @@index([teamId])
+  @@index([appliedAt])
+  @@index([accessToken])
+  @@map("applicants")
+}
+
+model Answer {
+  id          String   @id @default(uuid()) @db.Uuid
+  applicantId String   @map("applicant_id") @db.Uuid
+  questionId  String   @map("question_id") @db.Uuid
+  value       Json     // Supports any answer type
+  phaseTag    PhaseTag @default(INITIAL) @map("phase_tag")
+  answeredAt  DateTime @default(now()) @map("answered_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  applicant Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  question  Question  @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([applicantId, questionId, phaseTag])
+  @@index([applicantId])
+  @@index([questionId])
+  @@map("answers")
+}
+
+model Batch {
+  id                  String      @id @default(uuid()) @db.Uuid
+  batchNumber         Int         @unique @map("batch_number")
+  status              BatchStatus @default(FILLING)
+  capacity            Int         @default(1000)
+  currentCount        Int         @default(0) @map("current_count")
+  teamMinSize         Int         @default(5) @map("team_min_size")
+  teamMaxSize         Int         @default(25) @map("team_max_size")
+  teamFormationConfig Json?       @map("team_formation_config") // { weights, diversityVsSimilarity, etc. }
+  createdAt           DateTime    @default(now()) @map("created_at")
+  finalizedAt         DateTime?   @map("finalized_at")
+  productionAt        DateTime?   @map("production_at")
+  updatedAt           DateTime    @updatedAt @map("updated_at")
+
+  applicants   Applicant[]
+  teams        Team[]
+  instructions BatchInstruction[]
+
+  @@index([status])
+  @@index([batchNumber])
+  @@map("batches")
+}
+
+model Team {
+  id               String   @id @default(uuid()) @db.Uuid
+  batchId          String   @map("batch_id") @db.Uuid
+  name             String
+  memberCount      Int      @default(0) @map("member_count")
+  matchingCriteria Json?    @map("matching_criteria") // Snapshot of criteria used for formation
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  batch   Batch       @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  members Applicant[]
+
+  @@index([batchId])
+  @@map("teams")
+}
+
+model BatchInstruction {
+  id                    String   @id @default(uuid()) @db.Uuid
+  batchId               String   @map("batch_id") @db.Uuid
+  title                 String
+  content               String   @db.Text
+  additionalQuestionIds String[] @map("additional_question_ids") @db.Uuid
+  sentAt                DateTime @default(now()) @map("sent_at")
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  batch Batch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId])
+  @@map("batch_instructions")
+}
+
+model Notification {
+  id          String             @id @default(uuid()) @db.Uuid
+  applicantId String             @map("applicant_id") @db.Uuid
+  type        NotificationType   @default(EMAIL)
+  subject     String
+  body        String             @db.Text
+  status      NotificationStatus @default(PENDING)
+  metadata    Json?              // Extra data (templateId, etc.)
+  sentAt      DateTime?          @map("sent_at")
+  createdAt   DateTime           @default(now()) @map("created_at")
+
+  applicant Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+
+  @@index([applicantId])
+  @@index([status])
+  @@map("notifications")
+}
+
+model Document {
+  id          String         @id @default(uuid()) @db.Uuid
+  applicantId String         @map("applicant_id") @db.Uuid
+  type        DocumentType   @default(CONSENT)
+  fileName    String         @map("file_name")
+  fileUrl     String         @map("file_url")
+  fileSize    Int?           @map("file_size")
+  mimeType    String?        @map("mime_type")
+  status      DocumentStatus @default(PENDING)
+  uploadedAt  DateTime       @default(now()) @map("uploaded_at")
+  verifiedAt  DateTime?      @map("verified_at")
+
+  applicant Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+
+  @@index([applicantId])
+  @@index([type, status])
+  @@map("documents")
+}
+
+model EmailTemplate {
+  id        String   @id @default(uuid()) @db.Uuid
+  slug      String   @unique // e.g., "application-received", "batch-filled", "user-moved"
+  subject   String
+  body      String   @db.Text // Supports {{variable}} placeholders
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("email_templates")
+}
