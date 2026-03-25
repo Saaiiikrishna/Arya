@@ -21,13 +21,13 @@
     "postinstall": "npx prisma generate",
     "db:migrate": "npx prisma migrate dev",
     "db:push": "npx prisma db push",
-    "db:seed": "npx ts-node -r tsconfig-paths/register --compiler-options \"{\\\"module\\\":\\\"commonjs\\\"}\" prisma/seed.ts",
+    "db:seed": "cross-env TS_NODE_PROJECT=tsconfig.seed.json npx ts-node -r tsconfig-paths/register prisma/seed.ts",
     "db:studio": "npx prisma studio",
     "db:generate": "npx prisma generate",
     "db:reset": "npx prisma migrate reset"
   },
   "prisma": {
-    "seed": "npx ts-node -r tsconfig-paths/register --compiler-options \"{\\\"module\\\":\\\"commonjs\\\"}\" prisma/seed.ts"
+    "seed": "cross-env TS_NODE_PROJECT=tsconfig.seed.json npx ts-node -r tsconfig-paths/register prisma/seed.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1012.0",
@@ -41,6 +41,7 @@
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/swagger": "^11.2.6",
+    "@prisma/adapter-pg": "^7.5.0",
     "@prisma/client": "^7.5.0",
     "bcrypt": "^6.0.0",
     "bullmq": "^5.71.0",
@@ -50,6 +51,7 @@
     "ioredis": "^5.10.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
+    "pg": "^8.20.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "uuid": "^13.0.0"
@@ -65,8 +67,10 @@
     "@types/jest": "^30.0.0",
     "@types/node": "^22.10.7",
     "@types/passport-jwt": "^4.0.1",
+    "@types/pg": "^8.18.0",
     "@types/supertest": "^6.0.2",
     "@types/uuid": "^10.0.0",
+    "cross-env": "^10.1.0",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-prettier": "^5.2.2",

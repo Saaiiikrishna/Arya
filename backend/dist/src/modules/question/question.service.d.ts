@@ -41,8 +41,8 @@ export declare class QuestionService {
             createdAt: Date;
             updatedAt: Date;
             questionId: string;
-            operator: import("@prisma/client").$Enums.CriteriaOperator;
             value: import("@prisma/client/runtime/client").JsonValue;
+            operator: import("@prisma/client").$Enums.CriteriaOperator;
             weight: number;
         }[];
     } & {

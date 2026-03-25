@@ -27,7 +27,9 @@ export class EmailService {
         secretAccessKey: this.configService.get<string>('AWS_SECRET_ACCESS_KEY', ''),
       },
     });
-    this.fromEmail = this.configService.get<string>('AWS_SES_FROM_EMAIL', 'noreply@example.com');
+    const fromAddress = this.configService.get<string>('AWS_SES_FROM_EMAIL', 'noreply@example.com');
+    const fromName = this.configService.get<string>('AWS_SES_FROM_NAME', 'Aryavartham Support');
+    this.fromEmail = `${fromName} <${fromAddress}>`;
   }
 
   async sendEmail(params: SendEmailParams): Promise<boolean> {

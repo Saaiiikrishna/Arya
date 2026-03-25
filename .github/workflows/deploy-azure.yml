@@ -1,0 +1,54 @@
+name: Deploy Complete Application to Azure Container Apps
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy-backend-and-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v3
+
+      - name: Log in to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Install Azure Container Apps Extension
+        run: az extension add --name containerapp --upgrade
+
+      - name: Deploy Backend (NestJS)
+        run: |
+          az containerapp up \
+            --name arya-backend-api \
+            --resource-group arya-prod-rg \
+            --location centralindia \
+            --source ./backend \
+            --ingress external \
+            --target-port 3001 \
+            --env-vars "DATABASE_URL=${{ secrets.DATABASE_URL }}" "PRISMA_DATASOURCE_URL=${{ secrets.DATABASE_URL }}" "REDIS_HOST=arya-prod-redis-cache.redis.cache.windows.net" "REDIS_PORT=6380" "AWS_REGION=ap-south-2" "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" "AWS_SES_FROM_EMAIL=support@aryavartham.com" "AWS_SES_FROM_NAME=Aryavartham Support" "NODE_ENV=production"
+
+      - name: Get Backend URL
+        id: get-backend-url
+        run: |
+          BACKEND_FQDN=$(az containerapp show --name arya-backend-api --resource-group arya-prod-rg --query properties.configuration.ingress.fqdn -o tsv)
+          echo "backend_url=https://$BACKEND_FQDN" >> $GITHUB_ENV
+
+      - name: Deploy Frontend (NextJS)
+        run: |
+          az containerapp up \
+            --name arya-frontend-web \
+            --resource-group arya-prod-rg \
+            --location centralindia \
+            --source ./frontend \
+            --ingress external \
+            --target-port 3000 \
+            --env-vars "NEXT_PUBLIC_API_URL=${{ env.backend_url }}"
+
+      - name: Apply Auto-Scaling Rules
+        run: |
+          az containerapp update --name arya-frontend-web --resource-group arya-prod-rg --min-replicas 0 --max-replicas 50
+          az containerapp update --name arya-backend-api --resource-group arya-prod-rg --min-replicas 0 --max-replicas 50

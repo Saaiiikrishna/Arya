@@ -31,9 +31,9 @@ export declare class ApplicantController {
             updatedAt: Date;
             phaseTag: import("@prisma/client").$Enums.PhaseTag;
             questionId: string;
-            value: import("@prisma/client/runtime/client").JsonValue;
             answeredAt: Date;
             applicantId: string;
+            value: import("@prisma/client/runtime/client").JsonValue;
         })[];
     } & {
         id: string;
@@ -151,9 +151,9 @@ export declare class ApplicantController {
             updatedAt: Date;
             phaseTag: import("@prisma/client").$Enums.PhaseTag;
             questionId: string;
-            value: import("@prisma/client/runtime/client").JsonValue;
             answeredAt: Date;
             applicantId: string;
+            value: import("@prisma/client/runtime/client").JsonValue;
         })[];
         notifications: {
             id: string;
@@ -162,9 +162,9 @@ export declare class ApplicantController {
             body: string;
             status: import("@prisma/client").$Enums.NotificationStatus;
             type: import("@prisma/client").$Enums.NotificationType;
+            sentAt: Date | null;
             applicantId: string;
             metadata: import("@prisma/client/runtime/client").JsonValue | null;
-            sentAt: Date | null;
         }[];
         documents: {
             id: string;

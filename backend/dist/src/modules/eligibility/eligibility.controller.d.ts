@@ -14,8 +14,8 @@ export declare class EligibilityController {
         createdAt: Date;
         updatedAt: Date;
         questionId: string;
-        operator: import("@prisma/client").$Enums.CriteriaOperator;
         value: import("@prisma/client/runtime/client").JsonValue;
+        operator: import("@prisma/client").$Enums.CriteriaOperator;
         weight: number;
     }>;
     findAll(): Promise<({
@@ -29,8 +29,8 @@ export declare class EligibilityController {
         createdAt: Date;
         updatedAt: Date;
         questionId: string;
-        operator: import("@prisma/client").$Enums.CriteriaOperator;
         value: import("@prisma/client/runtime/client").JsonValue;
+        operator: import("@prisma/client").$Enums.CriteriaOperator;
         weight: number;
     })[]>;
     update(id: string, body: any): Promise<{
@@ -39,8 +39,8 @@ export declare class EligibilityController {
         createdAt: Date;
         updatedAt: Date;
         questionId: string;
-        operator: import("@prisma/client").$Enums.CriteriaOperator;
         value: import("@prisma/client/runtime/client").JsonValue;
+        operator: import("@prisma/client").$Enums.CriteriaOperator;
         weight: number;
     }>;
     remove(id: string): Promise<{
@@ -49,8 +49,8 @@ export declare class EligibilityController {
         createdAt: Date;
         updatedAt: Date;
         questionId: string;
-        operator: import("@prisma/client").$Enums.CriteriaOperator;
         value: import("@prisma/client/runtime/client").JsonValue;
+        operator: import("@prisma/client").$Enums.CriteriaOperator;
         weight: number;
     }>;
     screenBatch(batchId: string): Promise<{

@@ -82,9 +82,9 @@ export declare class TeamService {
                 updatedAt: Date;
                 phaseTag: import("@prisma/client").$Enums.PhaseTag;
                 questionId: string;
-                value: import("@prisma/client/runtime/client").JsonValue;
                 answeredAt: Date;
                 applicantId: string;
+                value: import("@prisma/client/runtime/client").JsonValue;
             })[];
         } & {
             id: string;
