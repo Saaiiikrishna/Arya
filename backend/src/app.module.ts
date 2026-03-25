@@ -24,6 +24,7 @@ import { JobsModule } from './modules/jobs';
         connection: {
           host: configService.get<string>('REDIS_HOST', 'localhost'),
           port: configService.get<number>('REDIS_PORT', 6379),
+          ...(String(configService.get('REDIS_PORT')) === '6380' ? { tls: {} } : {}),
         },
       }),
       inject: [ConfigService],

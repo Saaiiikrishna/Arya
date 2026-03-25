@@ -50,7 +50,7 @@ jobs:
 
       - name: Deploy Frontend (NextJS)
         run: |
-          echo "NEXT_PUBLIC_API_URL=${{ env.backend_url }}" > ./frontend/.env.production
+          echo "NEXT_PUBLIC_API_URL=${{ env.backend_url }}/api" > ./frontend/.env.production
           az containerapp up \
             --name arya-frontend-web \
             --resource-group arya-prod-rg \
@@ -58,7 +58,7 @@ jobs:
             --source ./frontend \
             --ingress external \
             --target-port 3000 \
-            --env-vars "NEXT_PUBLIC_API_URL=${{ env.backend_url }}"
+            --env-vars "NEXT_PUBLIC_API_URL=${{ env.backend_url }}/api"
 
       - name: Apply Auto-Scaling Rules
         run: |

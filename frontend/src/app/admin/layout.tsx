@@ -9,7 +9,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const { isAuthenticated, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
-  const isLoginPage = pathname === '/admin/login';
+  const isLoginPage = pathname?.startsWith('/admin/login');
 
   useEffect(() => {
     if (!loading && !isAuthenticated && !isLoginPage) {
