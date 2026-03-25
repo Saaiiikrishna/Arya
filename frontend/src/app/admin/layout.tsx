@@ -1,19 +1,21 @@
 'use client';
 
 import { useAuth } from '@/lib/auth';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useEffect } from 'react';
 import AdminSidebar from '@/components/AdminSidebar';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, loading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
+  const isLoginPage = pathname === '/admin/login';
 
   useEffect(() => {
-    if (!loading && !isAuthenticated) {
+    if (!loading && !isAuthenticated && !isLoginPage) {
       router.push('/admin/login');
     }
-  }, [loading, isAuthenticated, router]);
+  }, [loading, isAuthenticated, router, isLoginPage]);
 
   if (loading) {
     return (
@@ -23,6 +25,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     );
   }
 
+  // If it's the login page, bypass layout rendering and auth checks
+  if (isLoginPage) {
+    return <>{children}</>;
+  }
+
+  // Prevent unauthenticated users from seeing the protected layout
   if (!isAuthenticated) return null;
 
   return (
