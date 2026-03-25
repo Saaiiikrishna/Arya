@@ -19,8 +19,15 @@ async function bootstrap() {
   );
 
   // CORS
+  const frontendUrl = configService.get<string>('FRONTEND_URL', 'http://localhost:3000');
+  const allowedOrigins = [
+    frontendUrl,
+    'http://localhost:3005',
+    'https://aryavartham.com',
+    'https://www.aryavartham.com'
+  ];
   app.enableCors({
-    origin: configService.get<string>('FRONTEND_URL', 'http://localhost:3000'),
+    origin: allowedOrigins,
     credentials: true,
   });
 

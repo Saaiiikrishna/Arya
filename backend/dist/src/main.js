@@ -13,8 +13,15 @@ async function bootstrap() {
         transform: true,
         transformOptions: { enableImplicitConversion: true },
     }));
+    const frontendUrl = configService.get('FRONTEND_URL', 'http://localhost:3000');
+    const allowedOrigins = [
+        frontendUrl,
+        'http://localhost:3005',
+        'https://aryavartham.com',
+        'https://www.aryavartham.com'
+    ];
     app.enableCors({
-        origin: configService.get('FRONTEND_URL', 'http://localhost:3000'),
+        origin: allowedOrigins,
         credentials: true,
     });
     const port = configService.get('PORT', 3001);

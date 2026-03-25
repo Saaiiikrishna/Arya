@@ -33,6 +33,7 @@ exports.AppModule = AppModule = __decorate([
                     connection: {
                         host: configService.get('REDIS_HOST', 'localhost'),
                         port: configService.get('REDIS_PORT', 6379),
+                        ...(String(configService.get('REDIS_PORT')) === '6380' ? { tls: {} } : {}),
                     },
                 }),
                 inject: [config_1.ConfigService],
