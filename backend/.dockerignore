@@ -1,0 +1,14 @@
+node_modules
+npm-debug.log
+dist
+.env
+.env.*
+.git
+.gitignore
+*.md
+test
+coverage
+.prettierrc
+eslint.config.mjs
+test_prisma.js
+tsconfig.seed.json

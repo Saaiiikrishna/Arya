@@ -28,11 +28,15 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
+      - name: Seed Database (idempotent upserts)
+        run: |
+          cd backend
+          npx ts-node -r tsconfig-paths/register prisma/seed.ts
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
       - name: Deploy Backend (NestJS)
         run: |
-          ENV_DOMAIN=$(az containerapp env show --name arya-backend-api-env --resource-group arya-prod-rg --query properties.defaultDomain -o tsv)
-          FRONTEND_URL="https://arya-frontend-web.$ENV_DOMAIN"
-          
           az containerapp up \
             --name arya-backend-api \
             --resource-group arya-prod-rg \
@@ -40,7 +44,26 @@ jobs:
             --source ./backend \
             --ingress external \
             --target-port 3001 \
-            --env-vars "DATABASE_URL=${{ secrets.DATABASE_URL }}" "PRISMA_DATASOURCE_URL=${{ secrets.DATABASE_URL }}" "REDIS_HOST=arya-prod-redis-cache.redis.cache.windows.net" "REDIS_PORT=6380" "AWS_REGION=ap-south-2" "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" "AWS_SES_FROM_EMAIL=support@aryavartham.com" "AWS_SES_FROM_NAME=Aryavartham Support" "NODE_ENV=production" "FRONTEND_URL=$FRONTEND_URL"
+            --env-vars \
+              "DATABASE_URL=${{ secrets.DATABASE_URL }}" \
+              "PRISMA_DATASOURCE_URL=${{ secrets.DATABASE_URL }}" \
+              "REDIS_HOST=arya-prod-redis-cache.redis.cache.windows.net" \
+              "REDIS_PORT=6380" \
+              "REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}" \
+              "JWT_SECRET=${{ secrets.JWT_SECRET }}" \
+              "JWT_EXPIRATION=15m" \
+              "JWT_REFRESH_SECRET=${{ secrets.JWT_REFRESH_SECRET }}" \
+              "JWT_REFRESH_EXPIRATION=7d" \
+              "AWS_REGION=ap-south-2" \
+              "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" \
+              "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" \
+              "AWS_SES_FROM_EMAIL=support@aryavartham.com" \
+              "AWS_SES_FROM_NAME=Aryavartham Support" \
+              "AWS_S3_BUCKET=arya-documents" \
+              "NODE_ENV=production" \
+              "PORT=3001" \
+              "FRONTEND_URL=https://aryavartham.com" \
+              "BATCH_CAPACITY=1000"
 
       - name: Get Backend URL
         id: get-backend-url
@@ -60,7 +83,20 @@ jobs:
             --target-port 3000 \
             --env-vars "NEXT_PUBLIC_API_URL=${{ env.backend_url }}/api"
 
-      - name: Apply Auto-Scaling Rules
+      - name: Configure Scaling (min 1 replica to avoid cold starts)
         run: |
+          az containerapp update --name arya-backend-api --resource-group arya-prod-rg --min-replicas 1 --max-replicas 50
           az containerapp update --name arya-frontend-web --resource-group arya-prod-rg --min-replicas 0 --max-replicas 50
-          az containerapp update --name arya-backend-api --resource-group arya-prod-rg --min-replicas 0 --max-replicas 50
+
+      - name: Deactivate old revisions (keep only latest active)
+        run: |
+          # Deactivate all but the latest revision for backend
+          LATEST_BACKEND=$(az containerapp show --name arya-backend-api --resource-group arya-prod-rg --query properties.latestRevisionName -o tsv)
+          for rev in $(az containerapp revision list --name arya-backend-api --resource-group arya-prod-rg --query "[?name!='$LATEST_BACKEND'].name" -o tsv); do
+            az containerapp revision deactivate --name arya-backend-api --resource-group arya-prod-rg --revision "$rev" || true
+          done
+          # Deactivate all but the latest revision for frontend
+          LATEST_FRONTEND=$(az containerapp show --name arya-frontend-web --resource-group arya-prod-rg --query properties.latestRevisionName -o tsv)
+          for rev in $(az containerapp revision list --name arya-frontend-web --resource-group arya-prod-rg --query "[?name!='$LATEST_FRONTEND'].name" -o tsv); do
+            az containerapp revision deactivate --name arya-frontend-web --resource-group arya-prod-rg --revision "$rev" || true
+          done
