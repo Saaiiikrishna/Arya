@@ -27,52 +27,46 @@ export default function LoginPage() {
   };
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'var(--gradient-hero)',
-        padding: 'var(--space-xl)',
-      }}
-    >
-      <div
-        className="card-glass animate-fade-in"
-        style={{ width: '100%', maxWidth: 420, padding: 'var(--space-2xl)' }}
-      >
-        <div style={{ textAlign: 'center', marginBottom: 'var(--space-2xl)' }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: 'var(--space-sm)' }}>⬡</div>
-          <h1 className="page-title" style={{ fontSize: '1.75rem' }}>
-            ARYA
+    <div className="min-h-screen bg-parchment flex items-center justify-center p-8 selection:bg-forest selection:text-parchment">
+      <div className="w-full max-w-md bg-white border border-hairline p-12 shadow-[8px_8px_0px_0px_rgba(4,38,24,0.05)] animate-fade-in relative overflow-hidden">
+        {/* Decorative corner */}
+        <div className="absolute top-0 right-0 w-16 h-16 bg-forest/5 -mr-8 -mt-8 rotate-45 border border-forest/10" />
+        
+        <button 
+          type="button"
+          onClick={() => router.push('/')}
+          className="absolute top-8 left-8 text-ink/40 hover:text-forest transition-colors flex items-center gap-2 font-sans text-[10px] uppercase tracking-widest cursor-pointer z-20"
+        >
+          ← Home
+        </button>
+
+        <div className="text-center mb-12 relative z-10 pt-4">
+          <div className="flex justify-center mb-6">
+            <span className="text-4xl font-serif italic text-forest leading-none">Aryavartham</span>
+          </div>
+          <h1 className="font-serif text-2xl text-ink font-bold mb-2">
+            Administrator Access
           </h1>
-          <p className="text-muted text-sm" style={{ marginTop: 'var(--space-xs)' }}>
-            Admin Dashboard
+          <p className="font-sans text-[10px] uppercase tracking-[0.2em] text-ink/60">
+            Secure Command Center
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-6 relative z-10">
           {error && (
-            <div
-              style={{
-                padding: '0.625rem',
-                background: 'var(--color-error-bg)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-                borderRadius: 'var(--radius-md)',
-                color: 'var(--color-error)',
-                fontSize: '0.8125rem',
-              }}
-            >
+            <div className="p-4 bg-terracotta/10 border border-terracotta/30 text-terracotta text-sm font-sans italic text-center">
               {error}
             </div>
           )}
 
-          <div className="form-group">
-            <label className="form-label" htmlFor="email">Email</label>
+          <div className="flex flex-col gap-2">
+            <label className="font-sans text-[10px] uppercase tracking-widest text-forest font-semibold" htmlFor="email">
+              Credentials (Email)
+            </label>
             <input
               id="email"
               type="email"
-              className="form-input"
+              className="w-full border-b border-hairline bg-transparent pb-2 pt-1 font-sans text-ink focus:outline-none focus:border-forest transition-colors placeholder:text-ink/20"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="admin@arya.com"
@@ -81,12 +75,14 @@ export default function LoginPage() {
             />
           </div>
 
-          <div className="form-group">
-            <label className="form-label" htmlFor="password">Password</label>
+          <div className="flex flex-col gap-2">
+            <label className="font-sans text-[10px] uppercase tracking-widest text-forest font-semibold" htmlFor="password">
+              Security Key (Password)
+            </label>
             <input
               id="password"
               type="password"
-              className="form-input"
+              className="w-full border-b border-hairline bg-transparent pb-2 pt-1 font-sans text-ink focus:outline-none focus:border-forest transition-colors placeholder:text-ink/20"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
@@ -96,16 +92,16 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            className="btn btn-primary btn-lg"
             disabled={loading}
-            style={{ marginTop: 'var(--space-sm)', width: '100%' }}
+            className="mt-6 w-full bg-forest text-parchment py-4 font-sans text-[10px] uppercase tracking-[0.2em] font-bold hover:bg-forest/90 transition-all border border-forest disabled:opacity-50 disabled:cursor-not-allowed group"
           >
             {loading ? (
-              <>
-                <div className="spinner" /> Signing in...
-              </>
+              <span className="animate-pulse">Authenticating...</span>
             ) : (
-              'Sign In'
+              <span className="flex items-center justify-center gap-2">
+                Init Session 
+                <span className="text-terracotta group-hover:translate-x-1 transition-transform">→</span>
+              </span>
             )}
           </button>
         </form>

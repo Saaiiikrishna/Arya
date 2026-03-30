@@ -1,0 +1,41 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,200..800;1,6..72,200..800&family=Public+Sans:wght@100..900&display=swap');
+
+@theme {
+  --font-serif: "Newsreader", serif;
+  --font-sans: "Public Sans", sans-serif;
+
+  --color-parchment: #FEF9F0;
+  --color-forest: #133022;
+  --color-terracotta: #5B0902;
+  --color-alabaster: #FDFBF7;
+  --color-ink: #1D1C16;
+  --color-hairline: #C2C8C2;
+}
+
+@layer base {
+  body {
+    @apply bg-parchment text-ink font-sans antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-serif;
+  }
+}
+
+.editorial-underline {
+  @apply relative inline-block;
+}
+
+.editorial-underline::after {
+  content: '';
+  @apply absolute left-0 -bottom-1 w-full h-px bg-current;
+}
+
+.sharp-border {
+  @apply border border-hairline;
+}
+
+.grayscale-img {
+  @apply grayscale contrast-125;
+}

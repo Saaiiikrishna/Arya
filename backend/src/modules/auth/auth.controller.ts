@@ -15,6 +15,16 @@ export class AuthController {
     return this.authService.login(dto);
   }
 
+  @Post('google/callback')
+  async googleCallback(@Body('token') token: string) {
+    return this.authService.googleLogin(token);
+  }
+
+  @Post('test-razorpay')
+  async testRazorpay(@Body('email') email: string) {
+    return this.authService.testRazorpay(email);
+  }
+
   @Post('refresh')
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   async refresh(@Body('refreshToken') refreshToken: string) {
@@ -30,13 +40,14 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Get('me')
   async getProfile(@Request() req: any) {
-    const admin = req.user;
+    const user = req.user;
     return {
-      id: admin.id,
-      email: admin.email,
-      firstName: admin.firstName,
-      lastName: admin.lastName,
-      role: admin.role,
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+      avatarUrl: (user as any).avatarUrl,
     };
   }
 }

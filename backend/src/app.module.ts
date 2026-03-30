@@ -12,6 +12,18 @@ import { EmailModule } from './modules/email';
 import { DocumentModule } from './modules/document';
 import { EligibilityModule } from './modules/eligibility';
 import { JobsModule } from './modules/jobs';
+import { ProjectModule } from './modules/project/project.module';
+import { SprintModule } from './modules/sprint/sprint.module';
+import { LedgerModule } from './modules/ledger/ledger.module';
+import { PaymentModule } from './modules/payment/payment.module';
+// Phase 2 modules
+import { MatchingModule } from './modules/matching/matching.module';
+import { InvestorModule } from './modules/investor/investor.module';
+import { DonationModule } from './modules/donation/donation.module';
+import { TrainingModule } from './modules/training/training.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { ChatModule } from './modules/chat/chat.module';
+import { SettingsModule } from './modules/settings/settings.module';
 
 @Module({
   imports: [
@@ -56,6 +68,18 @@ import { JobsModule } from './modules/jobs';
     DocumentModule,
     EligibilityModule,
     JobsModule,
+    ProjectModule,
+    SprintModule,
+    LedgerModule,
+    PaymentModule,
+    // Phase 2 modules
+    MatchingModule,
+    InvestorModule,
+    DonationModule,
+    TrainingModule,
+    AnalyticsModule,
+    ChatModule,
+    SettingsModule,
   ],
 })
 export class AppModule {}

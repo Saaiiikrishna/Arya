@@ -110,7 +110,7 @@ async function main() {
   console.log(`✅ ${templates.length} email templates created`);
 
   // Create first batch
-  await prisma.batch.upsert({
+  const batch = await prisma.batch.upsert({
     where: { batchNumber: 1 },
     update: {},
     create: { batchNumber: 1 },

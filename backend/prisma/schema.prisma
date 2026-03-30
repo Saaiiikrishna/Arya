@@ -53,6 +53,35 @@ enum ApplicantStatus {
   REMOVED
   CONSENTED
   FINALIZED
+  TRAINING
+}
+
+enum TeamType {
+  IDEA_BASED
+  BUILDER_POOL
+}
+
+enum IdeaCategory {
+  FINTECH
+  HEALTHTECH
+  EDTECH
+  ECOMMERCE
+  SAAS
+  SOCIAL
+  AI_ML
+  BLOCKCHAIN
+  SUSTAINABILITY
+  LOGISTICS
+  MEDIA
+  GAMING
+  OTHER
+}
+
+enum CommitmentLevel {
+  FULL_TIME
+  PART_TIME
+  WEEKENDS_ONLY
+  FLEXIBLE
 }
 
 enum BatchStatus {
@@ -88,6 +117,37 @@ enum DocumentStatus {
   VERIFIED
 }
 
+enum ProjectStatus {
+  UNDER_DEVELOPMENT
+  TESTING
+  LAUNCHED
+  TRAINING
+}
+
+enum SprintStatus {
+  ON_TRACK
+  DELAYED
+  TRAINING
+}
+
+enum MilestoneType {
+  COMMON
+  CUSTOM
+}
+
+enum LedgerTransactionType {
+  DISBURSEMENT
+  UTILIZATION
+}
+
+enum PaymentStatus {
+  CREATED
+  AUTHORIZED
+  CAPTURED
+  FAILED
+  REFUNDED
+}
+
 // ─── MODELS ──────────────────────────────────────────────
 
 model Admin {
@@ -98,6 +158,7 @@ model Admin {
   lastName     String    @map("last_name")
   role         AdminRole @default(ADMIN)
   isActive     Boolean   @default(true) @map("is_active")
+  avatarUrl    String?   @map("avatar_url")
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
@@ -158,13 +219,26 @@ model Applicant {
   appliedAt      DateTime        @default(now()) @map("applied_at")
   movedAt        DateTime?       @map("moved_at") // When moved between batches
   removedAt      DateTime?       @map("removed_at")
+  role           String?
+  timezone       String?
+  availability   String?
+  isOnline       Boolean         @default(false) @map("is_online")
+  lastActiveAt   DateTime?       @map("last_active_at")
+  avgResponseTimeMs Int?         @map("avg_response_time_ms")
+  avatarUrl      String?         @map("avatar_url")
+  vocation       String?         @db.Text
+  obsession      String?         @db.Text
+  heresy         String?         @db.Text
+  scarTissue     String?         @db.Text @map("scar_tissue")
   updatedAt      DateTime        @updatedAt @map("updated_at")
 
-  batch         Batch?         @relation(fields: [batchId], references: [id])
-  team          Team?          @relation(fields: [teamId], references: [id])
-  answers       Answer[]
-  notifications Notification[]
-  documents     Document[]
+  batch           Batch?           @relation(fields: [batchId], references: [id])
+  team            Team?            @relation(fields: [teamId], references: [id])
+  answers         Answer[]
+  notifications   Notification[]
+  documents       Document[]
+  payments        Payment[]
+  matchingProfile MatchingProfile?
 
   @@index([status])
   @@index([batchId])
@@ -198,6 +272,7 @@ model Batch {
   status              BatchStatus @default(FILLING)
   capacity            Int         @default(1000)
   currentCount        Int         @default(0) @map("current_count")
+  pledgeAmount        Float       @default(10000.0) @map("pledge_amount")
   teamMinSize         Int         @default(5) @map("team_min_size")
   teamMaxSize         Int         @default(25) @map("team_max_size")
   teamFormationConfig Json?       @map("team_formation_config") // { weights, diversityVsSimilarity, etc. }
@@ -216,18 +291,24 @@ model Batch {
 }
 
 model Team {
-  id               String   @id @default(uuid()) @db.Uuid
-  batchId          String   @map("batch_id") @db.Uuid
+  id               String    @id @default(uuid()) @db.Uuid
+  batchId          String    @map("batch_id") @db.Uuid
   name             String
-  memberCount      Int      @default(0) @map("member_count")
-  matchingCriteria Json?    @map("matching_criteria") // Snapshot of criteria used for formation
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
+  teamType         TeamType  @default(BUILDER_POOL) @map("team_type")
+  memberCount      Int       @default(0) @map("member_count")
+  matchingCriteria Json?     @map("matching_criteria") // Snapshot of criteria used for formation
+  matchScore       Float?    @map("match_score") // Average compatibility score
+  ideaCategory     IdeaCategory? @map("idea_category") // Primary category for IDEA_BASED teams
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
 
   batch   Batch       @relation(fields: [batchId], references: [id], onDelete: Cascade)
   members Applicant[]
+  project Project?
+  sprints Sprint[]
 
   @@index([batchId])
+  @@index([teamType])
   @@map("teams")
 }
 
@@ -293,4 +374,324 @@ model EmailTemplate {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("email_templates")
+}
+
+model Project {
+  id               String        @id @default(uuid()) @db.Uuid
+  teamId           String        @unique @map("team_id") @db.Uuid
+  projectName      String        @map("project_name")
+  targetMarket     String        @map("target_market")
+  description      String        @db.Text
+  estimatedFunds   Float         @map("estimated_funds")
+  fundedAmount     Float         @default(0) @map("funded_amount")
+  status           ProjectStatus @default(UNDER_DEVELOPMENT)
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  team             Team          @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  ledger           LedgerTransaction[]
+  
+  @@map("projects")
+}
+
+model Sprint {
+  id         String       @id @default(uuid()) @db.Uuid
+  teamId     String       @map("team_id") @db.Uuid
+  status     SprintStatus @default(ON_TRACK)
+  startDate  DateTime     @map("start_date")
+  endDate    DateTime     @map("end_date")
+  createdAt  DateTime     @default(now()) @map("created_at")
+  updatedAt  DateTime     @updatedAt @map("updated_at")
+
+  team       Team         @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  milestones Milestone[]
+
+  @@index([teamId])
+  @@map("sprints")
+}
+
+model Milestone {
+  id          String        @id @default(uuid()) @db.Uuid
+  sprintId    String        @map("sprint_id") @db.Uuid
+  title       String
+  description String?       @db.Text
+  deadline    DateTime
+  type        MilestoneType @default(CUSTOM)
+  isCompleted Boolean       @default(false) @map("is_completed")
+  completedAt DateTime?     @map("completed_at")
+  createdAt   DateTime      @default(now()) @map("created_at")
+
+  sprint      Sprint        @relation(fields: [sprintId], references: [id], onDelete: Cascade)
+
+  @@index([sprintId])
+  @@map("milestones")
+}
+
+model LedgerTransaction {
+  id          String                @id @default(uuid()) @db.Uuid
+  projectId   String                @map("project_id") @db.Uuid
+  amount      Float
+  type        LedgerTransactionType
+  description String
+  date        DateTime              @default(now())
+  
+  project     Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@map("ledger_transactions")
+}
+
+model Payment {
+  id                String        @id @default(uuid()) @db.Uuid
+  applicantId       String        @map("applicant_id") @db.Uuid
+  razorpayOrderId   String?       @map("razorpay_order_id") @unique
+  razorpayPaymentId String?       @map("razorpay_payment_id") @unique
+  razorpaySignature String?       @map("razorpay_signature")
+  amount            Float
+  currency          String        @default("INR")
+  status            PaymentStatus @default(CREATED)
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  applicant         Applicant     @relation(fields: [applicantId], references: [id])
+
+  @@index([applicantId])
+  @@map("payments")
+}
+
+// ─── MATCHING PROFILE ─────────────────────────────────────
+
+model MatchingProfile {
+  id              String          @id @default(uuid()) @db.Uuid
+  applicantId     String          @unique @map("applicant_id") @db.Uuid
+  ideaCategory    IdeaCategory?   @map("idea_category")
+  hasIdea         Boolean         @default(false) @map("has_idea")
+  ideaSummary     String?         @map("idea_summary") @db.Text
+  skills          Json            @default("[]") // Array of skill tags: ["React", "Python", "Marketing"]
+  commitmentLevel CommitmentLevel @default(FLEXIBLE) @map("commitment_level")
+  hoursPerDay     Int?            @map("hours_per_day")
+  personalityScores Json?         @map("personality_scores") // { leadership, execution, creativity, analytical }
+  experienceYears Int?            @map("experience_years")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  applicant Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+
+  @@index([ideaCategory])
+  @@index([commitmentLevel])
+  @@index([hasIdea])
+  @@map("matching_profiles")
+}
+
+// ─── INVESTOR PLATFORM ────────────────────────────────────
+
+model Investor {
+  id            String   @id @default(uuid()) @db.Uuid
+  email         String   @unique
+  firstName     String   @map("first_name")
+  lastName      String   @map("last_name")
+  firm          String?
+  bio           String?  @db.Text
+  linkedIn      String?  @map("linkedin_url")
+  interests     Json?    // Array of IdeaCategory values they're interested in
+  isApproved    Boolean  @default(false) @map("is_approved")
+  avatarUrl     String?  @map("avatar_url")
+  passwordHash  String?  @map("password_hash")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  meetingRequests MeetingRequest[]
+
+  @@map("investors")
+}
+
+model StartupShowcase {
+  id            String   @id @default(uuid()) @db.Uuid
+  teamId        String   @unique @map("team_id") @db.Uuid
+  pitchSummary  String   @map("pitch_summary") @db.Text
+  mvpDemoUrl    String?  @map("mvp_demo_url")
+  metrics       Json?    // { users, revenue, growth, etc. }
+  isPublished   Boolean  @default(false) @map("is_published")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  meetingRequests MeetingRequest[]
+
+  @@map("startup_showcases")
+}
+
+enum MeetingStatus {
+  REQUESTED
+  ACCEPTED
+  DECLINED
+  COMPLETED
+}
+
+model MeetingRequest {
+  id            String        @id @default(uuid()) @db.Uuid
+  investorId    String        @map("investor_id") @db.Uuid
+  showcaseId    String        @map("showcase_id") @db.Uuid
+  status        MeetingStatus @default(REQUESTED)
+  message       String?       @db.Text
+  scheduledAt   DateTime?     @map("scheduled_at")
+  notes         String?       @db.Text
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  investor Investor        @relation(fields: [investorId], references: [id], onDelete: Cascade)
+  showcase StartupShowcase @relation(fields: [showcaseId], references: [id], onDelete: Cascade)
+
+  @@index([investorId])
+  @@index([showcaseId])
+  @@map("meeting_requests")
+}
+
+// ─── DONATION SYSTEM ──────────────────────────────────────
+
+enum DonationType {
+  ONE_TIME
+  RECURRING
+}
+
+model Donation {
+  id                String        @id @default(uuid()) @db.Uuid
+  donorName         String        @map("donor_name")
+  donorEmail        String        @map("donor_email")
+  amount            Float
+  currency          String        @default("INR")
+  type              DonationType  @default(ONE_TIME)
+  message           String?       @db.Text
+  razorpayOrderId   String?       @map("razorpay_order_id") @unique
+  razorpayPaymentId String?       @map("razorpay_payment_id") @unique
+  status            PaymentStatus @default(CREATED)
+  isAnonymous       Boolean       @default(false) @map("is_anonymous")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  @@index([donorEmail])
+  @@index([status])
+  @@map("donations")
+}
+
+// ─── TRAINING SYSTEM ──────────────────────────────────────
+
+model TrainingModule {
+  id          String   @id @default(uuid()) @db.Uuid
+  title       String
+  description String?  @db.Text
+  content     String   @db.Text // Markdown content or external URL
+  category    String?
+  durationMin Int?     @map("duration_min") // Estimated duration in minutes
+  sortOrder   Int      @default(0) @map("sort_order")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  assignments TrainingAssignment[]
+
+  @@map("training_modules")
+}
+
+model TrainingAssignment {
+  id          String    @id @default(uuid()) @db.Uuid
+  applicantId String    @map("applicant_id") @db.Uuid
+  moduleId    String    @map("module_id") @db.Uuid
+  assignedAt  DateTime  @default(now()) @map("assigned_at")
+  completedAt DateTime? @map("completed_at")
+  score       Float?    // Score from 0-100
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  module TrainingModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@unique([applicantId, moduleId])
+  @@index([applicantId])
+  @@index([moduleId])
+  @@map("training_assignments")
+}
+
+// ─── CHAT SYSTEM ──────────────────────────────────────────
+
+model ChatRoom {
+  id        String   @id @default(uuid()) @db.Uuid
+  teamId    String?  @unique @map("team_id") @db.Uuid
+  name      String
+  isGlobal  Boolean  @default(false) @map("is_global") // For admin announcements
+  createdAt DateTime @default(now()) @map("created_at")
+
+  messages ChatMessage[]
+
+  @@map("chat_rooms")
+}
+
+model ChatMessage {
+  id              String   @id @default(uuid()) @db.Uuid
+  roomId          String   @map("room_id") @db.Uuid
+  senderId        String   @map("sender_id") @db.Uuid
+  senderName      String   @map("sender_name")
+  content         String   @db.Text
+  isAnnouncement  Boolean  @default(false) @map("is_announcement")
+  sentAt          DateTime @default(now()) @map("sent_at")
+
+  room ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId])
+  @@index([sentAt])
+  @@map("chat_messages")
+}
+
+// ─── SITE SETTINGS ────────────────────────────────────────
+
+model SiteSetting {
+  key       String   @id
+  value     String   @db.Text
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("site_settings")
+}
+
+// ─── VISITOR ANALYTICS ────────────────────────────────────
+
+model PageView {
+  id             String   @id @default(uuid()) @db.Uuid
+  sessionId      String   @map("session_id")
+  path           String
+  referrer       String?
+  ip             String?
+  country        String?
+  city           String?
+  region         String?
+  userAgent      String?  @map("user_agent") @db.Text
+  browser        String?
+  os             String?
+  device         String?           // desktop | mobile | tablet
+  screenWidth    Int?     @map("screen_width")
+  screenHeight   Int?     @map("screen_height")
+  language       String?
+  // Logged-in user info (nullable for anonymous visitors)
+  applicantId    String?  @map("applicant_id") @db.Uuid
+  applicantEmail String?  @map("applicant_email")
+  applicantName  String?  @map("applicant_name")
+  // Timing
+  duration       Int?              // time on page in seconds
+  timestamp      DateTime @default(now())
+
+  @@index([timestamp])
+  @@index([sessionId])
+  @@index([path])
+  @@index([applicantId])
+  @@map("page_views")
+}
+
+model DailyPageStat {
+  id          String   @id @default(uuid()) @db.Uuid
+  date        DateTime @db.Date
+  path        String
+  views       Int      @default(0)
+  uniqueIps   Int      @default(0) @map("unique_ips")
+  avgDuration Float?   @map("avg_duration")
+
+  @@unique([date, path])
+  @@index([date])
+  @@map("daily_page_stats")
 }

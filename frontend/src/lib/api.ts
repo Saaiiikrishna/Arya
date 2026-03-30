@@ -67,6 +67,19 @@ class ApiClient {
     return data;
   }
 
+  async googleLogin(token: string) {
+    const data = await this.request<{
+      accessToken: string;
+      refreshToken: string;
+      admin: any;
+    }>('/admin/auth/google/callback', { method: 'POST', body: { token } });
+    this.setToken(data.accessToken);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('arya_refresh', data.refreshToken);
+    }
+    return data;
+  }
+
   logout() {
     this.setToken(null);
     if (typeof window !== 'undefined') {
@@ -148,6 +161,14 @@ class ApiClient {
     return this.request<any>(`/applicants/status/${accessToken}`);
   }
 
+  async submitDossier(data: any) {
+    return this.request<any>('/applicants/dossier', { method: 'PATCH', body: data });
+  }
+
+  async createRazorpayOrder() {
+    return this.request<any>('/payments/create-order', { method: 'POST' });
+  }
+
   async submitAdditionalAnswers(accessToken: string, answers: any[]) {
     return this.request<any>(`/applicants/answers/${accessToken}`, {
       method: 'POST',
@@ -210,6 +231,95 @@ class ApiClient {
     return this.request<any>(`/admin/teams/form/${batchId}`, { method: 'POST' });
   }
 
+  // Smart Matching (Phase 2)
+  async previewMatch(batchId: string, config?: any) {
+    return this.request<any>(`/admin/matching/preview/${batchId}`, { method: 'POST', body: config });
+  }
+
+  async executeMatch(batchId: string, config?: any) {
+    return this.request<any>(`/admin/matching/execute/${batchId}`, { method: 'POST', body: config });
+  }
+
+  async moveTeamMember(applicantId: string, targetTeamId: string) {
+    return this.request<any>(`/admin/matching/move-member`, {
+      method: 'PATCH',
+      body: { applicantId, targetTeamId },
+    });
+  }
+
+  async getMatchingProfiles(batchId: string) {
+    return this.request<any[]>(`/admin/matching/profiles/${batchId}`);
+  }
+
+  // Investors (Phase 2)
+  async registerInvestor(data: any) {
+    return this.request<any>('/investors/register', { method: 'POST', body: data });
+  }
+
+  async getStartupShowcases() {
+    return this.request<any[]>('/investors/showcases');
+  }
+
+  async requestMeeting(investorId: string, data: { showcaseId: string; date: string; message?: string }) {
+    return this.request<any>(`/investors/${investorId}/meeting-request`, { method: 'POST', body: data });
+  }
+
+  // Donations (Phase 2)
+  async createDonationOrder(data: { amount: number; isAnonymous: boolean; donorName?: string; donorEmail?: string }) {
+    return this.request<any>('/donations/create-order', { method: 'POST', body: data });
+  }
+
+  async getDonationStats() {
+    return this.request<any>('/donations/stats');
+  }
+
+  // Training (Phase 2)
+  async getTrainingModules() {
+    return this.request<any[]>('/admin/training/modules');
+  }
+
+  async createTrainingModule(data: any) {
+    return this.request<any>('/admin/training/modules', { method: 'POST', body: data });
+  }
+
+  async assignTraining(data: { moduleId: string; applicantId: string; requiredBy?: string }) {
+    return this.request<any>('/admin/training/assign', { method: 'POST', body: data });
+  }
+
+  async bulkAssignTraining(data: { moduleId: string; batchId?: string; requiredBy?: string }) {
+    return this.request<any>('/admin/training/assign-bulk', { method: 'POST', body: data });
+  }
+
+  async getMyTrainingAssignments() {
+    return this.request<any[]>('/training/my-assignments');
+  }
+
+  async completeTrainingAssignment(assignmentId: string, data?: { answers: any }) {
+    return this.request<any>(`/training/assignments/${assignmentId}/complete`, { method: 'PATCH', body: data });
+  }
+
+  // Analytics (Phase 2)
+  async getAnalyticsOverview() {
+    return this.request<any>('/admin/analytics/overview');
+  }
+
+  async getBatchAnalytics(batchId: string) {
+    return this.request<any>(`/admin/analytics/batch/${batchId}`);
+  }
+
+  async getTeamRankings() {
+    return this.request<any[]>('/admin/analytics/rankings');
+  }
+
+  async getTeamReport(teamId: string) {
+    return this.request<any>(`/admin/analytics/team/${teamId}/report`);
+  }
+
+  // Chat (Phase 2)
+  async getChatRoom(teamId: string) {
+    return this.request<any>(`/chat/room/team/${teamId}`);
+  }
+
   // Documents
   async getUploadUrl(applicantId: string, fileName: string, mimeType: string) {
     return this.request<any>('/documents/upload-url', {
@@ -231,6 +341,33 @@ class ApiClient {
 
   async verifyDocument(documentId: string) {
     return this.request<any>(`/admin/documents/${documentId}/verify`, { method: 'POST' });
+  }
+
+  // Site Settings
+  async getPublicSettings() {
+    return this.request<Record<string, string>>('/settings/public');
+  }
+
+  async getSettings() {
+    return this.request<Record<string, string>>('/admin/settings');
+  }
+
+  async updateSettings(data: Record<string, string>) {
+    return this.request<{ success: boolean }>('/admin/settings', { method: 'PATCH', body: data });
+  }
+
+  // Visitor Analytics
+  async getVisitorSummary(days = 30) {
+    return this.request<any>(`/admin/settings/visitors/summary?days=${days}`);
+  }
+
+  async getVisitorPageViews(params: Record<string, string> = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.request<{ data: any[]; meta: any }>(`/admin/settings/visitors/pageviews?${qs}`);
+  }
+
+  async trackPageView(data: { sessionId: string; path: string; referrer?: string; screenWidth?: number; screenHeight?: number; language?: string; applicantId?: string; applicantEmail?: string; applicantName?: string }) {
+    return this.request<void>('/track/pageview', { method: 'POST', body: data });
   }
 }
 

@@ -1,4 +1,4 @@
-import { Injectable, ConflictException, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma';
 import { ApplyDto, SubmitAdditionalAnswersDto } from './dto';
 import { v4 as uuidv4 } from 'uuid';
@@ -112,6 +112,38 @@ export class ApplicantService {
     });
 
     return { success: true };
+  }
+
+  async submitDossier(applicantId: string, data: any) {
+    console.log('SubmitDossier called with applicantId:', applicantId);
+    console.log('Data:', JSON.stringify(data));
+    
+    // Check if applicantId is a valid UUID to avoid Prisma crash
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(applicantId)) {
+      console.error('Invalid UUID detected in submitDossier:', applicantId);
+      throw new BadRequestException('Invalid applicant ID format');
+    }
+
+    const applicant = await this.prisma.applicant.findUnique({
+      where: { id: applicantId },
+    });
+    
+    if (!applicant) {
+      console.log('Applicant NOT found in DB for ID:', applicantId);
+      throw new NotFoundException('Applicant not found');
+    }
+
+    console.log('Found applicant, updating dossier...');
+    return this.prisma.applicant.update({
+      where: { id: applicantId },
+      data: {
+        vocation: data.vocation,
+        obsession: data.obsession,
+        heresy: data.heresy,
+        scarTissue: data.scarTissue,
+      },
+    });
   }
 
   async giveConsent(accessToken: string, consentDocUrl?: string) {

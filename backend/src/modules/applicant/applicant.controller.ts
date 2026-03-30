@@ -2,11 +2,13 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Delete,
   Body,
   Param,
   Query,
   UseGuards,
+  Req,
 } from '@nestjs/common';
 import { ApplicantService } from './applicant.service';
 import { ApplyDto, SubmitAdditionalAnswersDto } from './dto';
@@ -26,6 +28,12 @@ export class ApplicantController {
   @Get('applicants/status/:accessToken')
   async getStatus(@Param('accessToken') accessToken: string) {
     return this.applicantService.findByAccessToken(accessToken);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('applicants/dossier')
+  async submitDossier(@Req() req: any, @Body() dto: any) {
+    return this.applicantService.submitDossier(req.user.sub, dto);
   }
 
   @Post('applicants/answers/:accessToken')
