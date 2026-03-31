@@ -115,13 +115,9 @@ export class ApplicantService {
   }
 
   async submitDossier(applicantId: string, data: any) {
-    console.log('SubmitDossier called with applicantId:', applicantId);
-    console.log('Data:', JSON.stringify(data));
-    
     // Check if applicantId is a valid UUID to avoid Prisma crash
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(applicantId)) {
-      console.error('Invalid UUID detected in submitDossier:', applicantId);
       throw new BadRequestException('Invalid applicant ID format');
     }
 
@@ -130,20 +126,56 @@ export class ApplicantService {
     });
     
     if (!applicant) {
-      console.log('Applicant NOT found in DB for ID:', applicantId);
       throw new NotFoundException('Applicant not found');
     }
 
-    console.log('Found applicant, updating dossier...');
-    return this.prisma.applicant.update({
+    // Update applicant with all dossier fields (multi-step form data)
+    const updated = await this.prisma.applicant.update({
       where: { id: applicantId },
       data: {
-        vocation: data.vocation,
-        obsession: data.obsession,
-        heresy: data.heresy,
-        scarTissue: data.scarTissue,
-      },
+        // Step 1: Personal Info
+        ...(data.firstName && { firstName: data.firstName }),
+        ...(data.lastName && { lastName: data.lastName }),
+        ...(data.phone && { phone: data.phone }),
+        ...(data.city && { city: data.city }),
+        ...(data.age && { age: parseInt(data.age) }),
+        // Step 4: Creative Assessment
+        ...(data.vocation && { vocation: data.vocation }),
+        ...(data.obsession && { obsession: data.obsession }),
+        ...(data.heresy && { heresy: data.heresy }),
+        ...(data.scarTissue && { scarTissue: data.scarTissue }),
+        // Step 5: Agreement
+        ...(data.agreementAccepted !== undefined && { agreementAccepted: data.agreementAccepted }),
+      } as any,
     });
+
+    // Upsert MatchingProfile with skills/commitment/idea data (Step 2 & 3)
+    if (data.skills || data.commitmentLevel || data.ideaCategory || data.hasIdea !== undefined) {
+      await this.prisma.matchingProfile.upsert({
+        where: { applicantId },
+        create: {
+          applicantId,
+          skills: data.skills || [],
+          commitmentLevel: data.commitmentLevel || 'FLEXIBLE',
+          hoursPerDay: data.hoursPerDay ? parseInt(data.hoursPerDay) : null,
+          experienceYears: data.experienceYears ? parseInt(data.experienceYears) : null,
+          hasIdea: data.hasIdea || false,
+          ideaSummary: data.ideaSummary || null,
+          ideaCategory: data.ideaCategory || null,
+        },
+        update: {
+          ...(data.skills && { skills: data.skills }),
+          ...(data.commitmentLevel && { commitmentLevel: data.commitmentLevel }),
+          ...(data.hoursPerDay && { hoursPerDay: parseInt(data.hoursPerDay) }),
+          ...(data.experienceYears && { experienceYears: parseInt(data.experienceYears) }),
+          ...(data.hasIdea !== undefined && { hasIdea: data.hasIdea }),
+          ...(data.ideaSummary && { ideaSummary: data.ideaSummary }),
+          ...(data.ideaCategory && { ideaCategory: data.ideaCategory }),
+        },
+      });
+    }
+
+    return updated;
   }
 
   async giveConsent(accessToken: string, consentDocUrl?: string) {
@@ -194,6 +226,7 @@ export class ApplicantService {
         include: {
           batch: { select: { batchNumber: true, status: true } },
           team: { select: { id: true, name: true } },
+          matchingProfile: { select: { skills: true, commitmentLevel: true, hoursPerDay: true, hasIdea: true, ideaCategory: true, ideaSummary: true } },
         },
       }),
       this.prisma.applicant.count({ where }),
@@ -269,6 +302,7 @@ export class ApplicantService {
       eligibleCount,
       activeCount,
       removedCount,
+      heldCount,
       totalBatches,
       activeBatch,
     ] = await Promise.all([
@@ -277,6 +311,7 @@ export class ApplicantService {
       this.prisma.applicant.count({ where: { status: 'ELIGIBLE' } }),
       this.prisma.applicant.count({ where: { status: 'ACTIVE' } }),
       this.prisma.applicant.count({ where: { status: 'REMOVED' } }),
+      this.prisma.applicant.count({ where: { status: 'HELD' as any } }),
       this.prisma.batch.count(),
       this.prisma.batch.findFirst({
         where: { status: { not: 'PRODUCTION' } },
@@ -292,6 +327,7 @@ export class ApplicantService {
         eligible: eligibleCount,
         active: activeCount,
         removed: removedCount,
+        held: heldCount,
       },
       totalBatches,
       activeBatch: activeBatch
@@ -305,5 +341,41 @@ export class ApplicantService {
           }
         : null,
     };
+  }
+
+  // ─── Admin Status Actions ────────────────────────
+
+  async updateApplicantStatus(id: string, status: ApplicantStatus) {
+    const applicant = await this.prisma.applicant.findUnique({
+      where: { id },
+    });
+    if (!applicant) throw new NotFoundException('Applicant not found');
+
+    const validStatuses: ApplicantStatus[] = [
+      'PENDING', 'ELIGIBLE', 'INELIGIBLE', 'ACTIVE', 'REMOVED', 'HELD' as any,
+    ];
+    if (!validStatuses.includes(status)) {
+      throw new BadRequestException(`Invalid status: ${status}`);
+    }
+
+    const updated = await this.prisma.applicant.update({
+      where: { id },
+      data: {
+        status,
+        ...(status === ('REMOVED' as any) && { removedAt: new Date(), teamId: null }),
+        ...(status === ('HELD' as any) && { movedAt: new Date() }),
+      } as any,
+    });
+
+    // If removing, decrement batch count
+    if (status === ('REMOVED' as any) && applicant.batchId) {
+      await this.prisma.batch.update({
+        where: { id: applicant.batchId },
+        data: { currentCount: { decrement: 1 } },
+      });
+    }
+
+    this.logger.log(`Applicant ${id} status changed to ${status}`);
+    return updated;
   }
 }

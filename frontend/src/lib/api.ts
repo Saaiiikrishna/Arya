@@ -88,6 +88,27 @@ class ApiClient {
     }
   }
 
+  // OTP Auth
+  async sendOtp(email: string) {
+    return this.request<{ success: boolean; message: string }>('/auth/otp/send', {
+      method: 'POST',
+      body: { email },
+    });
+  }
+
+  async verifyOtp(email: string, otp: string) {
+    const data = await this.request<{
+      accessToken: string;
+      refreshToken: string;
+      admin: any;
+    }>('/auth/otp/verify', { method: 'POST', body: { email, otp } });
+    this.setToken(data.accessToken);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('arya_refresh', data.refreshToken);
+    }
+    return data;
+  }
+
   async getMe() {
     return this.request<any>('/admin/auth/me');
   }
@@ -151,6 +172,13 @@ class ApiClient {
 
   async removeApplicant(id: string) {
     return this.request<any>(`/admin/applicants/${id}`, { method: 'DELETE' });
+  }
+
+  async updateApplicantStatus(id: string, status: string) {
+    return this.request<any>(`/admin/applicants/${id}/status`, {
+      method: 'PATCH',
+      body: { status },
+    });
   }
 
   async apply(data: any) {
@@ -264,13 +292,13 @@ class ApiClient {
     return this.request<any>(`/investors/${investorId}/meeting-request`, { method: 'POST', body: data });
   }
 
-  // Donations (Phase 2)
-  async createDonationOrder(data: { amount: number; isAnonymous: boolean; donorName?: string; donorEmail?: string }) {
-    return this.request<any>('/donations/create-order', { method: 'POST', body: data });
+  // Support / Contributions (Phase 2)
+  async createSupportOrder(data: { amount: number; isAnonymous: boolean; donorName?: string; donorEmail?: string }) {
+    return this.request<any>('/support/create-order', { method: 'POST', body: data });
   }
 
-  async getDonationStats() {
-    return this.request<any>('/donations/stats');
+  async getSupportStats() {
+    return this.request<any>('/support/stats');
   }
 
   // Training (Phase 2)

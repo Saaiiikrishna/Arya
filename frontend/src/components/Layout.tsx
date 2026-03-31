@@ -10,7 +10,7 @@ import { useScroll, useTransform } from 'motion/react';
 
 interface LayoutProps {
   children: React.ReactNode;
-  activeTab?: 'manifesto' | 'apply' | 'archives' | 'hub' | 'pledge' | 'investors' | 'donate';
+  activeTab?: 'manifesto' | 'apply' | 'archives' | 'hub' | 'pledge' | 'investors' | 'support';
   onTabChange?: (tabId: string) => void;
   showNav?: boolean;
 }
@@ -54,20 +54,20 @@ export default function Layout({ children, activeTab = 'manifesto', onTabChange,
         <header className="bg-parchment border-b border-hairline sticky top-0 z-50">
           <nav className="flex justify-between items-center w-full px-8 py-6 max-w-screen-2xl mx-auto">
             <div
-              className={`flex cursor-pointer relative ${logoMode === 'svg' ? 'h-16 items-center w-64' : 'flex-col items-end'}`}
+              className={`flex cursor-pointer relative ${logoMode === 'svg' ? 'h-16 items-center w-48 md:w-64' : 'flex-col items-end'}`}
               onClick={() => handleNavigation('manifesto')}
             >
               {logoMode === 'text' ? (
                 <div className="flex flex-col items-end">
-                  <span className="text-3xl font-serif italic font-bold text-forest leading-none">Aryavartham</span>
-                  <span className="text-[10px] font-serif italic text-forest mt-1 leading-none text-right w-full pr-1">- The Founder&apos;s Club</span>
+                  <span className="text-2xl md:text-3xl font-serif italic font-bold text-forest leading-none">Aryavartham</span>
+                  <span className="text-[9px] md:text-[10px] font-serif italic text-forest mt-1 leading-none text-right w-full pr-0.5 md:pr-1">- The Founder&apos;s Club</span>
                 </div>
               ) : (
-                <>
+                <div className="relative w-full h-full flex items-center">
                   <motion.img
                     src="/logo-full.svg"
                     alt="Aryavartham"
-                    className="absolute left-0 h-16 object-contain origin-left"
+                    className="absolute left-0 h-10 md:h-16 object-contain origin-left"
                     style={{
                       x: fullLogoX,
                       opacity: fullLogoOpacity,
@@ -77,14 +77,14 @@ export default function Layout({ children, activeTab = 'manifesto', onTabChange,
                   <motion.img
                     src="/logo-short.svg"
                     alt="Arya"
-                    className="absolute left-0 h-16 object-contain origin-left"
+                    className="absolute left-0 h-10 md:h-16 object-contain origin-left"
                     style={{
                       x: shortLogoX,
                       opacity: shortLogoOpacity,
                       pointerEvents: shortLogoPointerEvents as any,
                     }}
                   />
-                </>
+                </div>
               )}
             </div>
             <div className="hidden md:flex items-center space-x-8">
@@ -93,7 +93,7 @@ export default function Layout({ children, activeTab = 'manifesto', onTabChange,
                 { id: 'apply', label: 'Apply' },
                 { id: 'archives', label: 'Archives' },
                 { id: 'investors', label: 'Investors' },
-                { id: 'donate', label: 'Donate' },
+                { id: 'support', label: 'Support' },
                 { id: 'hub', label: 'Hub' },
               ].map((tab) => (
                 <button
@@ -175,8 +175,8 @@ export default function Layout({ children, activeTab = 'manifesto', onTabChange,
             </div>
 
             <div className="flex flex-col gap-4 border-l border-forest/10 pl-6">
-               <h4 className="font-serif italic text-forest mb-2">Engage</h4>
-              {['Investors', 'Donate', 'Hub'].map((link) => (
+               <h4 className="font-serif italic text-forest mb-2">Join us</h4>
+              {['Investors', 'Support', 'Hub'].map((link) => (
                 <button
                   key={link}
                   onClick={() => handleNavigation(link.toLowerCase())}
@@ -212,8 +212,8 @@ export default function Layout({ children, activeTab = 'manifesto', onTabChange,
 
           <div className="flex flex-col md:flex-row justify-between items-center pt-8 border-t border-hairline gap-6">
             <div className="flex gap-8">
-               <a href="#" className="text-ink/40 font-sans text-[10px] uppercase tracking-widest hover:text-forest transition-colors">Privacy Policy</a>
-               <a href="#" className="text-ink/40 font-sans text-[10px] uppercase tracking-widest hover:text-forest transition-colors">Terms of Service</a>
+               <a href="/privacy" className="text-ink/40 font-sans text-[10px] uppercase tracking-widest hover:text-forest transition-colors">Privacy Policy</a>
+               <a href="/terms" className="text-ink/40 font-sans text-[10px] uppercase tracking-widest hover:text-forest transition-colors">Terms of Service</a>
             </div>
             <div className="text-ink/40 font-sans text-[10px] uppercase tracking-widest text-center md:text-right">
               © {new Date().getFullYear()} Aryavartham. All rights reserved.

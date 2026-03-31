@@ -84,6 +84,15 @@ export class ApplicantController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Patch('admin/applicants/:id/status')
+  async updateStatus(
+    @Param('id') id: string,
+    @Body('status') status: ApplicantStatus,
+  ) {
+    return this.applicantService.updateApplicantStatus(id, status);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get('admin/dashboard/stats')
   async getDashboardStats() {
     return this.applicantService.getDashboardStats();

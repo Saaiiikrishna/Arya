@@ -54,6 +54,7 @@ enum ApplicantStatus {
   CONSENTED
   FINALIZED
   TRAINING
+  HELD
 }
 
 enum TeamType {
@@ -226,6 +227,9 @@ model Applicant {
   lastActiveAt   DateTime?       @map("last_active_at")
   avgResponseTimeMs Int?         @map("avg_response_time_ms")
   avatarUrl      String?         @map("avatar_url")
+  city           String?
+  age            Int?
+  agreementAccepted Boolean      @default(false) @map("agreement_accepted")
   vocation       String?         @db.Text
   obsession      String?         @db.Text
   heresy         String?         @db.Text

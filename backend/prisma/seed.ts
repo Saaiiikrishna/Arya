@@ -4,6 +4,7 @@ import * as path from 'path';
 import { config } from 'dotenv';
 import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
+import { v4 as uuidv4 } from 'uuid';
 
 config({ path: path.resolve(__dirname, '..', '.env') });
 const connectionString = process.env.DATABASE_URL;
@@ -116,6 +117,30 @@ async function main() {
     create: { batchNumber: 1 },
   });
   console.log('✅ Batch 1 created');
+
+  // ─── Test Applicant Account ────────────────────────────
+  // This account can be used for testing OTP auth and Razorpay payment flows
+  const testAccessToken = '00000000-0000-4000-a000-000000000001';
+  const testApplicant = await prisma.applicant.upsert({
+    where: { email: 'test@arya.com' },
+    update: {},
+    create: {
+      email: 'test@arya.com',
+      firstName: 'Test',
+      lastName: 'Founder',
+      phone: '+919999999999',
+      accessToken: testAccessToken,
+      batchId: batch.id,
+      status: 'PENDING',
+      city: 'Hyderabad',
+      age: 28,
+      vocation: 'Full-Stack Engineer & Product Builder',
+      obsession: 'Democratizing access to startup infrastructure for first-generation founders in India.',
+      heresy: 'Most accelerators optimize for investor returns, not founder success. The model is broken.',
+      scarTissue: 'Built a SaaS product that reached 500 users but failed to monetize. Shut down after 14 months.',
+    } as any,
+  });
+  console.log(`✅ Test applicant created: ${testApplicant.email} (OTP login: request OTP for test@arya.com)`);
 
   console.log('🌱 Seeding complete!');
 }

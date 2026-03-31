@@ -1,8 +1,9 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../prisma';
+import { EmailService } from '../email/email.service';
 import { LoginDto, CreateAdminDto } from './dto';
 
 export interface JwtPayload {
@@ -11,12 +12,18 @@ export interface JwtPayload {
   role: string;
 }
 
+// In-memory OTP store: email -> { otp, expiresAt }
+const otpStore = new Map<string, { otp: string; expiresAt: number }>();
+
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly emailService: EmailService,
   ) {}
 
   async login(dto: LoginDto) {
@@ -142,33 +149,6 @@ export class AuthService {
     }
   }
 
-  async testRazorpay(email: string) {
-    let applicant = await this.prisma.applicant.findUnique({ where: { email } });
-    if (!applicant) {
-      let batch = await this.prisma.batch.findFirst({ where: { status: 'FILLING' }, orderBy: { batchNumber: 'asc' } });
-      if (!batch) {
-        const lastBatch = await this.prisma.batch.findFirst({ orderBy: { batchNumber: 'desc' } });
-        batch = await this.prisma.batch.create({ data: { batchNumber: (lastBatch?.batchNumber ?? 0) + 1 } });
-      }
-      applicant = await this.prisma.applicant.create({
-        data: {
-          email,
-          firstName: 'Razorpay',
-          lastName: 'Reviewer',
-          accessToken: require('uuid').v4(),
-          batchId: batch.id
-        }
-      });
-    }
-
-    const jwtPayload: JwtPayload = { sub: applicant.id, email: applicant.email, role: 'APPLICANT' };
-    return {
-      accessToken: this.jwtService.sign(jwtPayload),
-      refreshToken: this.jwtService.sign(jwtPayload, { secret: this.configService.get<string>('JWT_REFRESH_SECRET'), expiresIn: '7d' as any }),
-      admin: { id: applicant.id, email: applicant.email, firstName: applicant.firstName, lastName: applicant.lastName, role: 'APPLICANT' },
-    };
-  }
-
   async refreshToken(refreshToken: string) {
     try {
       const payload = this.jwtService.verify<JwtPayload>(refreshToken, {
@@ -239,5 +219,133 @@ export class AuthService {
     }
 
     return admin;
+  }
+
+  // ─── OTP Authentication ────────────────────────
+
+  async sendOtp(email: string) {
+    if (!email || !email.includes('@')) {
+      throw new BadRequestException('Valid email is required');
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Generate 6-digit OTP
+    const otp = String(Math.floor(100000 + Math.random() * 900000));
+    const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes
+
+    otpStore.set(normalizedEmail, { otp, expiresAt });
+
+    // Always log OTP in development for testing
+    this.logger.log(`[OTP] Code for ${normalizedEmail}: ${otp}`);
+
+    // Send OTP email via SES
+    try {
+      await this.emailService.sendEmail({
+        to: normalizedEmail,
+        subject: 'Your Aryavartham Login Code',
+        htmlBody: `
+          <div style="font-family: Georgia, serif; max-width: 480px; margin: 0 auto; padding: 40px; background: #faf8f5; border: 1px solid #e8e4de;">
+            <h2 style="color: #1a3a2a; margin-bottom: 8px;">Aryavartham</h2>
+            <p style="color: #6b5b4f; font-size: 12px; text-transform: uppercase; letter-spacing: 0.15em;">The Founder's Club</p>
+            <hr style="border: none; border-top: 1px solid #e8e4de; margin: 24px 0;" />
+            <p style="color: #2a2a2a;">Your verification code is:</p>
+            <div style="text-align: center; padding: 24px; margin: 16px 0; background: #1a3a2a; color: #faf8f5;">
+              <span style="font-size: 32px; font-family: monospace; letter-spacing: 8px; font-weight: bold;">${otp}</span>
+            </div>
+            <p style="color: #6b5b4f; font-size: 13px;">This code expires in 5 minutes. Do not share it with anyone.</p>
+          </div>
+        `,
+      });
+    } catch (error) {
+      this.logger.warn(`Failed to send OTP email to ${normalizedEmail}, but OTP is logged above for dev use`);
+    }
+
+    // For test account, include OTP in response so it can be shown on screen
+    const isTestAccount = normalizedEmail === 'test@arya.com';
+    return { success: true, message: 'OTP sent to your email', ...(isTestAccount && { otp }) };
+  }
+
+  async verifyOtp(email: string, otp: string) {
+    if (!email || !otp) {
+      throw new BadRequestException('Email and OTP are required');
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const stored = otpStore.get(normalizedEmail);
+
+    if (!stored) {
+      throw new UnauthorizedException('No OTP found for this email. Please request a new one.');
+    }
+
+    if (Date.now() > stored.expiresAt) {
+      otpStore.delete(normalizedEmail);
+      throw new UnauthorizedException('OTP has expired. Please request a new one.');
+    }
+
+    if (stored.otp !== otp) {
+      throw new UnauthorizedException('Invalid OTP. Please try again.');
+    }
+
+    // OTP is valid - clear it
+    otpStore.delete(normalizedEmail);
+
+    // Check if admin
+    const admin = await this.prisma.admin.findUnique({ where: { email: normalizedEmail } });
+    if (admin) {
+      if (!admin.isActive) throw new UnauthorizedException('Account is disabled');
+      const payload: JwtPayload = { sub: admin.id, email: admin.email, role: admin.role };
+      return {
+        accessToken: this.jwtService.sign(payload),
+        refreshToken: this.jwtService.sign(payload, {
+          secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+          expiresIn: '7d' as any,
+        }),
+        admin: {
+          id: admin.id,
+          email: admin.email,
+          firstName: admin.firstName,
+          lastName: admin.lastName,
+          role: admin.role,
+          avatarUrl: (admin as any).avatarUrl,
+        },
+      };
+    }
+
+    // Find or create applicant
+    let applicant = await this.prisma.applicant.findUnique({ where: { email: normalizedEmail } });
+    if (!applicant) {
+      let batch = await this.prisma.batch.findFirst({ where: { status: 'FILLING' } as any, orderBy: { batchNumber: 'asc' } });
+      if (!batch) {
+        const lastBatch = await this.prisma.batch.findFirst({ orderBy: { batchNumber: 'desc' } });
+        batch = await this.prisma.batch.create({ data: { batchNumber: ((lastBatch as any)?.batchNumber ?? 0) + 1 } as any });
+      }
+      applicant = await this.prisma.applicant.create({
+        data: {
+          email: normalizedEmail,
+          firstName: normalizedEmail.split('@')[0],
+          lastName: '',
+          accessToken: require('uuid').v4(),
+          batchId: (batch as any).id,
+        } as any,
+      });
+    }
+
+    const jwtPayload: JwtPayload = { sub: (applicant as any).id, email: (applicant as any).email, role: 'APPLICANT' };
+    return {
+      accessToken: this.jwtService.sign(jwtPayload),
+      refreshToken: this.jwtService.sign(jwtPayload, {
+        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+        expiresIn: '7d' as any,
+      }),
+      admin: {
+        id: (applicant as any).id,
+        email: (applicant as any).email,
+        firstName: (applicant as any).firstName,
+        lastName: (applicant as any).lastName,
+        role: 'APPLICANT',
+        avatarUrl: (applicant as any).avatarUrl,
+      },
+    };
   }
 }

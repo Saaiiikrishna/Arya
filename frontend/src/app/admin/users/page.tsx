@@ -4,12 +4,26 @@ import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import Link from 'next/link';
 
+const STATUS_CONFIG: Record<string, { bg: string; text: string; border: string; label: string }> = {
+  PENDING:   { bg: 'bg-amber-50',      text: 'text-amber-700',    border: 'border-amber-200', label: 'Pending' },
+  ELIGIBLE:  { bg: 'bg-emerald-50',    text: 'text-emerald-700',  border: 'border-emerald-200', label: 'Approved' },
+  INELIGIBLE:{ bg: 'bg-red-50',        text: 'text-red-700',      border: 'border-red-200', label: 'Ineligible' },
+  ACTIVE:    { bg: 'bg-forest/10',     text: 'text-forest',       border: 'border-forest/20', label: 'Active' },
+  REMOVED:   { bg: 'bg-terracotta/10', text: 'text-terracotta',   border: 'border-terracotta/20', label: 'Rejected' },
+  CONSENTED: { bg: 'bg-blue-50',       text: 'text-blue-700',     border: 'border-blue-200', label: 'Consented' },
+  FINALIZED: { bg: 'bg-purple-50',     text: 'text-purple-700',   border: 'border-purple-200', label: 'Finalized' },
+  TRAINING:  { bg: 'bg-indigo-50',     text: 'text-indigo-700',   border: 'border-indigo-200', label: 'Training' },
+  HELD:      { bg: 'bg-slate-100',     text: 'text-slate-600',    border: 'border-slate-300', label: 'On Hold' },
+};
+
 export default function UsersPage() {
   const [data, setData] = useState<{ data: any[]; meta: any }>({ data: [], meta: { total: 0, page: 1, limit: 20, totalPages: 0 } });
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const loadUsers = async () => {
     setLoading(true);
@@ -32,17 +46,42 @@ export default function UsersPage() {
     loadUsers();
   };
 
-  const handleRemove = async (id: string, name: string) => {
-    if (!confirm(`Remove ${name}? This will trigger backfill from the next batch.`)) return;
+  const handleStatusAction = async (id: string, status: string, actionLabel: string, name: string) => {
+    if (!confirm(`${actionLabel} "${name}"?`)) return;
+    setActionLoading(id);
     try {
-      await api.removeApplicant(id);
+      await api.updateApplicantStatus(id, status);
       loadUsers();
     } catch (err: any) {
-      alert(err.message);
+      alert(err.message || `Failed to ${actionLabel.toLowerCase()}`);
+    } finally {
+      setActionLoading(null);
     }
   };
 
-  const statuses = ['', 'PENDING', 'ELIGIBLE', 'INELIGIBLE', 'ACTIVE', 'REMOVED', 'CONSENTED', 'FINALIZED'];
+  const handleRemove = async (id: string, name: string) => {
+    if (!confirm(`Remove ${name}? This action will mark them as rejected.`)) return;
+    setActionLoading(id);
+    try {
+      await api.updateApplicantStatus(id, 'REMOVED');
+      loadUsers();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const statuses = ['', 'PENDING', 'HELD', 'ELIGIBLE', 'INELIGIBLE', 'ACTIVE', 'REMOVED', 'CONSENTED', 'FINALIZED', 'TRAINING'];
+
+  const getStatusBadge = (status: string) => {
+    const cfg = STATUS_CONFIG[status] || { bg: 'bg-slate-50', text: 'text-slate-600', border: 'border-slate-200', label: status };
+    return (
+      <span className={`px-3 py-1 text-[10px] uppercase tracking-widest font-bold border ${cfg.bg} ${cfg.text} ${cfg.border}`}>
+        {cfg.label}
+      </span>
+    );
+  };
 
   return (
     <div className="text-ink animate-fade-in px-8 py-12 max-w-[1200px] mx-auto min-h-screen">
@@ -81,7 +120,7 @@ export default function UsersPage() {
         >
           <option value="">All Statuses</option>
           {statuses.filter(Boolean).map((s) => (
-            <option key={s} value={s}>{s}</option>
+            <option key={s} value={s}>{STATUS_CONFIG[s]?.label || s}</option>
           ))}
         </select>
       </div>
@@ -109,35 +148,153 @@ export default function UsersPage() {
                   <th className="px-6 py-5 text-xs font-bold uppercase tracking-widest text-ink/60">Email</th>
                   <th className="px-6 py-5 text-xs font-bold uppercase tracking-widest text-ink/60">Status</th>
                   <th className="px-6 py-5 text-xs font-bold uppercase tracking-widest text-ink/60">Batch</th>
-                  <th className="px-6 py-5 text-xs font-bold uppercase tracking-widest text-ink/60">Team</th>
                   <th className="px-6 py-5 text-xs font-bold uppercase tracking-widest text-ink/60">Applied</th>
                   <th className="px-6 py-5 text-xs font-bold uppercase tracking-widest text-ink/60">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {data.data.map((user) => (
-                  <tr key={user.id} className="border-b border-hairline last:border-0 hover:bg-parchment/30 transition-colors">
-                    <td className="px-6 py-5 font-serif text-xl font-bold">{user.firstName} {user.lastName}</td>
-                    <td className="px-6 py-5 text-ink/60 text-sm">{user.email}</td>
-                    <td className="px-6 py-5">
-                      <span className={`px-3 py-1 text-[10px] uppercase tracking-widest font-bold border ${user.status === 'REMOVED' ? 'bg-terracotta/10 text-terracotta border-terracotta/20' : 'bg-forest/10 text-forest border-forest/20'}`}>
-                        {user.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-5 font-serif text-lg">{user.batch ? `#${user.batch.batchNumber}` : '—'}</td>
-                    <td className="px-6 py-5 text-sm">{user.team?.name || '—'}</td>
-                    <td className="px-6 py-5 text-[11px] text-ink/40 uppercase tracking-widest">{new Date(user.appliedAt).toLocaleDateString()}</td>
-                    <td className="px-6 py-5">
-                      <div className="flex gap-4">
-                        <Link href={`/admin/users/${user.id}`} className="text-[11px] uppercase tracking-widest font-bold text-forest hover:text-ink transition-colors">View</Link>
-                        {user.status !== 'REMOVED' && (
-                          <button className="text-[11px] uppercase tracking-widest font-bold text-terracotta hover:text-ink transition-colors" onClick={() => handleRemove(user.id, `${user.firstName} ${user.lastName}`)}>
-                            Remove
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
+                  <>
+                    <tr key={user.id} className={`border-b border-hairline last:border-0 hover:bg-parchment/30 transition-colors ${expandedId === user.id ? 'bg-parchment/40' : ''}`}>
+                      <td className="px-6 py-5 font-serif text-lg font-bold">
+                        <button onClick={() => setExpandedId(expandedId === user.id ? null : user.id)} className="text-left hover:text-forest transition-colors">
+                          {user.firstName} {user.lastName}
+                          <span className="ml-2 text-ink/30 text-sm">{expandedId === user.id ? '▲' : '▼'}</span>
+                        </button>
+                      </td>
+                      <td className="px-6 py-5 text-ink/60 text-sm">{user.email}</td>
+                      <td className="px-6 py-5">{getStatusBadge(user.status)}</td>
+                      <td className="px-6 py-5 font-serif text-lg">{user.batch ? `#${user.batch.batchNumber}` : '—'}</td>
+                      <td className="px-6 py-5 text-[11px] text-ink/40 uppercase tracking-widest">{new Date(user.appliedAt).toLocaleDateString()}</td>
+                      <td className="px-6 py-5">
+                        <div className="flex gap-3 items-center flex-wrap">
+                          {actionLoading === user.id ? (
+                            <span className="text-[10px] uppercase tracking-widest text-ink/40 animate-pulse">Processing...</span>
+                          ) : (
+                            <>
+                              {/* Approve: set ELIGIBLE */}
+                              {user.status !== 'ELIGIBLE' && user.status !== 'REMOVED' && user.status !== 'ACTIVE' && (
+                                <button
+                                  className="text-[10px] uppercase tracking-widest font-bold text-emerald-600 hover:text-emerald-800 transition-colors px-2 py-1 border border-emerald-200 bg-emerald-50 hover:bg-emerald-100"
+                                  onClick={() => handleStatusAction(user.id, 'ELIGIBLE', 'Approve', `${user.firstName} ${user.lastName}`)}
+                                >
+                                  ✓ Approve
+                                </button>
+                              )}
+                              {/* Hold: set HELD */}
+                              {user.status !== 'HELD' && user.status !== 'REMOVED' && (
+                                <button
+                                  className="text-[10px] uppercase tracking-widest font-bold text-slate-500 hover:text-slate-700 transition-colors px-2 py-1 border border-slate-200 bg-slate-50 hover:bg-slate-100"
+                                  onClick={() => handleStatusAction(user.id, 'HELD', 'Hold', `${user.firstName} ${user.lastName}`)}
+                                >
+                                  ⏸ Hold
+                                </button>
+                              )}
+                              {/* Reject: set REMOVED */}
+                              {user.status !== 'REMOVED' && (
+                                <button
+                                  className="text-[10px] uppercase tracking-widest font-bold text-terracotta hover:text-red-800 transition-colors px-2 py-1 border border-terracotta/20 bg-terracotta/5 hover:bg-terracotta/10"
+                                  onClick={() => handleRemove(user.id, `${user.firstName} ${user.lastName}`)}
+                                >
+                                  ✕ Reject
+                                </button>
+                              )}
+                              {/* Re-activate from REMOVED */}
+                              {user.status === 'REMOVED' && (
+                                <button
+                                  className="text-[10px] uppercase tracking-widest font-bold text-forest hover:text-forest/80 transition-colors px-2 py-1 border border-forest/20 bg-forest/5 hover:bg-forest/10"
+                                  onClick={() => handleStatusAction(user.id, 'PENDING', 'Restore', `${user.firstName} ${user.lastName}`)}
+                                >
+                                  ↺ Restore
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                    
+                    {/* Expandable Detail Row */}
+                    {expandedId === user.id && (
+                      <tr key={`${user.id}-detail`} className="bg-parchment/30">
+                        <td colSpan={6} className="px-6 py-8">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                            {/* Personal Info */}
+                            <div className="border border-hairline bg-white p-5">
+                              <h4 className="text-[10px] uppercase tracking-widest text-forest font-bold mb-4 pb-2 border-b border-hairline">Personal Info</h4>
+                              <div className="space-y-2 text-sm">
+                                <p><span className="text-ink/40 w-20 inline-block">Phone:</span> {user.phone || '—'}</p>
+                                <p><span className="text-ink/40 w-20 inline-block">City:</span> {user.city || '—'}</p>
+                                <p><span className="text-ink/40 w-20 inline-block">Age:</span> {user.age || '—'}</p>
+                                <p><span className="text-ink/40 w-20 inline-block">Team:</span> {user.team?.name || '—'}</p>
+                              </div>
+                            </div>
+
+                            {/* Dossier */}
+                            <div className="border border-hairline bg-white p-5">
+                              <h4 className="text-[10px] uppercase tracking-widest text-forest font-bold mb-4 pb-2 border-b border-hairline">Dossier</h4>
+                              <div className="space-y-3 text-sm">
+                                {user.vocation && (
+                                  <div>
+                                    <span className="text-ink/40 text-[10px] uppercase tracking-widest block mb-1">Vocation</span>
+                                    <p className="font-serif italic">{user.vocation}</p>
+                                  </div>
+                                )}
+                                {user.obsession && (
+                                  <div>
+                                    <span className="text-ink/40 text-[10px] uppercase tracking-widest block mb-1">Obsession</span>
+                                    <p className="text-ink/70 leading-relaxed line-clamp-3">{user.obsession}</p>
+                                  </div>
+                                )}
+                                {user.heresy && (
+                                  <div>
+                                    <span className="text-ink/40 text-[10px] uppercase tracking-widest block mb-1">Heresy</span>
+                                    <p className="text-ink/70 leading-relaxed line-clamp-3">{user.heresy}</p>
+                                  </div>
+                                )}
+                                {user.scarTissue && (
+                                  <div>
+                                    <span className="text-ink/40 text-[10px] uppercase tracking-widest block mb-1">Scar Tissue</span>
+                                    <p className="text-ink/70 leading-relaxed line-clamp-3">{user.scarTissue}</p>
+                                  </div>
+                                )}
+                                {!user.vocation && !user.obsession && (
+                                  <p className="text-ink/30 italic">No dossier submitted yet</p>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Matching Profile */}
+                            <div className="border border-hairline bg-white p-5">
+                              <h4 className="text-[10px] uppercase tracking-widest text-forest font-bold mb-4 pb-2 border-b border-hairline">Skills & Matching</h4>
+                              {user.matchingProfile ? (
+                                <div className="space-y-3 text-sm">
+                                  {user.matchingProfile.skills?.length > 0 && (
+                                    <div>
+                                      <span className="text-ink/40 text-[10px] uppercase tracking-widest block mb-2">Skills</span>
+                                      <div className="flex flex-wrap gap-1">
+                                        {user.matchingProfile.skills.map((s: string) => (
+                                          <span key={s} className="bg-forest/10 text-forest px-2 py-0.5 text-[9px] uppercase tracking-widest font-bold border border-forest/20">{s}</span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                  <p><span className="text-ink/40">Commitment:</span> {user.matchingProfile.commitmentLevel || '—'}</p>
+                                  <p><span className="text-ink/40">Hours/Day:</span> {user.matchingProfile.hoursPerDay || '—'}</p>
+                                  <p><span className="text-ink/40">Has Idea:</span> {user.matchingProfile.hasIdea ? 'Yes' : 'No'}</p>
+                                  {user.matchingProfile.ideaCategory && (
+                                    <p><span className="text-ink/40">Category:</span> {user.matchingProfile.ideaCategory}</p>
+                                  )}
+                                </div>
+                              ) : (
+                                <p className="text-ink/30 italic text-sm">No matching profile yet</p>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </>
                 ))}
               </tbody>
             </table>

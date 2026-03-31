@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
+import { useSettings } from '@/lib/settings';
 import styles from './AdminSidebar.module.css';
 
 const navItems = [
@@ -18,12 +19,20 @@ const navItems = [
 export default function AdminSidebar() {
   const pathname = usePathname();
   const { admin, logout } = useAuth();
+  const { settings } = useSettings();
+  const logoMode = settings?.logoMode || 'text';
 
   return (
     <aside className={styles.sidebar}>
       <div className={styles.logo}>
-        <span className={styles.logoIcon}>⬡</span>
-        <span className={styles.logoText}>ARYA</span>
+        {logoMode === 'text' ? (
+          <div className="flex flex-col items-center">
+            <span className="text-xl font-serif italic font-bold text-forest leading-none">Aryavartham</span>
+            <span className="text-[8px] font-serif italic text-forest mt-0.5 leading-none">- The Founder&apos;s Club</span>
+          </div>
+        ) : (
+          <img src="/logo-full.svg" alt="Aryavartham" className="h-8 object-contain" />
+        )}
       </div>
 
       <nav className={styles.nav}>

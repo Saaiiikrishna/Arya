@@ -8,12 +8,12 @@ export class DonationController {
 
   // ─── Public ────────────────────────────────────────
 
-  @Post('donations/create-order')
+  @Post('support/create-order')
   async createOrder(@Body() data: any) {
     return this.donationService.createDonationOrder(data);
   }
 
-  @Post('donations/webhook')
+  @Post('support/webhook')
   async webhook(
     @Headers('x-razorpay-signature') signature: string,
     @Body() body: any,
@@ -21,7 +21,7 @@ export class DonationController {
     return this.donationService.handleWebhook(signature, body);
   }
 
-  @Get('donations/stats')
+  @Get('support/stats')
   async getStats() {
     return this.donationService.getStats();
   }
@@ -29,7 +29,7 @@ export class DonationController {
   // ─── Admin ─────────────────────────────────────────
 
   @UseGuards(JwtAuthGuard)
-  @Get('admin/donations')
+  @Get('admin/support')
   async getDonations(
     @Query('page') page?: string,
     @Query('limit') limit?: string,

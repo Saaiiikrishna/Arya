@@ -20,11 +20,6 @@ export class AuthController {
     return this.authService.googleLogin(token);
   }
 
-  @Post('test-razorpay')
-  async testRazorpay(@Body('email') email: string) {
-    return this.authService.testRazorpay(email);
-  }
-
   @Post('refresh')
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   async refresh(@Body('refreshToken') refreshToken: string) {
