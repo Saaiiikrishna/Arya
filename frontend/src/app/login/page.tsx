@@ -187,7 +187,6 @@ function LoginContent() {
                     onError={() => setError('Google processing interrupted.')}
                     theme="outline"
                     shape="rectangular"
-                    width="100%"
                     text="continue_with"
                     size="large"
                   />
