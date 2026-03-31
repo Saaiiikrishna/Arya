@@ -58,6 +58,26 @@ export default function AdminSettingsPage() {
   const [pvLoading, setPvLoading] = useState(false);
   const [pvSearch, setPvSearch] = useState('');
 
+  // Pledge Pricing State
+  const [pledgePricing, setPledgePricing] = useState<{id: string, label: string, amount: number}[]>([]);
+  const [pricingLoaded, setPricingLoaded] = useState(false);
+
+  const addPricingItem = () => {
+    setPledgePricing(prev => [...prev, { id: Math.random().toString(36).substring(2, 9), label: 'New Charge', amount: 0 }]);
+  };
+
+  const removePricingItem = (id: string) => {
+    setPledgePricing(prev => prev.filter(item => item.id !== id));
+  };
+
+  const updatePricingItem = (id: string, field: 'label' | 'amount', value: string | number) => {
+    setPledgePricing(prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item));
+  };
+
+  const savePricing = () => {
+    saveSetting('pledgePricing', JSON.stringify(pledgePricing));
+  };
+
   // Load settings
   useEffect(() => {
     api.getSettings()
@@ -65,6 +85,22 @@ export default function AdminSettingsPage() {
       .catch(() => {})
       .finally(() => setSettingsLoading(false));
   }, []);
+
+  // Initialize pledge pricing
+  useEffect(() => {
+    if (activeTab === 'settings' && !settingsLoading && !pricingLoaded) {
+      if (settings.pledgePricing) {
+        try {
+          setPledgePricing(JSON.parse(settings.pledgePricing));
+        } catch {
+          setPledgePricing([{ id: 'base', label: 'Base Price', amount: 10000 }]);
+        }
+      } else {
+        setPledgePricing([{ id: 'base', label: 'Base Price', amount: 10000 }]);
+      }
+      setPricingLoaded(true);
+    }
+  }, [activeTab, settingsLoading, settings.pledgePricing, pricingLoaded]);
 
   // Load analytics summary when tab is active
   useEffect(() => {
@@ -236,6 +272,81 @@ export default function AdminSettingsPage() {
                       />
                     </div>
                   ))}
+                </div>
+              </section>
+
+              {/* Pledge Pricing Structure */}
+              <section className="bg-white border border-hairline p-8">
+                <div className="flex justify-between items-start mb-6">
+                  <div>
+                    <h2 className="font-serif text-2xl font-bold mb-2">Pledge Pricing Structure</h2>
+                    <p className="text-xs uppercase tracking-widest text-ink/50">
+                      Configure the exact line-item breakdown displayed during checkout
+                    </p>
+                  </div>
+                  <button
+                    onClick={savePricing}
+                    disabled={saving}
+                    className="bg-forest text-parchment px-6 py-2 text-xs uppercase tracking-widest font-semibold hover:bg-forest/90 transition-colors disabled:opacity-50"
+                  >
+                    {saving ? 'Saving...' : 'Save Pricing Structure'}
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {pledgePricing.map((item, index) => (
+                    <div key={item.id} className="flex items-center gap-4 bg-alabaster p-4 border border-hairline group">
+                      <div className="flex-1 flex flex-col gap-2">
+                        <label className="font-sans text-[10px] uppercase tracking-widest text-forest font-semibold">
+                          Line Item Label
+                        </label>
+                        <input
+                          type="text"
+                          value={item.label}
+                          onChange={(e) => updatePricingItem(item.id, 'label', e.target.value)}
+                          placeholder="e.g. Base Price, Processing Fee"
+                          className="border border-hairline px-4 py-2 text-sm bg-white focus:outline-none focus:border-forest"
+                        />
+                      </div>
+                      <div className="w-48 flex flex-col gap-2">
+                        <label className="font-sans text-[10px] uppercase tracking-widest text-forest font-semibold">
+                          Amount (INR)
+                        </label>
+                        <input
+                          type="number"
+                          value={item.amount}
+                          onChange={(e) => updatePricingItem(item.id, 'amount', Number(e.target.value))}
+                          min="0"
+                          className="border border-hairline px-4 py-2 text-sm bg-white focus:outline-none focus:border-forest"
+                        />
+                      </div>
+                      <div className="pt-6">
+                        <button
+                          onClick={() => removePricingItem(item.id)}
+                          className="p-2 text-ink/30 hover:text-terracotta transition-colors"
+                          title="Remove item"
+                        >
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+
+                  <button
+                    onClick={addPricingItem}
+                    className="w-full py-4 border-2 border-hairline border-dashed text-sm font-semibold text-forest hover:border-forest/30 hover:bg-forest/5 transition-all flex items-center justify-center gap-2"
+                  >
+                    <span>+</span> Add Fee / Line Item
+                  </button>
+                  
+                  <div className="mt-6 pt-6 border-t border-hairline flex justify-between items-center bg-forest/5 p-4 border-l-4 border-l-forest">
+                    <span className="font-serif italic text-forest">Total Calculated Pledge Amount</span>
+                    <span className="text-xl font-mono font-bold text-forest">
+                      ₹{pledgePricing.reduce((sum, item) => sum + Number(item.amount), 0).toLocaleString()}
+                    </span>
+                  </div>
                 </div>
               </section>
             </>

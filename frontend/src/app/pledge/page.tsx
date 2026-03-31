@@ -4,15 +4,26 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Layout from '@/components/Layout';
 import { useAuth } from '@/lib/auth';
+import { useSettings } from '@/lib/settings';
 import { api } from '@/lib/api';
 import Script from 'next/script';
 
 export default function PledgePage() {
   const router = useRouter();
   const { isAuthenticated, loading } = useAuth();
+  const { settings } = useSettings();
   const [pledgeReady, setPledgeReady] = useState(false);
   const [orderData, setOrderData] = useState<any>(null);
   const [paymentStatus, setPaymentStatus] = useState<'IDLE' | 'PROCESSING' | 'SUCCESS' | 'FAILED'>('IDLE');
+
+  let pledgePricing = [{ id: 'base', label: 'Base Commitment', amount: 10000 }];
+  try {
+    if (settings?.pledgePricing) {
+      pledgePricing = JSON.parse(settings.pledgePricing);
+    }
+  } catch (e) {}
+
+  const totalAmount = pledgePricing.reduce((sum: number, item: any) => sum + Number(item.amount), 0);
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
@@ -107,9 +118,21 @@ export default function PledgePage() {
               </p>
               
               <div className="p-6 bg-parchment/30 border border-hairline">
-                <span className="block text-xs uppercase tracking-widest text-ink/50 mb-2">Active Batch Allocation</span>
-                <span className="block text-3xl font-serif font-bold text-forest">Standard Fulfillment</span>
-                <span className="block text-xs tracking-wide text-ink/40 mt-1">Amount dynamically synced</span>
+                <span className="block text-xs uppercase tracking-widest text-ink/50 mb-4 border-b border-hairline pb-2">Funding Breakdown</span>
+                
+                <div className="space-y-3 mb-6">
+                  {pledgePricing.map((item: any) => (
+                    <div key={item.id} className="flex justify-between items-center text-sm">
+                      <span className="text-ink/70">{item.label}</span>
+                      <span className="font-mono text-ink/80">₹{Number(item.amount).toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex justify-between items-center pt-4 border-t border-hairline">
+                  <span className="text-xs uppercase tracking-widest font-bold text-forest">Total Order</span>
+                  <span className="text-2xl font-serif font-bold text-forest">₹{totalAmount.toLocaleString()}</span>
+                </div>
               </div>
 
               <button 

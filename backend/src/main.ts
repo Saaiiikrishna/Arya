@@ -70,6 +70,8 @@ async function bootstrap() {
   app.use(helmet({
     contentSecurityPolicy: false, // Allow inline scripts for admin dashboard
     crossOriginEmbedderPolicy: false,
+    crossOriginOpenerPolicy: false, // Prevents blocking Google Auth popups
+    crossOriginResourcePolicy: { policy: 'cross-origin' }, // Allows cross-origin API fetches
   }));
 
   // Global validation pipe

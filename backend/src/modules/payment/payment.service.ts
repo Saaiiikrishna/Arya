@@ -28,8 +28,27 @@ export class PaymentService {
     if (!applicant.batch) throw new BadRequestException('Applicant is not assigned to a batch');
 
     const batch = applicant.batch as any;
-    const amount = Number(batch.pledgeAmount) * 100; // Razorpay uses smallest currency unit (paise)
+    let amount = Number(batch.pledgeAmount) * 100; // Razorpay uses smallest currency unit (paise)
     const currency = 'INR';
+
+    // Dynamic pricing override via SiteSettings
+    const pricingSetting = await (this.prisma as any).siteSetting.findUnique({
+      where: { key: 'pledgePricing' },
+    });
+
+    if (pricingSetting && pricingSetting.value) {
+      try {
+        const pricingItems = JSON.parse(pricingSetting.value);
+        if (Array.isArray(pricingItems)) {
+          const sum = pricingItems.reduce((acc: number, item: any) => acc + Number(item.amount), 0);
+          if (sum > 0) {
+            amount = sum * 100;
+          }
+        }
+      } catch (e) {
+        console.error('Failed to parse dynamic pledge pricing', e);
+      }
+    }
 
     const orderOptions = {
       amount,
