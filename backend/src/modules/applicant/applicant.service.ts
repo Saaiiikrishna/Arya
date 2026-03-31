@@ -129,6 +129,13 @@ export class ApplicantService {
       throw new NotFoundException('Applicant not found');
     }
 
+    // Safe parseInt that returns null instead of NaN
+    const safeInt = (val: any): number | null => {
+      if (val === null || val === undefined || val === '') return null;
+      const n = typeof val === 'number' ? val : parseInt(String(val));
+      return isNaN(n) ? null : n;
+    };
+
     // Update applicant with all dossier fields (multi-step form data)
     const updated = await this.prisma.applicant.update({
       where: { id: applicantId },
@@ -138,7 +145,7 @@ export class ApplicantService {
         ...(data.lastName && { lastName: data.lastName }),
         ...(data.phone && { phone: data.phone }),
         ...(data.city && { city: data.city }),
-        ...(data.age && { age: parseInt(data.age) }),
+        ...(safeInt(data.age) !== null && { age: safeInt(data.age) }),
         // Step 4: Creative Assessment
         ...(data.vocation && { vocation: data.vocation }),
         ...(data.obsession && { obsession: data.obsession }),
@@ -151,28 +158,33 @@ export class ApplicantService {
 
     // Upsert MatchingProfile with skills/commitment/idea data (Step 2 & 3)
     if (data.skills || data.commitmentLevel || data.ideaCategory || data.hasIdea !== undefined) {
-      await this.prisma.matchingProfile.upsert({
-        where: { applicantId },
-        create: {
-          applicantId,
-          skills: data.skills || [],
-          commitmentLevel: data.commitmentLevel || 'FLEXIBLE',
-          hoursPerDay: data.hoursPerDay ? parseInt(data.hoursPerDay) : null,
-          experienceYears: data.experienceYears ? parseInt(data.experienceYears) : null,
-          hasIdea: data.hasIdea || false,
-          ideaSummary: data.ideaSummary || null,
-          ideaCategory: data.ideaCategory || null,
-        },
-        update: {
-          ...(data.skills && { skills: data.skills }),
-          ...(data.commitmentLevel && { commitmentLevel: data.commitmentLevel }),
-          ...(data.hoursPerDay && { hoursPerDay: parseInt(data.hoursPerDay) }),
-          ...(data.experienceYears && { experienceYears: parseInt(data.experienceYears) }),
-          ...(data.hasIdea !== undefined && { hasIdea: data.hasIdea }),
-          ...(data.ideaSummary && { ideaSummary: data.ideaSummary }),
-          ...(data.ideaCategory && { ideaCategory: data.ideaCategory }),
-        },
-      });
+      try {
+        await this.prisma.matchingProfile.upsert({
+          where: { applicantId },
+          create: {
+            applicantId,
+            skills: data.skills || [],
+            commitmentLevel: data.commitmentLevel || 'FLEXIBLE',
+            hoursPerDay: safeInt(data.hoursPerDay),
+            experienceYears: safeInt(data.experienceYears),
+            hasIdea: data.hasIdea || false,
+            ideaSummary: data.ideaSummary || null,
+            ideaCategory: data.ideaCategory || null,
+          },
+          update: {
+            ...(data.skills && { skills: data.skills }),
+            ...(data.commitmentLevel && { commitmentLevel: data.commitmentLevel }),
+            ...(safeInt(data.hoursPerDay) !== null && { hoursPerDay: safeInt(data.hoursPerDay) }),
+            ...(safeInt(data.experienceYears) !== null && { experienceYears: safeInt(data.experienceYears) }),
+            ...(data.hasIdea !== undefined && { hasIdea: data.hasIdea }),
+            ...(data.ideaSummary !== undefined && { ideaSummary: data.ideaSummary }),
+            ...(data.ideaCategory !== undefined && { ideaCategory: data.ideaCategory || null }),
+          },
+        });
+      } catch (profileError) {
+        console.error('[submitDossier] MatchingProfile upsert error:', profileError);
+        // Don't fail the entire submission for matching profile issues
+      }
     }
 
     return updated;

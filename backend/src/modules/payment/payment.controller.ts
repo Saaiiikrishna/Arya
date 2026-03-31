@@ -9,7 +9,7 @@ export class PaymentController {
   @UseGuards(JwtAuthGuard)
   @Post('create-order')
   async createOrder(@Req() req: any) {
-    return this.paymentService.createOrder(req.user.sub);
+    return this.paymentService.createOrder(req.user.id || req.user.sub);
   }
 
   @Post('webhook/razorpay')

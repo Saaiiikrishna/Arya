@@ -90,7 +90,7 @@ class ApiClient {
 
   // OTP Auth
   async sendOtp(email: string) {
-    return this.request<{ success: boolean; message: string }>('/auth/otp/send', {
+    return this.request<{ success: boolean; message: string; otp?: string }>('/auth/otp/send', {
       method: 'POST',
       body: { email },
     });

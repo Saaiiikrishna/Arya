@@ -49,6 +49,13 @@ import { SettingsModule } from './modules/settings/settings.module';
             port,
             ...(password ? { password } : {}),
             ...(useTls ? { tls: {} } : {}),
+            maxRetriesPerRequest: null,   // Required by BullMQ
+            enableOfflineQueue: false,    // Don't queue commands when disconnected
+            lazyConnect: true,            // Don't block startup
+            retryStrategy(times: number) {
+              if (times > 3) return null;  // Stop retrying after 3 attempts
+              return Math.min(times * 500, 3000);
+            },
           },
         };
       },

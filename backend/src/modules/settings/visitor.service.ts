@@ -59,10 +59,14 @@ export class VisitorService {
       timestamp: new Date().toISOString(),
     };
 
-    await this.visitorQueue.add('page-view', enrichedEvent, {
-      removeOnComplete: true,
-      removeOnFail: 100,
-    });
+    try {
+      await this.visitorQueue.add('page-view', enrichedEvent, {
+        removeOnComplete: true,
+        removeOnFail: 100,
+      });
+    } catch (error) {
+      this.logger.warn('Failed to enqueue page view (Redis unavailable): ' + (error as any)?.message);
+    }
   }
 
   /**

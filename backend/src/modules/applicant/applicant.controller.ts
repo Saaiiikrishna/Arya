@@ -33,7 +33,18 @@ export class ApplicantController {
   @UseGuards(JwtAuthGuard)
   @Patch('applicants/dossier')
   async submitDossier(@Req() req: any, @Body() dto: any) {
-    return this.applicantService.submitDossier(req.user.sub, dto);
+    const applicantId = req.user.id || req.user.sub;
+    console.log('[submitDossier] user:', JSON.stringify({ id: req.user.id, sub: req.user.sub, email: req.user.email, role: req.user.role }));
+    console.log('[submitDossier] applicantId:', applicantId);
+    console.log('[submitDossier] dto keys:', Object.keys(dto || {}));
+    try {
+      const result = await this.applicantService.submitDossier(applicantId, dto);
+      console.log('[submitDossier] Success for:', applicantId);
+      return result;
+    } catch (error) {
+      console.error('[submitDossier] Error:', error);
+      throw error;
+    }
   }
 
   @Post('applicants/answers/:accessToken')

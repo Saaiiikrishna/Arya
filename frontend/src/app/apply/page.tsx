@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import ApplicationForm from '@/components/Dossier';
 import Layout from '@/components/Layout';
 import GlobalOneTap from '@/components/GlobalOneTap';
@@ -10,8 +10,42 @@ import { api } from '@/lib/api';
 
 export default function ApplyPage() {
   const router = useRouter();
-  const { isAuthenticated, admin } = useAuth();
+  const { isAuthenticated, admin, loading } = useAuth();
   const [authTriggered, setAuthTriggered] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const autoSubmitDone = useRef(false);
+
+  // Auto-submit pending application after login
+  useEffect(() => {
+    if (loading || !isAuthenticated || autoSubmitDone.current) return;
+
+    const pending = localStorage.getItem('arya_pending_application');
+    if (!pending) return;
+
+    autoSubmitDone.current = true;
+
+    (async () => {
+      setSubmitting(true);
+      setError('');
+      try {
+        const data = JSON.parse(pending);
+        await api.submitDossier(data);
+        localStorage.removeItem('arya_pending_application');
+        router.push('/pledge');
+      } catch (e: any) {
+        console.error('Auto-submit failed', e);
+        const errorMessage = e?.message || 'Submission failed. Please try again.';
+        setError(errorMessage);
+        setSubmitting(false);
+        // If it's an unrecoverable error (e.g. format issues), clear the pending application
+        if (errorMessage.toLowerCase().includes('format') || errorMessage.toLowerCase().includes('invalid')) {
+          localStorage.removeItem('arya_pending_application');
+        }
+        // Leave autoSubmitDone = true so it does not loop infinitely
+      }
+    })();
+  }, [isAuthenticated, loading, router]);
 
   const handleSubmit = async (data: any) => {
     if (!isAuthenticated) {
@@ -21,11 +55,16 @@ export default function ApplyPage() {
       return;
     }
     
+    setSubmitting(true);
+    setError('');
     try {
       await api.submitDossier(data);
+      localStorage.removeItem('arya_pending_application');
       router.push('/pledge');
-    } catch (e) {
+    } catch (e: any) {
       console.error('Submission failed', e);
+      setError(e?.message || 'Submission failed. Please try again.');
+      setSubmitting(false);
     }
   };
 
@@ -33,6 +72,25 @@ export default function ApplyPage() {
     <Layout activeTab="apply">
       <GlobalOneTap />
       
+      {/* Submitting overlay */}
+      {submitting && (
+        <div className="fixed inset-0 z-50 bg-parchment/90 backdrop-blur-sm flex items-center justify-center p-6">
+          <div className="bg-white border border-hairline p-12 max-w-lg w-full text-center shadow-2xl">
+            <div className="w-8 h-8 border-2 border-forest border-t-transparent rounded-full animate-spin mx-auto mb-6" />
+            <h2 className="font-serif text-2xl font-bold mb-2 text-forest">Sealing Your Application</h2>
+            <p className="text-ink/50 text-sm uppercase tracking-widest">Transmitting dossier...</p>
+          </div>
+        </div>
+      )}
+
+      {/* Error banner */}
+      {error && !submitting && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-terracotta text-parchment px-8 py-4 shadow-lg max-w-lg text-center">
+          <p className="text-sm font-bold uppercase tracking-widest">{error}</p>
+          <button onClick={() => setError('')} className="text-xs underline mt-2 opacity-70 hover:opacity-100">Dismiss</button>
+        </div>
+      )}
+
       {authTriggered && !isAuthenticated ? (
         <div className="fixed inset-0 z-50 bg-parchment/90 backdrop-blur-sm flex items-center justify-center p-6">
           <div className="bg-white border border-hairline p-12 max-w-lg w-full text-center shadow-2xl">
@@ -57,3 +115,4 @@ export default function ApplyPage() {
     </Layout>
   );
 }
+

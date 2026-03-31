@@ -148,10 +148,10 @@ export default function Layout({ children, activeTab = 'manifesto', onTabChange,
             <div className="flex flex-col border-l border-forest/20 pl-6">
               <div className="mb-6">
                 {logoMode === 'text' ? (
-                  <>
-                    <span className="text-2xl font-serif italic font-bold text-forest leading-none block">Aryavartham</span>
-                    <span className="text-[10px] font-serif italic text-forest mt-1 leading-none text-right block w-full pr-1">- The Founder&apos;s Club</span>
-                  </>
+                  <div className="flex flex-col items-end max-w-max">
+                    <span className="text-2xl font-serif italic font-bold text-forest leading-none">Aryavartham</span>
+                    <span className="text-[9px] font-serif italic text-forest mt-1 leading-none text-right w-full pr-0.5">- The Founder&apos;s Club</span>
+                  </div>
                 ) : (
                   <img src="/logo-full.svg" alt="Aryavartham" className="h-12 object-contain" />
                 )}

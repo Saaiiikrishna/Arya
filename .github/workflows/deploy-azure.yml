@@ -31,7 +31,7 @@ jobs:
       - name: Seed Database (idempotent upserts)
         run: |
           cd backend
-          npx ts-node -r tsconfig-paths/register prisma/seed.ts
+          npx cross-env TS_NODE_PROJECT=tsconfig.seed.json npx ts-node -r tsconfig-paths/register prisma/seed.ts
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
@@ -63,7 +63,12 @@ jobs:
               "NODE_ENV=production" \
               "PORT=3001" \
               "FRONTEND_URL=https://aryavartham.com" \
-              "BATCH_CAPACITY=1000"
+              "BATCH_CAPACITY=1000" \
+              "RAZORPAY_KEY_ID=${{ secrets.RAZORPAY_KEY_ID }}" \
+              "RAZORPAY_KEY_SECRET=${{ secrets.RAZORPAY_KEY_SECRET }}" \
+              "RAZORPAY_WEBHOOK_SECRET=${{ secrets.RAZORPAY_WEBHOOK_SECRET }}" \
+              "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}" \
+              "GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}"
 
       - name: Get Backend URL
         id: get-backend-url

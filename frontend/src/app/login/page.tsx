@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, Suspense } from 'react';
+import React, { useState, useRef, useEffect, Suspense } from 'react';
 import Layout from '@/components/Layout';
 import { GoogleLogin } from '@react-oauth/google';
 import { useRouter } from 'next/navigation';
@@ -17,6 +17,11 @@ function LoginContent() {
   const [error, setError] = useState<string | null>(null);
   const [authMode, setAuthMode] = useState<'choose' | 'otp-email' | 'otp-verify'>('choose');
   const [otpEmail, setOtpEmail] = useState('');
+  const [mounted, setMounted] = useState(false);
+  
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   const [otpDigits, setOtpDigits] = useState(['', '', '', '', '', '']);
   const [otpLoading, setOtpLoading] = useState(false);
   const [testOtpCode, setTestOtpCode] = useState<string | null>(null);
@@ -142,7 +147,7 @@ function LoginContent() {
         <div className="border border-hairline bg-white shadow-sm p-12">
           <div className="flex flex-col items-center text-center space-y-6">
             {/* Logo – respects site settings toggle */}
-            {logoMode === 'text' ? (
+            {mounted && logoMode === 'text' ? (
               <div className="flex flex-col items-end max-w-max mx-auto">
                 <span className="text-4xl font-serif italic font-bold text-forest leading-none">Aryavartham</span>
                 <span className="text-sm font-serif italic text-forest mt-1 leading-none text-right w-full pr-1">- The Founder&apos;s Club</span>
