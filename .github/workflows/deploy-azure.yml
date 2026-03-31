@@ -74,6 +74,7 @@ jobs:
       - name: Deploy Frontend (NextJS)
         run: |
           echo "NEXT_PUBLIC_API_URL=${{ env.backend_url }}/api" > ./frontend/.env.production
+          echo "NEXT_PUBLIC_GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}" >> ./frontend/.env.production
           az containerapp up \
             --name arya-frontend-web \
             --resource-group arya-prod-rg \
@@ -86,7 +87,7 @@ jobs:
       - name: Configure Scaling (min 1 replica to avoid cold starts)
         run: |
           az containerapp update --name arya-backend-api --resource-group arya-prod-rg --min-replicas 1 --max-replicas 50
-          az containerapp update --name arya-frontend-web --resource-group arya-prod-rg --min-replicas 0 --max-replicas 50
+          az containerapp update --name arya-frontend-web --resource-group arya-prod-rg --min-replicas 1 --max-replicas 50
 
       - name: Deactivate old revisions (keep only latest active)
         run: |
@@ -100,3 +101,8 @@ jobs:
           for rev in $(az containerapp revision list --name arya-frontend-web --resource-group arya-prod-rg --query "[?name!='$LATEST_FRONTEND'].name" -o tsv); do
             az containerapp revision deactivate --name arya-frontend-web --resource-group arya-prod-rg --revision "$rev" || true
           done
+
+      - name: Configure Health Probes
+        run: |
+          az containerapp update --name arya-frontend-web --resource-group arya-prod-rg \
+            --set-env-vars "HOSTNAME=0.0.0.0"
