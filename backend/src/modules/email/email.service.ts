@@ -28,7 +28,7 @@ export class EmailService {
       },
     });
     const fromAddress = this.configService.get<string>('AWS_SES_FROM_EMAIL', 'noreply@example.com');
-    const fromName = this.configService.get<string>('AWS_SES_FROM_NAME', 'Aryavartham Support');
+    const fromName = this.configService.get<string>('AWS_SES_FROM_NAME', 'Aryavartham');
     this.fromEmail = `${fromName} <${fromAddress}>`;
   }
 

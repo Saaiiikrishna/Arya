@@ -58,7 +58,7 @@ jobs:
               "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" \
               "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" \
               "AWS_SES_FROM_EMAIL=support@aryavartham.com" \
-              "AWS_SES_FROM_NAME=Aryavartham Support" \
+              "AWS_SES_FROM_NAME=Aryavartham" \
               "AWS_S3_BUCKET=arya-documents" \
               "NODE_ENV=production" \
               "PORT=3001" \
