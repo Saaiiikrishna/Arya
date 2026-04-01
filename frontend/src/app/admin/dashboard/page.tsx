@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import Link from 'next/link';
+import { useAuth } from '@/lib/auth';
 
 interface Stats {
   totalApplicants: number;
@@ -26,6 +27,7 @@ interface Stats {
 export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
+  const { admin, logout } = useAuth();
 
   useEffect(() => {
     api.getDashboardStats().then(setStats).finally(() => setLoading(false));
@@ -56,7 +58,19 @@ export default function DashboardPage() {
       {/* Header */}
       <header className="border-b border-hairline pb-8 mb-12 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
         <div>
-          <p className="text-sm uppercase tracking-widest text-forest font-medium mb-3">Administrator Privileges</p>
+          <div className="flex items-center gap-4 mb-3">
+            <p className="text-sm uppercase tracking-widest text-forest font-medium">Administrator Privileges</p>
+            {admin?.role === 'SUPER_ADMIN' && (
+              <button
+                onClick={logout}
+                className="flex items-center gap-2 border border-terracotta text-terracotta px-3 py-1 text-[10px] uppercase tracking-widest hover:bg-terracotta hover:text-white transition-colors"
+                title="Super Admin Disconnect"
+              >
+                <span>Disconnect</span>
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+              </button>
+            )}
+          </div>
           <h1 className="font-serif text-5xl font-bold leading-none">Command Center</h1>
         </div>
         <div className="text-left md:text-right">
