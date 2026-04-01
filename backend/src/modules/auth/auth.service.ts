@@ -1,7 +1,6 @@
 import { Injectable, UnauthorizedException, BadRequestException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { InjectRedis } from '@nestjs-modules/ioredis';
 import Redis from 'ioredis';
 import * as bcrypt from 'bcrypt';
 import { OAuth2Client } from 'google-auth-library';
@@ -20,13 +19,25 @@ export interface JwtPayload {
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
+  private readonly redis: Redis;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly emailService: EmailService,
-  ) {}
+  ) {
+    const port = this.configService.get<number>('REDIS_PORT', 6379);
+    const password = this.configService.get<string>('REDIS_PASSWORD');
+    const useTls = String(port) === '6380';
+    
+    this.redis = new Redis({
+      host: this.configService.get<string>('REDIS_HOST', 'localhost'),
+      port,
+      ...(password ? { password } : {}),
+      ...(useTls ? { tls: {} } : {}),
+    });
+  }
 
   async login(dto: LoginDto) {
     const admin = await this.prisma.admin.findUnique({
@@ -233,9 +244,9 @@ export class AuthService {
 
     // Generate 6-digit OTP
     const otp = String(Math.floor(100000 + Math.random() * 900000));
-    const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes
-
-    otpStore.set(normalizedEmail, { otp, expiresAt });
+    
+    // Store in Redis with 5 minute expiration (300 seconds)
+    await this.redis.set(`otp:${normalizedEmail}`, otp, 'EX', 300);
 
     // Always log OTP in development for testing
     this.logger.log(`[OTP] Code for ${normalizedEmail}: ${otp}`);
@@ -273,23 +284,18 @@ export class AuthService {
     }
 
     const normalizedEmail = email.toLowerCase().trim();
-    const stored = otpStore.get(normalizedEmail);
+    const storedOtp = await this.redis.get(`otp:${normalizedEmail}`);
 
-    if (!stored) {
-      throw new UnauthorizedException('No OTP found for this email. Please request a new one.');
+    if (!storedOtp) {
+      throw new UnauthorizedException('No OTP found for this email or it has expired. Please request a new one.');
     }
 
-    if (Date.now() > stored.expiresAt) {
-      otpStore.delete(normalizedEmail);
-      throw new UnauthorizedException('OTP has expired. Please request a new one.');
-    }
-
-    if (stored.otp !== otp) {
+    if (storedOtp !== otp) {
       throw new UnauthorizedException('Invalid OTP. Please try again.');
     }
 
     // OTP is valid - clear it
-    otpStore.delete(normalizedEmail);
+    await this.redis.del(`otp:${normalizedEmail}`);
 
     // Check if admin
     const admin = await this.prisma.admin.findUnique({ where: { email: normalizedEmail } });
