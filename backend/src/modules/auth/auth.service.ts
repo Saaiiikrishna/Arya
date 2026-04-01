@@ -2,6 +2,8 @@ import { Injectable, UnauthorizedException, BadRequestException, Logger } from '
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
+import { OAuth2Client } from 'google-auth-library';
+import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../../prisma';
 import { EmailService } from '../email/email.service';
 import { LoginDto, CreateAdminDto } from './dto';
@@ -63,7 +65,6 @@ export class AuthService {
   }
 
   async googleLogin(token: string) {
-    const { OAuth2Client } = require('google-auth-library');
     const client = new OAuth2Client(this.configService.get<string>('GOOGLE_CLIENT_ID'));
 
     try {
@@ -117,7 +118,7 @@ export class AuthService {
             email,
             firstName: payload.given_name || 'Founder',
             lastName: payload.family_name || '',
-            accessToken: require('uuid').v4(),
+            accessToken: uuidv4(),
             batchId: (batch as any).id,
             avatarUrl,
           } as any
@@ -325,7 +326,7 @@ export class AuthService {
           email: normalizedEmail,
           firstName: normalizedEmail.split('@')[0],
           lastName: '',
-          accessToken: require('uuid').v4(),
+          accessToken: uuidv4(),
           batchId: (batch as any).id,
         } as any,
       });

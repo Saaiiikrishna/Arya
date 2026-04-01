@@ -190,6 +190,18 @@ export class ApplicantService {
     return updated;
   }
 
+  async getMyProfile(id: string) {
+    const applicant = await this.prisma.applicant.findUnique({
+      where: { id },
+      include: {
+        matchingProfile: true,
+        payments: true,
+      },
+    });
+    if (!applicant) throw new NotFoundException('Applicant not found');
+    return applicant;
+  }
+
   async giveConsent(accessToken: string, consentDocUrl?: string) {
     const applicant = await this.prisma.applicant.findUnique({
       where: { accessToken },

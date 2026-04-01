@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/auth';
+import { api } from '@/lib/api';
 
 interface ApplicationFormProps {
   onSubmit: (data: any) => void;
@@ -134,6 +135,24 @@ export default function ApplicationForm({ onSubmit, defaultData, userInfo }: App
   // Pre-fill from defaultData
   useEffect(() => {
     if (defaultData) {
+      if (defaultData.firstName) setFirstName(defaultData.firstName);
+      if (defaultData.lastName) setLastName(defaultData.lastName);
+      if (defaultData.email) setEmail(defaultData.email);
+      if (defaultData.phone && defaultData.phone.length > 5) setPhone(phoneForDisplay(defaultData.phone));
+      if (defaultData.city) setCity(defaultData.city);
+      if (defaultData.age) setAge(String(defaultData.age));
+      
+      if (defaultData.matchingProfile) {
+        const mp = defaultData.matchingProfile;
+        if (mp.skills && mp.skills.length > 0) setSkills(mp.skills);
+        if (mp.experienceYears !== null) setExperienceYears(String(mp.experienceYears));
+        if (mp.hoursPerDay !== null) setHoursPerDay(String(mp.hoursPerDay));
+        if (mp.commitmentLevel) setCommitmentLevel(mp.commitmentLevel);
+        if (mp.hasIdea !== undefined) setHasIdea(mp.hasIdea);
+        if (mp.ideaSummary) setIdeaSummary(mp.ideaSummary);
+        if (mp.ideaCategory) setIdeaCategory(mp.ideaCategory);
+      }
+
       if (defaultData.vocation) setVocation(defaultData.vocation);
       if (defaultData.obsession) setObsession(defaultData.obsession);
       if (defaultData.heresy) setHeresy(defaultData.heresy);
@@ -142,15 +161,30 @@ export default function ApplicationForm({ onSubmit, defaultData, userInfo }: App
   }, [defaultData]);
 
   // Auto-save draft
-  const saveDraft = useCallback(() => {
+  const saveDraft = useCallback(async () => {
     const draft = {
       firstName, lastName, email, phone, city, age,
       skills, experienceYears, hoursPerDay, commitmentLevel,
       hasIdea, ideaSummary, ideaCategory,
       vocation, obsession, heresy, scarTissue,
     };
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-  }, [firstName, lastName, email, phone, city, age, skills, experienceYears, hoursPerDay, commitmentLevel, hasIdea, ideaSummary, ideaCategory, vocation, obsession, heresy, scarTissue]);
+    
+    if (isAuthenticated) {
+      const storedPhone = phone ? formatPhoneForStorage(phone) : '';
+      const payload = {
+        ...draft,
+        phone: storedPhone,
+        age: age ? parseInt(age) : null,
+        experienceYears: experienceYears ? parseInt(experienceYears) : null,
+        hoursPerDay: hoursPerDay ? parseInt(hoursPerDay) : null,
+      };
+      
+      // Do not wait for response to avoid blocking typing
+      api.submitDossier(payload).catch(e => console.error("Draft autosave failed", e));
+    } else {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    }
+  }, [firstName, lastName, email, phone, city, age, skills, experienceYears, hoursPerDay, commitmentLevel, hasIdea, ideaSummary, ideaCategory, vocation, obsession, heresy, scarTissue, isAuthenticated]);
 
   useEffect(() => {
     const timeout = setTimeout(saveDraft, 500);

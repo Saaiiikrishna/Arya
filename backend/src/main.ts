@@ -1,8 +1,9 @@
-
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
+import * as bcrypt from 'bcrypt';
+import { v4 as uuidv4 } from 'uuid';
 import { AppModule } from './app.module';
 import { PrismaService } from './prisma';
 
@@ -12,7 +13,6 @@ async function autoSeed(app: any) {
     const prisma = app.get(PrismaService);
 
     // Ensure default admin exists
-    const bcrypt = require('bcrypt');
     const adminPassword = await bcrypt.hash('admin123456', 12);
     await prisma.admin.upsert({
       where: { email: 'admin@arya.com' },
@@ -35,7 +35,6 @@ async function autoSeed(app: any) {
     });
 
     // Ensure test applicant exists
-    const { v4: uuidv4 } = require('uuid');
     await prisma.applicant.upsert({
       where: { email: 'test@arya.com' },
       update: {},

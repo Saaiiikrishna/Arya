@@ -47,6 +47,13 @@ export class ApplicantController {
     }
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Get('applicants/me/dossier')
+  async getMyDossierEndpoint(@Req() req: any) {
+    const applicantId = req.user.id || req.user.sub;
+    return this.applicantService.getMyProfile(applicantId);
+  }
+
   @Post('applicants/answers/:accessToken')
   async submitAdditionalAnswers(
     @Param('accessToken') accessToken: string,

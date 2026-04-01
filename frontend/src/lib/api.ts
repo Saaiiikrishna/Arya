@@ -39,7 +39,7 @@ class ApiClient {
     }
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout for cold starts / network delays
 
     try {
       const response = await fetch(`${API_BASE}${endpoint}`, {
@@ -204,6 +204,10 @@ class ApiClient {
 
   async submitDossier(data: any) {
     return this.request<any>('/applicants/dossier', { method: 'PATCH', body: data });
+  }
+
+  async getMyDossier() {
+    return this.request<any>('/applicants/me/dossier');
   }
 
   async createRazorpayOrder() {

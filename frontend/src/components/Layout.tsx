@@ -90,7 +90,6 @@ export default function Layout({ children, activeTab = 'manifesto', onTabChange,
             <div className="hidden md:flex items-center space-x-8">
               {[
                 { id: 'manifesto', label: 'Manifesto' },
-                { id: 'apply', label: 'Apply' },
                 { id: 'archives', label: 'Archives' },
                 { id: 'investors', label: 'Investors' },
                 { id: 'support', label: 'Support' },
@@ -163,7 +162,7 @@ export default function Layout({ children, activeTab = 'manifesto', onTabChange,
             
             <div className="flex flex-col gap-4 border-l border-forest/10 pl-6">
                <h4 className="font-serif italic text-forest mb-2">Navigation</h4>
-              {['Manifesto', 'Apply', 'Archives'].map((link) => (
+              {['Manifesto', 'Archives'].map((link) => (
                 <button
                   key={link}
                   onClick={() => handleNavigation(link.toLowerCase())}
