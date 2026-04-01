@@ -187,6 +187,10 @@ class ApiClient {
     return this.request<any>(`/admin/applicants/${id}`, { method: 'DELETE' });
   }
 
+  async deleteApplicant(id: string) {
+    return this.request<any>(`/admin/applicants/${id}/hard`, { method: 'DELETE' });
+  }
+
   async updateApplicantStatus(id: string, status: string) {
     return this.request<any>(`/admin/applicants/${id}/status`, {
       method: 'PATCH',

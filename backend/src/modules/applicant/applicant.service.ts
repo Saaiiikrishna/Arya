@@ -128,6 +128,10 @@ export class ApplicantService {
     if (!applicant) {
       throw new NotFoundException('Applicant not found');
     }
+    
+    if (applicant.status !== 'PENDING') {
+      throw new BadRequestException('Application corresponds to a finalized dossier and cannot be edited');
+    }
 
     // Safe parseInt that returns null instead of NaN
     const safeInt = (val: any): number | null => {
@@ -241,6 +245,13 @@ export class ApplicantService {
       ];
     }
 
+    // Filter to only include applicants who have successfully completed a payment
+    where.payments = {
+      some: {
+        status: 'CAPTURED'
+      }
+    };
+
     const [applicants, total] = await Promise.all([
       this.prisma.applicant.findMany({
         where,
@@ -316,6 +327,43 @@ export class ApplicantService {
       removedApplicantId: id,
       batchId: applicant.batchId,
       message: 'Applicant removed. Backfill job will be triggered.',
+    };
+  }
+
+  async hardDeleteApplicant(id: string) {
+    const applicant = await this.prisma.applicant.findUnique({
+      where: { id },
+    });
+    if (!applicant) throw new NotFoundException('Applicant not found');
+
+    await this.prisma.$transaction(async (tx) => {
+      if (applicant.batchId && applicant.status !== 'REMOVED') {
+        await tx.batch.update({
+          where: { id: applicant.batchId },
+          data: { currentCount: { decrement: 1 } },
+        });
+      }
+
+      await tx.payment.deleteMany({
+        where: { applicantId: id },
+      });
+
+      await (tx as any).pageView.deleteMany({
+        where: { applicantId: id },
+      });
+      
+      await (tx as any).trainingAssignment.deleteMany({
+        where: { applicantId: id },
+      });
+
+      await tx.applicant.delete({
+        where: { id },
+      });
+    });
+
+    return {
+      deletedApplicantId: id,
+      message: 'Applicant permanently deleted.',
     };
   }
 

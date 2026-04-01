@@ -8,6 +8,7 @@ interface ApplicationFormProps {
   onSubmit: (data: any) => void;
   defaultData?: any;
   userInfo?: { firstName?: string; lastName?: string; email?: string };
+  readOnly?: boolean;
 }
 
 const IDEA_CATEGORIES = [
@@ -58,7 +59,7 @@ function phoneForDisplay(stored: string): string {
   return stored.replace(/\D/g, '').slice(0, 10);
 }
 
-export default function ApplicationForm({ onSubmit, defaultData, userInfo }: ApplicationFormProps) {
+export default function ApplicationForm({ onSubmit, defaultData, userInfo, readOnly }: ApplicationFormProps) {
   const { admin, isAuthenticated } = useAuth();
   const [step, setStep] = useState(1);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -296,6 +297,63 @@ export default function ApplicationForm({ onSubmit, defaultData, userInfo }: App
     `w-full bg-transparent border border-hairline px-4 py-3.5 focus:outline-none focus:border-forest text-base font-sans leading-relaxed placeholder:text-ink/25 transition-all resize-none ${
       hasError ? 'border-terracotta' : ''
     }`;
+
+  if (readOnly) {
+    return (
+      <div className="space-y-8 bg-parchment/30 p-8 border border-hairline relative">
+        <div className="absolute top-0 right-0 py-1 px-3 border border-r-0 border-t-0 border-hairline bg-white text-ink/40 text-[10px] uppercase tracking-widest font-bold">
+          Archive Record
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 font-sans text-sm">
+          <div><span className="text-ink/50 uppercase tracking-widest text-[10px] block mb-1">Name</span><strong className="text-forest">{firstName} {lastName}</strong></div>
+          <div><span className="text-ink/50 uppercase tracking-widest text-[10px] block mb-1">Email</span><strong className="text-forest">{email}</strong></div>
+          <div><span className="text-ink/50 uppercase tracking-widest text-[10px] block mb-1">Phone</span><strong className="text-forest">{phone}</strong></div>
+          <div><span className="text-ink/50 uppercase tracking-widest text-[10px] block mb-1">City</span><strong className="text-forest">{city}</strong></div>
+          <div><span className="text-ink/50 uppercase tracking-widest text-[10px] block mb-1">Age</span><strong className="text-forest">{age}</strong></div>
+          
+          <div className="md:col-span-2"><span className="text-ink/50 uppercase tracking-widest text-[10px] block mb-1">Skills</span>
+            <div className="flex flex-wrap gap-2 mt-1">
+              {skills.map(s => <span key={s} className="px-2 py-1 bg-white border border-hairline text-xs font-medium">{s}</span>)}
+            </div>
+          </div>
+          <div><span className="text-ink/50 uppercase tracking-widest text-[10px] block mb-1">Experience</span><strong className="text-forest">{experienceYears} years</strong></div>
+          <div>
+            <span className="text-ink/50 uppercase tracking-widest text-[10px] block mb-1">Commitment</span>
+            <strong className="text-forest">
+              {COMMITMENT_LEVELS.find(c => c.value === commitmentLevel)?.label || commitmentLevel}
+              {hoursPerDay ? ` (${hoursPerDay} hrs/day)` : ''}
+            </strong>
+          </div>
+          
+          <div className="md:col-span-2">
+            <span className="text-ink/50 uppercase tracking-widest text-[10px] block mb-1">Idea Details</span>
+            <strong className="text-forest block mb-2">{hasIdea ? (IDEA_CATEGORIES.find(c => c.value === ideaCategory)?.label || ideaCategory) : 'No specific idea yet'}</strong>
+            {hasIdea && ideaSummary && <p className="text-forest/80 whitespace-pre-wrap mt-2 p-4 bg-white border border-hairline leading-relaxed">{ideaSummary}</p>}
+          </div>
+
+          <div className="md:col-span-2 mt-4 space-y-6">
+            <h4 className="font-serif text-lg font-bold text-forest border-b border-hairline pb-2">Creative Assessment</h4>
+            <div>
+              <span className="text-ink/50 uppercase tracking-widest text-[10px] block mb-2 font-bold">Vocation</span>
+              <p className="text-forest/80 whitespace-pre-wrap p-4 bg-white border border-hairline leading-relaxed">{vocation}</p>
+            </div>
+            <div>
+              <span className="text-ink/50 uppercase tracking-widest text-[10px] block mb-2 font-bold">Obsession</span>
+              <p className="text-forest/80 whitespace-pre-wrap p-4 bg-white border border-hairline leading-relaxed">{obsession}</p>
+            </div>
+            <div>
+              <span className="text-ink/50 uppercase tracking-widest text-[10px] block mb-2 font-bold">Heresy</span>
+              <p className="text-forest/80 whitespace-pre-wrap p-4 bg-white border border-hairline leading-relaxed">{heresy}</p>
+            </div>
+            <div>
+              <span className="text-ink/50 uppercase tracking-widest text-[10px] block mb-2 font-bold">Scar Tissue</span>
+              <p className="text-forest/80 whitespace-pre-wrap p-4 bg-white border border-hairline leading-relaxed">{scarTissue}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen py-24 px-6">

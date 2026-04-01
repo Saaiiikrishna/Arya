@@ -38,7 +38,9 @@ export default function ChatWidget({ teamId, userId, userName }: ChatWidgetProps
     if (!isOpen) return;
 
     const token = localStorage.getItem('token');
-    const newSocket = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000', {
+    // Strip /api from the URL to connect to the root namespace
+    const baseUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api').replace(/\/api\/?$/, '');
+    const newSocket = io(baseUrl, {
       auth: { token },
       transports: ['websocket']
     });

@@ -9,7 +9,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, logout, isAuthenticated, admin } = useAuth();
   const router = useRouter();
 
   const handleSubmit = async (e: FormEvent) => {
@@ -25,6 +25,39 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
+
+  if (isAuthenticated && admin) {
+    return (
+      <div className="min-h-screen bg-parchment flex items-center justify-center p-8 selection:bg-forest selection:text-parchment">
+        <div className="w-full max-w-md bg-white border border-hairline p-12 text-center shadow-sm relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-16 h-16 bg-forest/5 -mr-8 -mt-8 rotate-45 border border-forest/10" />
+          <div className="flex justify-center mb-6 relative z-10 pt-4">
+            <span className="text-4xl font-serif italic text-forest leading-none">Aryavartham</span>
+          </div>
+          <h2 className="font-serif text-2xl font-bold mb-4 text-forest relative z-10">Active Session</h2>
+          <p className="text-ink/60 mb-8 leading-relaxed text-sm relative z-10">
+            You are securely logged in as <strong>{admin.email}</strong>.
+          </p>
+          <div className="flex flex-col gap-4 relative z-10">
+            <button
+              onClick={() => router.push('/admin/dashboard')}
+              className="bg-forest text-parchment px-8 py-4 text-sm font-sans uppercase tracking-[0.2em] font-bold hover:bg-forest/90 transition-colors"
+            >
+              Command Center →
+            </button>
+            <button
+              onClick={() => {
+                logout();
+              }}
+              className="bg-transparent border border-terracotta text-terracotta px-8 py-4 text-sm font-sans uppercase tracking-[0.2em] font-bold hover:bg-terracotta/5 transition-colors"
+            >
+              Logout Entirely
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-parchment flex items-center justify-center p-8 selection:bg-forest selection:text-parchment">

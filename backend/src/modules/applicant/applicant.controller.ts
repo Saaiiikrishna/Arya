@@ -102,6 +102,12 @@ export class ApplicantController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Delete('admin/applicants/:id/hard')
+  async hardDelete(@Param('id') id: string) {
+    return this.applicantService.hardDeleteApplicant(id);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Patch('admin/applicants/:id/status')
   async updateStatus(
     @Param('id') id: string,

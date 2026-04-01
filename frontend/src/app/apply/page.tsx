@@ -16,7 +16,7 @@ export default function ApplyPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   
-  // Draft / State
+  const [isEditingUnpaid, setIsEditingUnpaid] = useState(false);
   const [dossierData, setDossierData] = useState<any>(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [paymentPending, setPaymentPending] = useState(false);
@@ -118,7 +118,7 @@ export default function ApplyPage() {
           <div className="w-8 h-8 border-2 border-forest border-t-transparent rounded-full animate-spin" />
         </div>
       ) : isSubmitted ? (
-         <div className="min-h-screen py-24 px-6 flex items-center justify-center">
+         <div className="min-h-screen py-24 px-6 flex flex-col items-center max-w-4xl mx-auto space-y-12">
            <div className="bg-white border border-hairline p-12 max-w-lg w-full text-center shadow-lg">
              <div className="w-16 h-16 bg-forest/10 rounded-full flex items-center justify-center mx-auto mb-6 text-2xl">
                ✅
@@ -134,8 +134,18 @@ export default function ApplyPage() {
                Return to Hub →
              </button>
            </div>
+           
+           <div className="w-full">
+             <h3 className="font-serif text-2xl font-bold mb-6 text-forest">Your Submission Record</h3>
+             <ApplicationForm 
+               onSubmit={() => {}} 
+               defaultData={dossierData} 
+               userInfo={admin || undefined} 
+               readOnly={true} 
+             />
+           </div>
          </div>
-      ) : paymentPending ? (
+      ) : paymentPending && !isEditingUnpaid ? (
          <div className="min-h-screen py-24 px-6 flex items-center justify-center">
            <div className="bg-white border border-hairline p-12 max-w-lg w-full text-center shadow-lg">
              <div className="w-16 h-16 bg-terracotta/10 rounded-full flex items-center justify-center mx-auto mb-6 text-2xl">
@@ -145,12 +155,20 @@ export default function ApplyPage() {
              <p className="text-ink/60 mb-8 leading-relaxed">
                Your form filling is complete, but the pledge payment was not finalized. Please securely complete the pledge to formally seal your dossier.
              </p>
-             <button
-               onClick={() => router.push('/pledge')}
-               className="inline-block bg-terracotta text-parchment px-8 py-4 text-sm uppercase tracking-widest font-bold hover:bg-terracotta/90 transition-colors"
-             >
-               Commit Pledge →
-             </button>
+             <div className="flex flex-col gap-4 max-w-xs mx-auto">
+               <button
+                 onClick={() => router.push('/pledge')}
+                 className="inline-block bg-terracotta text-parchment px-8 py-4 text-sm uppercase tracking-widest font-bold hover:bg-terracotta/90 transition-colors w-full"
+               >
+                 Commit Pledge →
+               </button>
+               <button
+                 onClick={() => setIsEditingUnpaid(true)}
+                 className="bg-transparent border border-terracotta text-terracotta px-8 py-4 text-sm uppercase tracking-widest font-bold hover:bg-terracotta/5 transition-colors w-full"
+               >
+                 Edit Application
+               </button>
+             </div>
            </div>
          </div>
       ) : (

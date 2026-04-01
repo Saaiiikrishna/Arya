@@ -10,7 +10,8 @@ export default function Hub() {
 
   useEffect(() => {
     // Note: teamId would be fetched from auth context
-    fetch('http://localhost:3000/sprints/team/dummy-team-id')
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+    fetch(`${baseUrl}/admin/sprints/team/dummy-team-id`)
       .then(res => res.json())
       .then(data => {
         if (!data.error && data.id) setSprintData(data);

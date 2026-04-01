@@ -72,6 +72,19 @@ export default function UsersPage() {
     }
   };
 
+  const handleDelete = async (id: string, name: string) => {
+    if (!confirm(`Permanently delete application for ${name}? This action cannot be undone.`)) return;
+    setActionLoading(id);
+    try {
+      await api.deleteApplicant(id);
+      loadUsers();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const statuses = ['', 'PENDING', 'HELD', 'ELIGIBLE', 'INELIGIBLE', 'ACTIVE', 'REMOVED', 'CONSENTED', 'FINALIZED', 'TRAINING'];
 
   const getStatusBadge = (status: string) => {
@@ -208,6 +221,13 @@ export default function UsersPage() {
                                   ↺ Restore
                                 </button>
                               )}
+                              {/* Delete completely */}
+                              <button
+                                className="text-[10px] uppercase tracking-widest font-bold text-red-700 hover:text-red-900 transition-colors px-2 py-1 border border-red-300 bg-red-100 hover:bg-red-200"
+                                onClick={() => handleDelete(user.id, `${user.firstName} ${user.lastName}`)}
+                              >
+                                ✕ Delete
+                              </button>
                             </>
                           )}
                         </div>
