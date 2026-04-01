@@ -108,23 +108,16 @@ export default function ApplyPage() {
     }
   };
 
-  // Render Loader while fetching
-  if (loading || fetchingDossier) {
-    return (
-      <Layout activeTab="apply">
-        <GlobalOneTap />
+  return (
+    <Layout activeTab="apply">
+      <GlobalOneTap />
+      
+      {/* State-based conditional rendering */}
+      {(loading || fetchingDossier) ? (
         <div className="min-h-screen py-24 px-6 flex items-center justify-center bg-parchment">
           <div className="w-8 h-8 border-2 border-forest border-t-transparent rounded-full animate-spin" />
         </div>
-      </Layout>
-    );
-  }
-
-  // Render Already Submitted Page
-  if (isSubmitted) {
-    return (
-      <Layout activeTab="apply">
-         <GlobalOneTap />
+      ) : isSubmitted ? (
          <div className="min-h-screen py-24 px-6 flex items-center justify-center">
            <div className="bg-white border border-hairline p-12 max-w-lg w-full text-center shadow-lg">
              <div className="w-16 h-16 bg-forest/10 rounded-full flex items-center justify-center mx-auto mb-6 text-2xl">
@@ -142,15 +135,7 @@ export default function ApplyPage() {
              </button>
            </div>
          </div>
-      </Layout>
-    );
-  }
-
-  // Render Pending Payment Page
-  if (paymentPending) {
-    return (
-      <Layout activeTab="apply">
-         <GlobalOneTap />
+      ) : paymentPending ? (
          <div className="min-h-screen py-24 px-6 flex items-center justify-center">
            <div className="bg-white border border-hairline p-12 max-w-lg w-full text-center shadow-lg">
              <div className="w-16 h-16 bg-terracotta/10 rounded-full flex items-center justify-center mx-auto mb-6 text-2xl">
@@ -168,55 +153,51 @@ export default function ApplyPage() {
              </button>
            </div>
          </div>
-      </Layout>
-    );
-  }
+      ) : (
+        <>
+          {/* Submitting overlay */}
+          {submitting && (
+            <div className="fixed inset-0 z-50 bg-parchment/90 backdrop-blur-sm flex items-center justify-center p-6">
+              <div className="bg-white border border-hairline p-12 max-w-lg w-full text-center shadow-2xl">
+                <div className="w-8 h-8 border-2 border-forest border-t-transparent rounded-full animate-spin mx-auto mb-6" />
+                <h2 className="font-serif text-2xl font-bold mb-2 text-forest">Sealing Your Application</h2>
+                <p className="text-ink/50 text-sm uppercase tracking-widest">Transmitting dossier...</p>
+              </div>
+            </div>
+          )}
 
-  return (
-    <Layout activeTab="apply">
-      <GlobalOneTap />
-      
-      {/* Submitting overlay */}
-      {submitting && (
-        <div className="fixed inset-0 z-50 bg-parchment/90 backdrop-blur-sm flex items-center justify-center p-6">
-          <div className="bg-white border border-hairline p-12 max-w-lg w-full text-center shadow-2xl">
-            <div className="w-8 h-8 border-2 border-forest border-t-transparent rounded-full animate-spin mx-auto mb-6" />
-            <h2 className="font-serif text-2xl font-bold mb-2 text-forest">Sealing Your Application</h2>
-            <p className="text-ink/50 text-sm uppercase tracking-widest">Transmitting dossier...</p>
-          </div>
-        </div>
+          {/* Error banner */}
+          {error && !submitting && (
+            <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-terracotta text-parchment px-8 py-4 shadow-lg max-w-lg text-center">
+              <p className="text-sm font-bold uppercase tracking-widest">{error}</p>
+              <button onClick={() => setError('')} className="text-xs underline mt-2 opacity-70 hover:opacity-100">Dismiss</button>
+            </div>
+          )}
+
+          {authTriggered && !isAuthenticated ? (
+            <div className="fixed inset-0 z-50 bg-parchment/90 backdrop-blur-sm flex items-center justify-center p-6">
+              <div className="bg-white border border-hairline p-12 max-w-lg w-full text-center shadow-2xl">
+                <h2 className="font-serif text-3xl font-bold mb-4 text-forest">Identity Required</h2>
+                <p className="text-ink/60 mb-8 leading-relaxed">
+                  Your application is ready to be sealed. Please authenticate your identity to proceed to the pledge phase.
+                </p>
+                <a 
+                  href="/login" 
+                  className="inline-block bg-forest text-parchment px-8 py-4 text-sm uppercase tracking-widest font-bold hover:bg-forest/90 transition-colors"
+                >
+                  Login to Submit →
+                </a>
+              </div>
+            </div>
+          ) : null}
+
+          <ApplicationForm 
+            onSubmit={handleSubmit} 
+            defaultData={dossierData}
+            userInfo={admin && !dossierData ? { firstName: admin.firstName, lastName: admin.lastName, email: admin.email } : undefined}
+          />
+        </>
       )}
-
-      {/* Error banner */}
-      {error && !submitting && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-terracotta text-parchment px-8 py-4 shadow-lg max-w-lg text-center">
-          <p className="text-sm font-bold uppercase tracking-widest">{error}</p>
-          <button onClick={() => setError('')} className="text-xs underline mt-2 opacity-70 hover:opacity-100">Dismiss</button>
-        </div>
-      )}
-
-      {authTriggered && !isAuthenticated ? (
-        <div className="fixed inset-0 z-50 bg-parchment/90 backdrop-blur-sm flex items-center justify-center p-6">
-          <div className="bg-white border border-hairline p-12 max-w-lg w-full text-center shadow-2xl">
-            <h2 className="font-serif text-3xl font-bold mb-4 text-forest">Identity Required</h2>
-            <p className="text-ink/60 mb-8 leading-relaxed">
-              Your application is ready to be sealed. Please authenticate your identity to proceed to the pledge phase.
-            </p>
-            <a 
-              href="/login" 
-              className="inline-block bg-forest text-parchment px-8 py-4 text-sm uppercase tracking-widest font-bold hover:bg-forest/90 transition-colors"
-            >
-              Login to Submit →
-            </a>
-          </div>
-        </div>
-      ) : null}
-
-      <ApplicationForm 
-        onSubmit={handleSubmit} 
-        defaultData={dossierData}
-        userInfo={admin && !dossierData ? { firstName: admin.firstName, lastName: admin.lastName, email: admin.email } : undefined}
-      />
     </Layout>
   );
 }

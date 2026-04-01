@@ -1,6 +1,8 @@
 import { Injectable, UnauthorizedException, BadRequestException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { InjectRedis } from '@nestjs-modules/ioredis';
+import Redis from 'ioredis';
 import * as bcrypt from 'bcrypt';
 import { OAuth2Client } from 'google-auth-library';
 import { v4 as uuidv4 } from 'uuid';
@@ -12,10 +14,8 @@ export interface JwtPayload {
   sub: string;
   email: string;
   role: string;
+  tokenId?: string; // For refresh token rotation tracking
 }
-
-// In-memory OTP store: email -> { otp, expiresAt }
-const otpStore = new Map<string, { otp: string; expiresAt: number }>();
 
 @Injectable()
 export class AuthService {
