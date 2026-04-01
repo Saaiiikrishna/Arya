@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
+import { useRouter } from 'next/navigation';
 
 interface Stats {
   totalApplicants: number;
@@ -28,6 +29,7 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const { admin, logout } = useAuth();
+  const router = useRouter();
 
   useEffect(() => {
     api.getDashboardStats().then(setStats).finally(() => setLoading(false));
@@ -62,7 +64,10 @@ export default function DashboardPage() {
             <p className="text-sm uppercase tracking-widest text-forest font-medium">Administrator Privileges</p>
             {admin?.role === 'SUPER_ADMIN' && (
               <button
-                onClick={logout}
+                onClick={() => {
+                  logout();
+                  router.push('/admin/login');
+                }}
                 className="flex items-center gap-2 border border-terracotta text-terracotta px-3 py-1 text-[10px] uppercase tracking-widest hover:bg-terracotta hover:text-white transition-colors"
                 title="Super Admin Disconnect"
               >

@@ -54,7 +54,7 @@ jobs:
               "JWT_EXPIRATION=15m" \
               "JWT_REFRESH_SECRET=${{ secrets.JWT_REFRESH_SECRET }}" \
               "JWT_REFRESH_EXPIRATION=7d" \
-              "AWS_REGION=ap-south-1" \
+              "AWS_REGION=ap-south-2" \
               "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" \
               "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" \
               "AWS_SES_FROM_EMAIL=support@aryavartham.com" \

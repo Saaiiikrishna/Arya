@@ -18,7 +18,7 @@ export default function ProfilePage() {
 
   const handleLogout = () => {
     logout();
-    router.push('/');
+    window.location.href = '/';
   };
 
   if (loading || !user) {

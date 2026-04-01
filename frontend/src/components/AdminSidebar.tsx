@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { useSettings } from '@/lib/settings';
 import styles from './AdminSidebar.module.css';
@@ -18,6 +18,7 @@ const navItems = [
 
 export default function AdminSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const { admin, logout } = useAuth();
   const { settings } = useSettings();
   const logoMode = settings?.logoMode || 'text';
@@ -64,7 +65,10 @@ export default function AdminSidebar() {
         </div>
         <button 
           className="w-full flex items-center justify-center gap-3 py-2 border border-terracotta/20 text-terracotta hover:bg-terracotta/10 transition-colors cursor-pointer group rounded"
-          onClick={logout}
+          onClick={() => {
+            logout();
+            router.push('/admin/login');
+          }}
           title="Logout"
         >
           <span className="font-sans text-[10px] uppercase tracking-widest font-bold group-hover:tracking-[0.25em] transition-all">Logout</span>
