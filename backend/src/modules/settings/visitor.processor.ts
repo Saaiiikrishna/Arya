@@ -51,7 +51,7 @@ export class VisitorProcessor extends WorkerHost {
       applicantId: data.applicantId || null,
       applicantEmail: data.applicantEmail || null,
       applicantName: data.applicantName || null,
-      duration: data.duration || null,
+      duration: data.duration || 0,
       timestamp: data.timestamp ? new Date(data.timestamp) : new Date(),
     });
 
@@ -61,7 +61,7 @@ export class VisitorProcessor extends WorkerHost {
   }
 
   /**
-   * Flush buffered page views to DB in a single createMany call.
+   * Flush buffered page views to DB as aggregated Visitor upserts.
    */
   private async flushBuffer() {
     if (this.buffer.length === 0) return;
@@ -69,12 +69,88 @@ export class VisitorProcessor extends WorkerHost {
     const batch = [...this.buffer];
     this.buffer = [];
 
+    // Aggregate by sessionId to avoid race conditions
+    const aggregatedBySession: Record<string, { hits: any[]; latest: any }> = {};
+
+    for (const item of batch) {
+      const sessionId = item.sessionId;
+      if (!sessionId) continue; // fallback to session if no IP
+      if (!aggregatedBySession[sessionId]) {
+        aggregatedBySession[sessionId] = { hits: [], latest: item };
+      } else {
+        aggregatedBySession[sessionId].latest = {
+          ...aggregatedBySession[sessionId].latest,
+          ...item,
+          applicantId: item.applicantId || aggregatedBySession[sessionId].latest.applicantId,
+          applicantEmail: item.applicantEmail || aggregatedBySession[sessionId].latest.applicantEmail,
+          applicantName: item.applicantName || aggregatedBySession[sessionId].latest.applicantName,
+        };
+      }
+      aggregatedBySession[sessionId].hits.push({
+        path: item.path,
+        timestamp: item.timestamp.toISOString(),
+        duration: item.duration || 0,
+      });
+    }
+
     try {
-      await this.prisma.pageView.createMany({ data: batch });
-      this.logger.debug(`Flushed ${batch.length} page views to DB`);
-    } catch (error) {
-      this.logger.error(`Failed to flush page views: ${error.message}`);
-      // Push back failed items (up to a limit to avoid infinite growth)
+      for (const [sessionId, data] of Object.entries(aggregatedBySession)) {
+        const existing = await this.prisma.visitor.findUnique({ where: { sessionId } });
+        
+        const history: any[] = (existing?.history as any[]) || [];
+        history.push(...data.hits);
+        
+        // Exact duration in seconds between earliest known hit and most recent hit
+        const firstVisitAt = existing ? existing.firstVisitAt : new Date(data.hits[0].timestamp);
+        const lastVisitAt = new Date(data.latest.timestamp);
+        const totalDuration = Math.floor((lastVisitAt.getTime() - firstVisitAt.getTime()) / 1000);
+
+        await this.prisma.visitor.upsert({
+          where: { sessionId },
+          create: {
+            sessionId,
+            ip: data.latest.ip || '',
+            history,
+            totalDuration,
+            country: data.latest.country,
+            city: data.latest.city,
+            region: data.latest.region,
+            userAgent: data.latest.userAgent,
+            browser: data.latest.browser,
+            os: data.latest.os,
+            device: data.latest.device,
+            screenWidth: data.latest.screenWidth,
+            screenHeight: data.latest.screenHeight,
+            language: data.latest.language,
+            applicantId: data.latest.applicantId,
+            applicantEmail: data.latest.applicantEmail,
+            applicantName: data.latest.applicantName,
+            firstVisitAt,
+            lastVisitAt,
+          },
+          update: {
+            history,
+            totalDuration,
+            country: data.latest.country || existing?.country,
+            city: data.latest.city || existing?.city,
+            region: data.latest.region || existing?.region,
+            userAgent: data.latest.userAgent || existing?.userAgent,
+            browser: data.latest.browser || existing?.browser,
+            os: data.latest.os || existing?.os,
+            device: data.latest.device || existing?.device,
+            screenWidth: data.latest.screenWidth || existing?.screenWidth,
+            screenHeight: data.latest.screenHeight || existing?.screenHeight,
+            language: data.latest.language || existing?.language,
+            applicantId: data.latest.applicantId || existing?.applicantId,
+            applicantEmail: data.latest.applicantEmail || existing?.applicantEmail,
+            applicantName: data.latest.applicantName || existing?.applicantName,
+            lastVisitAt,
+          }
+        });
+      }
+      this.logger.debug(`Flushed ${batch.length} hits into ${Object.keys(aggregatedBySession).length} visitors`);
+    } catch (error: any) {
+      this.logger.error(`Failed to flush visitor buffers: ${error.message}`);
       if (this.buffer.length < 500) {
         this.buffer.push(...batch);
       }
@@ -105,19 +181,22 @@ export class VisitorProcessor extends WorkerHost {
 
     this.logger.log(`Aggregating daily stats for ${dateStr}`);
 
-    // Get path-level aggregates using raw SQL for efficiency
+    // Get path-level aggregates using json unnesting
     const pathStats: any[] = await this.prisma.$queryRaw`
       SELECT
-        path,
+        arr.elem->>'path' as path,
         COUNT(*)::int as views,
-        COUNT(DISTINCT ip)::int as unique_ips,
-        AVG(duration)::float as avg_duration
-      FROM page_views
-      WHERE timestamp >= ${dayStart} AND timestamp <= ${dayEnd}
-      GROUP BY path
+        COUNT(DISTINCT v.ip)::int as unique_ips,
+        AVG(CAST(COALESCE(arr.elem->>'duration', '0') AS FLOAT))::float as avg_duration
+      FROM visitors v,
+      jsonb_array_elements(v.history) as arr(elem)
+      WHERE CAST(arr.elem->>'timestamp' AS timestamp) >= ${dayStart} 
+        AND CAST(arr.elem->>'timestamp' AS timestamp) <= ${dayEnd}
+      GROUP BY arr.elem->>'path'
     `;
 
     for (const stat of pathStats) {
+      if (!stat.path) continue;
       await this.prisma.dailyPageStat.upsert({
         where: {
           date_path: { date: dayStart, path: stat.path },
@@ -144,20 +223,20 @@ export class VisitorProcessor extends WorkerHost {
   }
 
   /**
-   * Clean up raw page views older than 90 days.
+   * Clean up raw visitors older than 90 days.
    * Assumes daily aggregates are already computed.
    */
   private async handleCleanup() {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - 90);
 
-    this.logger.log(`Cleaning up page views older than ${cutoff.toISOString()}`);
+    this.logger.log(`Cleaning up visitors older than ${cutoff.toISOString()}`);
 
-    const result = await this.prisma.pageView.deleteMany({
-      where: { timestamp: { lt: cutoff } },
+    const result = await this.prisma.visitor.deleteMany({
+      where: { lastVisitAt: { lt: cutoff } },
     });
 
-    this.logger.log(`Deleted ${result.count} old page view records`);
+    this.logger.log(`Deleted ${result.count} old visitor records`);
     return { deleted: result.count };
   }
 

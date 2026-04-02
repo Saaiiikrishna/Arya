@@ -4,6 +4,7 @@ import { useState, useEffect, use } from 'react';
 import { api } from '@/lib/api';
 import Link from 'next/link';
 import SmartMatchingModal from '@/components/admin/SmartMatchingModal';
+import AdminElectionControls from '@/components/admin/AdminElectionControls';
 
 const STATUS_TRANSITIONS: Record<string, { next: string; label: string }> = {
   FILLING: { next: 'SCREENING', label: 'Start Screening' },
@@ -22,7 +23,20 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
   const [actionLoading, setActionLoading] = useState('');
   const [showInstructionModal, setShowInstructionModal] = useState(false);
   const [showMatchingModal, setShowMatchingModal] = useState(false);
-  const [instructionForm, setInstructionForm] = useState({ title: '', content: '' });
+  const [showCapacityModal, setShowCapacityModal] = useState(false);
+  const [showElectionModal, setShowElectionModal] = useState(false);
+  const [newCapacity, setNewCapacity] = useState(1000);
+  const [instructionForm, setInstructionForm] = useState({
+    title: '',
+    content: '',
+    explanation: '',
+    deadline: '',
+    additionalQuestionIds: [] as string[],
+  });
+  const [electionForm, setElectionForm] = useState({
+    instructions: '',
+    deadline: '',
+  });
 
   const loadData = async () => {
     try {
@@ -32,6 +46,7 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
       ]);
       setBatch(batchData);
       setTeams(teamsData);
+      setNewCapacity(batchData.capacity);
     } finally {
       setLoading(false);
     }
@@ -82,14 +97,64 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
 
   const handleSendInstructions = async (e: React.FormEvent) => {
     e.preventDefault();
+    const applicantCount = batch._count?.applicants || 0;
+    if (!confirm(`All ${applicantCount} applicants in this batch will receive this questionnaire. Continue?`)) return;
     try {
-      await api.sendBatchInstructions(id, instructionForm);
+      const result = await api.sendBatchInstructions(id, instructionForm);
       setShowInstructionModal(false);
-      setInstructionForm({ title: '', content: '' });
-      alert('Instructions sent!');
+      setInstructionForm({ title: '', content: '', explanation: '', deadline: '', additionalQuestionIds: [] });
+      alert(`Instructions sent! ${result.emailsSent || 0} emails dispatched.`);
       loadData();
     } catch (err: any) {
       alert(err.message);
+    }
+  };
+
+  const handleIncreaseCapacity = async () => {
+    if (newCapacity <= batch.capacity) {
+      alert('New capacity must be greater than current capacity');
+      return;
+    }
+    try {
+      await api.updateBatch(id, { capacity: newCapacity });
+      setShowCapacityModal(false);
+      loadData();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleRemoveNonResponders = async (instructionId: string) => {
+    if (!confirm('This will remove all applicants who did not respond to this questionnaire. Continue?')) return;
+    setActionLoading(`remove-${instructionId}`);
+    try {
+      const result = await api.removeNonResponders(id, instructionId);
+      alert(`Removed ${result.removedCount} non-responder(s)`);
+      loadData();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setActionLoading('');
+    }
+  };
+
+  const handleStartBatchElections = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!confirm('This will start a leadership election for ALL teams in this batch. Continue?')) return;
+    setActionLoading('election');
+    try {
+      const result = await api.startBatchElections(id, {
+        instructions: electionForm.instructions || undefined,
+        deadline: electionForm.deadline || undefined,
+      });
+      setShowElectionModal(false);
+      setElectionForm({ instructions: '', deadline: '' });
+      alert(`Elections started for ${result.totalTeams} teams. Check each team for details.`);
+      loadData();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setActionLoading('');
     }
   };
 
@@ -117,7 +182,13 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
           <Link href="/admin/batches" className="text-sm uppercase tracking-widest text-forest font-medium mb-3 inline-block">
             ← All Batches
           </Link>
-          <h1 className="font-serif text-5xl font-bold leading-none">Batch #{batch.batchNumber}</h1>
+          <h1 className="font-serif text-5xl font-bold leading-none">
+            Batch #{batch.batchNumber}
+            {batch.name && <span className="text-2xl text-ink/50 ml-3 font-normal">— {batch.name}</span>}
+          </h1>
+          {batch.nickname && (
+            <p className="text-xs text-ink/40 uppercase tracking-widest mt-1">"{batch.nickname}"</p>
+          )}
           <div className="flex items-center gap-4 mt-4">
             <span className={`px-3 py-1 text-[10px] uppercase tracking-widest font-bold border ${
               batch.status === 'PRODUCTION'
@@ -129,6 +200,12 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
             <span className="text-sm text-ink/40 uppercase tracking-widest">
               {batch.currentCount} / {batch.capacity} applicants
             </span>
+            <button
+              onClick={() => setShowCapacityModal(true)}
+              className="text-[10px] uppercase tracking-widest text-forest border border-forest/30 px-2 py-1 hover:bg-forest/10 transition-colors"
+            >
+              Increase Quota
+            </button>
           </div>
         </div>
 
@@ -149,6 +226,15 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
               disabled={!!actionLoading}
             >
               🧩 Form Teams
+            </button>
+          )}
+          {teams.length > 0 && ['TEAM_FORMATION', 'PROCESSING'].includes(batch.status) && (
+            <button
+              className="bg-terracotta text-white px-6 py-3 text-xs uppercase tracking-widest font-semibold hover:bg-terracotta/90 transition-colors"
+              onClick={() => setShowElectionModal(true)}
+              disabled={!!actionLoading}
+            >
+              🗳️ Start Election Procedure
             </button>
           )}
           <button
@@ -205,6 +291,7 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
                 {team.members && team.members.length > 5 && (
                   <div className="text-xs text-ink/40 mt-2 uppercase tracking-widest">+{team.members.length - 5} more</div>
                 )}
+                <AdminElectionControls teamId={team.id} />
               </div>
             ))}
           </div>
@@ -220,11 +307,35 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
               <div key={inst.id} className="p-6 border-b border-hairline last:border-0 hover:bg-parchment/30 transition-colors">
                 <div className="flex items-center justify-between mb-2">
                   <span className="font-serif text-lg font-bold">{inst.title}</span>
-                  <span className="text-[10px] uppercase tracking-widest text-ink/40 font-semibold">
-                    {new Date(inst.sentAt).toLocaleDateString()}
-                  </span>
+                  <div className="flex items-center gap-3">
+                    {inst.deadline && (
+                      <span className="text-[10px] uppercase tracking-widest text-terracotta font-semibold">
+                        ⏰ {new Date(inst.deadline).toLocaleDateString()}
+                      </span>
+                    )}
+                    <span className="text-[10px] uppercase tracking-widest text-ink/40 font-semibold">
+                      {new Date(inst.sentAt).toLocaleDateString()}
+                    </span>
+                  </div>
                 </div>
+                {inst.explanation && (
+                  <p className="text-xs text-ink/50 italic mb-2">{inst.explanation}</p>
+                )}
                 <p className="text-sm text-ink/60 leading-relaxed">{inst.content}</p>
+                {inst.additionalQuestionIds && inst.additionalQuestionIds.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-hairline flex justify-between items-center">
+                    <span className="text-[10px] uppercase tracking-widest text-ink/40">
+                      {inst.additionalQuestionIds.length} question(s) attached
+                    </span>
+                    <button
+                      onClick={() => handleRemoveNonResponders(inst.id)}
+                      disabled={actionLoading === `remove-${inst.id}`}
+                      className="text-[10px] uppercase tracking-widest font-bold text-terracotta border border-terracotta/30 px-3 py-1.5 hover:bg-terracotta hover:text-white transition-colors"
+                    >
+                      {actionLoading === `remove-${inst.id}` ? 'Removing...' : 'Remove Non-Responders'}
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -234,18 +345,13 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
       {/* Instruction Modal */}
       {showInstructionModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/80 backdrop-blur-sm" onClick={() => setShowInstructionModal(false)}>
-          <div
-            className="bg-white border-2 border-ink p-8 shadow-[8px_8px_0px_#1C1B19] w-full max-w-xl animate-fade-in"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="bg-white border-2 border-ink p-8 shadow-[8px_8px_0px_#1C1B19] w-full max-w-xl animate-fade-in max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-8 pb-4 border-b border-hairline">
               <h2 className="font-serif text-3xl font-bold">Send Instructions</h2>
-              <button
-                className="text-2xl text-ink/40 hover:text-terracotta transition-colors leading-none"
-                onClick={() => setShowInstructionModal(false)}
-              >
-                ×
-              </button>
+              <button className="text-2xl text-ink/40 hover:text-terracotta transition-colors leading-none" onClick={() => setShowInstructionModal(false)}>×</button>
+            </div>
+            <div className="bg-amber-50 border border-amber-200 p-4 mb-6 text-sm text-amber-800">
+              📢 This will be sent to <strong>{batch._count?.applicants || 0} applicant(s)</strong> in Batch #{batch.batchNumber}
             </div>
             <form onSubmit={handleSendInstructions} className="flex flex-col gap-6">
               <div>
@@ -258,6 +364,16 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
                 />
               </div>
               <div>
+                <label className="block text-xs uppercase tracking-widest font-semibold text-ink/60 mb-2">Explanation (Why participants need to answer)</label>
+                <textarea
+                  className="w-full bg-parchment/50 border-b border-ink/20 px-4 py-3 font-sans focus:outline-none focus:border-forest transition-colors resize-y min-h-[80px]"
+                  value={instructionForm.explanation}
+                  onChange={(e) => setInstructionForm({ ...instructionForm, explanation: e.target.value })}
+                  rows={3}
+                  placeholder="Help participants understand the purpose of this questionnaire..."
+                />
+              </div>
+              <div>
                 <label className="block text-xs uppercase tracking-widest font-semibold text-ink/60 mb-2">Content *</label>
                 <textarea
                   className="w-full bg-parchment/50 border-b border-ink/20 px-4 py-3 font-sans focus:outline-none focus:border-forest transition-colors resize-y min-h-[120px]"
@@ -267,19 +383,80 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
                   rows={6}
                 />
               </div>
+              <div>
+                <label className="block text-xs uppercase tracking-widest font-semibold text-ink/60 mb-2">Response Deadline</label>
+                <input
+                  type="datetime-local"
+                  className="w-full bg-parchment/50 border-b border-ink/20 px-4 py-3 font-sans focus:outline-none focus:border-forest transition-colors"
+                  value={instructionForm.deadline}
+                  onChange={(e) => setInstructionForm({ ...instructionForm, deadline: e.target.value })}
+                />
+                <p className="text-[10px] text-ink/40 mt-1">If set, non-responders can be removed after this deadline.</p>
+              </div>
               <div className="flex gap-4 mt-4 pt-6 border-t border-hairline justify-end">
-                <button
-                  type="button"
-                  className="px-6 py-3 border border-ink text-xs uppercase tracking-widest font-semibold text-ink hover:bg-parchment transition-colors"
-                  onClick={() => setShowInstructionModal(false)}
-                >
+                <button type="button" className="px-6 py-3 border border-ink text-xs uppercase tracking-widest font-semibold text-ink hover:bg-parchment transition-colors" onClick={() => setShowInstructionModal(false)}>
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  className="bg-forest hover:opacity-90 text-white px-8 py-3 text-xs uppercase tracking-widest font-semibold transition-colors"
-                >
+                <button type="submit" className="bg-forest hover:opacity-90 text-white px-8 py-3 text-xs uppercase tracking-widest font-semibold transition-colors">
                   Send to All Users
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Capacity Modal */}
+      {showCapacityModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/80 backdrop-blur-sm" onClick={() => setShowCapacityModal(false)}>
+          <div className="bg-white border-2 border-ink p-8 shadow-[8px_8px_0px_#1C1B19] w-full max-w-sm animate-fade-in" onClick={(e) => e.stopPropagation()}>
+            <h2 className="font-serif text-2xl font-bold mb-6">Increase Batch Quota</h2>
+            <p className="text-sm text-ink/60 mb-4">Current: {batch.capacity} | Filled: {batch.currentCount}</p>
+            <input
+              type="number"
+              min={batch.capacity + 1}
+              value={newCapacity}
+              onChange={(e) => setNewCapacity(parseInt(e.target.value))}
+              className="w-full bg-parchment/50 border-b border-ink/20 px-4 py-3 font-sans focus:outline-none focus:border-forest transition-colors mb-6"
+            />
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setShowCapacityModal(false)} className="px-4 py-2 border border-ink text-xs uppercase tracking-widest font-semibold">Cancel</button>
+              <button onClick={handleIncreaseCapacity} className="px-6 py-2 bg-forest text-white text-xs uppercase tracking-widest font-semibold">Update</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Election Modal */}
+      {showElectionModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/80 backdrop-blur-sm" onClick={() => setShowElectionModal(false)}>
+          <div className="bg-white border-2 border-ink p-8 shadow-[8px_8px_0px_#1C1B19] w-full max-w-md animate-fade-in" onClick={(e) => e.stopPropagation()}>
+            <h2 className="font-serif text-2xl font-bold mb-6">Start Election Procedure</h2>
+            <p className="text-sm text-ink/60 mb-6">This will initiate elections for all {teams.length} teams in this batch simultaneously.</p>
+            <form onSubmit={handleStartBatchElections} className="flex flex-col gap-5">
+              <div>
+                <label className="block text-xs uppercase tracking-widest font-semibold text-ink/60 mb-2">Election Instructions</label>
+                <textarea
+                  className="w-full bg-parchment/50 border-b border-ink/20 px-4 py-3 font-sans focus:outline-none focus:border-forest resize-y min-h-[80px]"
+                  value={electionForm.instructions}
+                  onChange={(e) => setElectionForm({ ...electionForm, instructions: e.target.value })}
+                  placeholder="Instructions about the election process..."
+                  rows={3}
+                />
+              </div>
+              <div>
+                <label className="block text-xs uppercase tracking-widest font-semibold text-ink/60 mb-2">Election Deadline</label>
+                <input
+                  type="datetime-local"
+                  className="w-full bg-parchment/50 border-b border-ink/20 px-4 py-3 font-sans focus:outline-none focus:border-forest"
+                  value={electionForm.deadline}
+                  onChange={(e) => setElectionForm({ ...electionForm, deadline: e.target.value })}
+                />
+              </div>
+              <div className="flex gap-3 justify-end mt-4 pt-4 border-t border-hairline">
+                <button type="button" onClick={() => setShowElectionModal(false)} className="px-4 py-2 border border-ink text-xs uppercase tracking-widest font-semibold">Cancel</button>
+                <button type="submit" disabled={actionLoading === 'election'} className="px-6 py-2 bg-terracotta text-white text-xs uppercase tracking-widest font-semibold">
+                  {actionLoading === 'election' ? 'Starting...' : 'Start All Elections'}
                 </button>
               </div>
             </form>

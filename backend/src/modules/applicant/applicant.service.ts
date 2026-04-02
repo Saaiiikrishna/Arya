@@ -8,7 +8,7 @@ import { ApplicantStatus, PhaseTag } from '@prisma/client';
 export class ApplicantService {
   private readonly logger = new Logger(ApplicantService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   async apply(dto: ApplyDto) {
     // Check if email already exists
@@ -26,11 +26,50 @@ export class ApplicantService {
     });
 
     if (!batch) {
+      const autoBatchSetting = await this.prisma.siteSetting.findUnique({
+        where: { key: 'auto_batch_enabled' },
+      });
+      const isAutoEnabled = autoBatchSetting?.value === 'true';
+
+      if (!isAutoEnabled) {
+        throw new BadRequestException('Admissions are temporarily closed. No open batches available.');
+      }
+
+      const capacitySetting = await this.prisma.siteSetting.findUnique({
+        where: { key: 'auto_batch_capacity' },
+      });
+      const nicknameSetting = await this.prisma.siteSetting.findUnique({
+        where: { key: 'auto_batch_nicknames' },
+      });
+      const namingSetting = await this.prisma.siteSetting.findUnique({
+        where: { key: 'auto_batch_naming_sequence' },
+      });
+
+      const capacity = capacitySetting ? parseInt(capacitySetting.value, 10) || 1000 : 1000;
+      const nicknames: string[] = nicknameSetting ? JSON.parse(nicknameSetting.value) : [];
+      const namingSequence = namingSetting?.value || 'Batch';
+      
       const lastBatch = await this.prisma.batch.findFirst({
         orderBy: { batchNumber: 'desc' },
       });
+      
+      const nextBatchNumber = (lastBatch?.batchNumber ?? 0) + 1;
+      const nickname = nicknames.length > 0 ? nicknames.shift() : undefined;
+
+      if (nicknameSetting && nicknames.length >= 0) {
+        await this.prisma.siteSetting.update({
+          where: { key: 'auto_batch_nicknames' },
+          data: { value: JSON.stringify(nicknames) },
+        });
+      }
+
       batch = await this.prisma.batch.create({
-        data: { batchNumber: (lastBatch?.batchNumber ?? 0) + 1 },
+        data: { 
+          batchNumber: nextBatchNumber,
+          name: `${namingSequence} ${nextBatchNumber}`,
+          nickname: nickname || null,
+          capacity,
+        },
       });
     }
 
@@ -124,11 +163,11 @@ export class ApplicantService {
     const applicant = await this.prisma.applicant.findUnique({
       where: { id: applicantId },
     });
-    
+
     if (!applicant) {
       throw new NotFoundException('Applicant not found');
     }
-    
+
     if (applicant.status !== 'PENDING') {
       throw new BadRequestException('Application corresponds to a finalized dossier and cannot be edited');
     }
@@ -204,6 +243,189 @@ export class ApplicantService {
     });
     if (!applicant) throw new NotFoundException('Applicant not found');
     return applicant;
+  }
+
+  async getHubData(applicantId: string) {
+    const applicant = await this.prisma.applicant.findUnique({
+      where: { id: applicantId },
+      include: {
+        batch: { select: { id: true, batchNumber: true, status: true } },
+        team: {
+          include: {
+            members: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                role: true,
+                timezone: true,
+                avatarUrl: true,
+                city: true,
+              },
+            },
+            project: true,
+            sprints: {
+              include: { milestones: { orderBy: { deadline: 'asc' } } },
+              orderBy: { startDate: 'desc' },
+              take: 1,
+            },
+            elections: {
+              where: { status: { in: ['NOMINATION', 'VOTING'] } },
+              take: 1,
+            },
+            requests: {
+              where: { status: 'PENDING' },
+              orderBy: { createdAt: 'desc' },
+            },
+          },
+        },
+      },
+    });
+
+    if (!applicant) throw new NotFoundException('Applicant not found');
+
+    const team = applicant.team;
+    const project = team?.project || null;
+    const activeSprint = team?.sprints?.[0] || null;
+
+    // Calculate sprint day
+    let sprintInfo: any = { status: 'AWAITING_TEAM', label: 'Awaiting Team Formation' };
+    if (team && !activeSprint) {
+      sprintInfo = { status: 'IDEATION', label: 'Sprint not started — Ideation' };
+    } else if (activeSprint) {
+      const startDate = new Date(activeSprint.startDate);
+      const endDate = new Date(activeSprint.endDate);
+      const now = new Date();
+      const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+      const currentDay = Math.max(1, Math.ceil((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
+      sprintInfo = {
+        status: 'ACTIVE',
+        currentDay: Math.min(currentDay, totalDays),
+        totalDays,
+        phase: activeSprint.status,
+        milestones: activeSprint.milestones,
+      };
+    }
+
+    return {
+      applicant: {
+        id: applicant.id,
+        firstName: applicant.firstName,
+        lastName: applicant.lastName,
+        email: applicant.email,
+        phone: applicant.phone,
+        status: applicant.status,
+        avatarUrl: applicant.avatarUrl,
+      },
+      batch: applicant.batch ? {
+        id: applicant.batch.id,
+        batchNumber: applicant.batch.batchNumber,
+        status: applicant.batch.status,
+      } : null,
+      team: team ? {
+        id: team.id,
+        name: team.name,
+        teamType: team.teamType,
+        members: team.members.map((m: any) => ({
+          id: m.id,
+          name: `${m.firstName} ${m.lastName}`.trim(),
+          firstName: m.firstName,
+          lastName: m.lastName,
+          email: m.email,
+          role: m.role || 'Member',
+          timezone: m.timezone,
+          avatarUrl: m.avatarUrl,
+          city: m.city,
+          initial: `${(m.firstName || '')[0] || ''}${(m.lastName || '')[0] || ''}`.toUpperCase(),
+          isLeader: team.leaderId === m.id,
+        })),
+        leaderId: team.leaderId,
+        activeElection: team.elections?.[0] || null,
+        pendingRequests: team.requests || [],
+      } : null,
+      project: project ? {
+        id: project.id,
+        projectName: project.projectName,
+        targetMarket: project.targetMarket,
+        description: project.description,
+        estimatedFunds: project.estimatedFunds,
+        fundedAmount: project.fundedAmount,
+        status: project.status,
+      } : null,
+      sprint: sprintInfo,
+    };
+  }
+
+  // ─── Pending Questionnaires (Hub) ─────────────────
+  async getPendingQuestionnaires(applicantId: string) {
+    const applicant = await this.prisma.applicant.findUnique({
+      where: { id: applicantId },
+      select: { batchId: true },
+    });
+    if (!applicant || !applicant.batchId) return { instructions: [] };
+
+    // Get all instructions for this batch that have additional questions
+    const instructions = await this.prisma.batchInstruction.findMany({
+      where: {
+        batchId: applicant.batchId,
+        additionalQuestionIds: { isEmpty: false },
+      },
+      orderBy: { sentAt: 'desc' },
+    });
+
+    // Get all answers this applicant has already submitted
+    const existingAnswers = await this.prisma.answer.findMany({
+      where: {
+        applicantId,
+        phaseTag: 'ADDITIONAL',
+      },
+      select: { questionId: true },
+    });
+    const answeredQuestionIds = new Set(existingAnswers.map((a) => a.questionId));
+
+    // Build pending list
+    const pending = [];
+    for (const inst of instructions) {
+      const unansweredIds = inst.additionalQuestionIds.filter(
+        (qId) => !answeredQuestionIds.has(qId),
+      );
+      if (unansweredIds.length > 0) {
+        // Fetch the actual question objects
+        const questions = await this.prisma.question.findMany({
+          where: { id: { in: unansweredIds } },
+          orderBy: { sortOrder: 'asc' },
+        });
+        pending.push({
+          instructionId: inst.id,
+          title: inst.title,
+          content: inst.content,
+          explanation: inst.explanation,
+          deadline: inst.deadline,
+          questions,
+          answeredCount: inst.additionalQuestionIds.length - unansweredIds.length,
+          totalCount: inst.additionalQuestionIds.length,
+        });
+      }
+    }
+
+    return { instructions: pending };
+  }
+
+  // ─── Member Profile (public for Hub) ──────────────
+  async getMemberProfile(memberId: string) {
+    const member = await this.prisma.applicant.findUnique({
+      where: { id: memberId },
+      include: {
+        team: { select: { id: true, name: true, leaderId: true } },
+        answers: {
+          include: { question: { select: { label: true, type: true } } },
+          orderBy: { answeredAt: 'asc' },
+        },
+      },
+    });
+    if (!member) throw new NotFoundException('Member not found');
+    return member;
   }
 
   async giveConsent(accessToken: string, consentDocUrl?: string) {
@@ -351,7 +573,7 @@ export class ApplicantService {
       await (tx as any).pageView.deleteMany({
         where: { applicantId: id },
       });
-      
+
       await (tx as any).trainingAssignment.deleteMany({
         where: { applicantId: id },
       });
@@ -368,6 +590,8 @@ export class ApplicantService {
   }
 
   async getDashboardStats() {
+    const paymentFilter: any = { payments: { some: { status: 'CAPTURED' } } };
+
     const [
       totalApplicants,
       pendingCount,
@@ -378,12 +602,12 @@ export class ApplicantService {
       totalBatches,
       activeBatch,
     ] = await Promise.all([
-      this.prisma.applicant.count(),
-      this.prisma.applicant.count({ where: { status: 'PENDING' } }),
-      this.prisma.applicant.count({ where: { status: 'ELIGIBLE' } }),
-      this.prisma.applicant.count({ where: { status: 'ACTIVE' } }),
-      this.prisma.applicant.count({ where: { status: 'REMOVED' } }),
-      this.prisma.applicant.count({ where: { status: 'HELD' as any } }),
+      this.prisma.applicant.count({ where: paymentFilter }),
+      this.prisma.applicant.count({ where: { ...paymentFilter, status: 'PENDING' } }),
+      this.prisma.applicant.count({ where: { ...paymentFilter, status: 'ELIGIBLE' } }),
+      this.prisma.applicant.count({ where: { ...paymentFilter, status: 'ACTIVE' } }),
+      this.prisma.applicant.count({ where: { ...paymentFilter, status: 'REMOVED' } }),
+      this.prisma.applicant.count({ where: { ...paymentFilter, status: 'HELD' as any } }),
       this.prisma.batch.count(),
       this.prisma.batch.findFirst({
         where: { status: { not: 'PRODUCTION' } },
@@ -404,13 +628,13 @@ export class ApplicantService {
       totalBatches,
       activeBatch: activeBatch
         ? {
-            id: activeBatch.id,
-            batchNumber: activeBatch.batchNumber,
-            status: activeBatch.status,
-            currentCount: activeBatch.currentCount,
-            capacity: activeBatch.capacity,
-            teamCount: activeBatch._count.teams,
-          }
+          id: activeBatch.id,
+          batchNumber: activeBatch.batchNumber,
+          status: activeBatch.status,
+          currentCount: activeBatch.currentCount,
+          capacity: activeBatch.capacity,
+          teamCount: activeBatch._count.teams,
+        }
         : null,
     };
   }

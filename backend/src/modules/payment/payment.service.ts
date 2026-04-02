@@ -75,6 +75,10 @@ export class PaymentService {
         amount: order.amount,
         currency: order.currency,
         key: this.configService.get<string>('RAZORPAY_KEY_ID'),
+        // Prefill data for Razorpay checkout
+        applicantName: `${applicant.firstName} ${applicant.lastName}`.trim(),
+        applicantEmail: applicant.email,
+        applicantPhone: applicant.phone || '',
       };
     } catch (error) {
       console.error('Razorpay Error', error);

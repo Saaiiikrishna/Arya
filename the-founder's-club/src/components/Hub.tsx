@@ -19,9 +19,8 @@ export default function Hub() {
               <a
                 key={item.label}
                 href="#"
-                className={`group flex items-center gap-3 font-medium text-sm tracking-wide uppercase transition-colors ${
-                  item.active ? 'text-ink' : 'text-ink/40 hover:text-ink'
-                }`}
+                className={`group flex items-center gap-3 font-medium text-sm tracking-wide uppercase transition-colors ${item.active ? 'text-ink' : 'text-ink/40 hover:text-ink'
+                  }`}
               >
                 <span className={`w-1 h-1 ${item.active ? 'bg-forest' : 'bg-transparent group-hover:bg-ink'}`} />
                 <span>{item.label}</span>
@@ -46,7 +45,7 @@ export default function Hub() {
           <header className="border-b border-hairline pb-8 mb-12 flex justify-between items-end">
             <div>
               <p className="text-sm uppercase tracking-widest text-forest font-medium mb-3">Command Center</p>
-              <h1 className="font-serif text-5xl font-bold leading-none">Founder's Hub</h1>
+              <h1 className="font-serif text-5xl font-bold leading-none">Founder's Club</h1>
             </div>
             <div className="text-right">
               <p className="text-3xl font-serif text-terracotta mb-1">Day 14 <span className="text-ink/40 text-xl">of 90</span></p>

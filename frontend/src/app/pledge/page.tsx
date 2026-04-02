@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth';
 import { useSettings } from '@/lib/settings';
 import { api } from '@/lib/api';
 import Script from 'next/script';
+import { ShieldCheck, Lock } from 'lucide-react';
 
 export default function PledgePage() {
   const router = useRouter();
@@ -47,17 +48,21 @@ export default function PledgePage() {
         description: "The Founder's Club Pledge",
         order_id: data.orderId,
         handler: function (response: any) {
-          // Razorpay returns razorpay_payment_id, razorpay_order_id, razorpay_signature
-          // We can let Webhooks deal with DB updates, but show success here
           setPaymentStatus('SUCCESS');
           setTimeout(() => {
             router.push('/hub');
           }, 3000);
         },
         prefill: {
-          name: "Founder",
-          email: "",
-          contact: ""
+          name: data.applicantName || "Founder",
+          email: data.applicantEmail || "",
+          contact: data.applicantPhone || ""
+        },
+        modal: {
+          ondismiss: function () {
+            // Reset to IDLE so user can retry — prevents frozen button
+            setPaymentStatus('IDLE');
+          }
         },
         theme: {
           color: "#0a0a0a"
@@ -135,6 +140,19 @@ export default function PledgePage() {
                 </div>
               </div>
 
+
+              <div className="pt-6 border-t border-hairline/30 text-left space-y-4">
+                <div className="flex items-start gap-3">
+                  <ShieldCheck className="w-5 h-5 text-forest mt-0.5" />
+                  <div>
+                    <h4 className="font-serif italic text-forest text-sm font-bold">A Commitment to Integrity</h4>
+                    <p className="text-[11px] text-ink/60 leading-relaxed">
+                      Your pledge is a testament to your architectural intent. We shield your commitment with sovereign-grade security, ensuring your transition into Aryavartham is protected.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               <button 
                 onClick={initiatePayment} 
                 className="w-full bg-forest text-parchment p-4 font-bold uppercase tracking-widest text-sm hover:bg-forest/90 transition-colors disabled:opacity-50"
@@ -143,7 +161,10 @@ export default function PledgePage() {
                 {paymentStatus === 'PROCESSING' ? 'Establishing Connection...' : 'Initiate Secure Checkout'}
               </button>
               
-              <p className="text-[10px] uppercase text-ink/30 tracking-widest">Secured via Razorpay Network</p>
+              <div className="flex items-center justify-center gap-2 text-ink/30">
+                <Lock className="w-3 h-3" />
+                <p className="text-[10px] uppercase tracking-widest text-center">Secured via Razorpay Network</p>
+              </div>
             </div>
           )}
         </div>

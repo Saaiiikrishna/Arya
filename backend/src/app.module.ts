@@ -25,6 +25,9 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { SettingsModule } from './modules/settings/settings.module';
 
+import { ElectionModule } from './modules/election/election.module';
+import { AnnouncementModule } from './modules/announcement';
+
 @Module({
   imports: [
     // Config
@@ -87,6 +90,9 @@ import { SettingsModule } from './modules/settings/settings.module';
     AnalyticsModule,
     ChatModule,
     SettingsModule,
+    // Phase 3 module
+    ElectionModule,
+    AnnouncementModule,
   ],
 })
 export class AppModule {}

@@ -126,6 +126,10 @@ class ApiClient {
     return this.request<any>('/admin/auth/me');
   }
 
+  async getMyProfile() {
+    return this.request<any>('/applicants/me/profile');
+  }
+
   // Dashboard
   async getDashboardStats() {
     return this.request<any>('/admin/dashboard/stats');
@@ -214,6 +218,10 @@ class ApiClient {
     return this.request<any>('/applicants/me/dossier');
   }
 
+  async getMyHub() {
+    return this.request<any>('/applicants/me/hub');
+  }
+
   async createRazorpayOrder() {
     return this.request<any>('/payments/create-order', { method: 'POST' });
   }
@@ -241,26 +249,51 @@ class ApiClient {
     return this.request<any>(`/admin/batches/${id}`);
   }
 
+  async createBatch(data: { name: string; nickname?: string; capacity: number }) {
+    return this.request<any>('/admin/batches', { method: 'POST', body: data });
+  }
+
+  async updateBatch(id: string, data: { name?: string; nickname?: string; capacity?: number }) {
+    return this.request<any>(`/admin/batches/${id}`, { method: 'PUT', body: data });
+  }
+
   async getBatchApplicants(id: string) {
     return this.request<any[]>(`/admin/batches/${id}/applicants`);
   }
 
   async transitionBatchStatus(id: string, status: string) {
-    return this.request<any>(`/admin/batches/${id}/status`, {
+    return this.request<any>(`/admin/batches/${id}/transition`, {
       method: 'PUT',
       body: { status },
     });
   }
 
-  async sendBatchInstructions(id: string, data: { title: string; content: string; additionalQuestionIds?: string[] }) {
+  async sendBatchInstructions(id: string, data: {
+    title: string;
+    content: string;
+    additionalQuestionIds?: string[];
+    explanation?: string;
+    deadline?: string;
+  }) {
     return this.request<any>(`/admin/batches/${id}/instructions`, {
       method: 'POST',
       body: data,
     });
   }
 
+  async removeNonResponders(batchId: string, instructionId: string) {
+    return this.request<any>(`/admin/batches/${batchId}/remove-non-responders`, {
+      method: 'POST',
+      body: { instructionId },
+    });
+  }
+
   async approveBatch(id: string) {
     return this.request<any>(`/admin/batches/${id}/approve`, { method: 'POST' });
+  }
+
+  async getCurrentBatch() {
+    return this.request<any>('/batches/current');
   }
 
   async getPublicBatchStatus(batchNumber: number) {
@@ -369,13 +402,135 @@ class ApiClient {
     return this.request<any>(`/chat/room/team/${teamId}`);
   }
 
-  // Documents
   async getUploadUrl(applicantId: string, fileName: string, mimeType: string) {
     return this.request<any>('/documents/upload-url', {
       method: 'POST',
       body: { applicantId, fileName, mimeType },
     });
   }
+
+  // ─── Team Requests & Leader Actions ────────────────
+
+  async createTeamRequest(teamId: string, data: { type: string; title: string; details: string }) {
+    return this.request<any>(`/teams/${teamId}/requests`, { method: 'POST', body: data });
+  }
+
+  async getTeamRequests(teamId: string, status?: string) {
+    const qs = status ? `?status=${status}` : '';
+    return this.request<any[]>(`/teams/${teamId}/requests${qs}`);
+  }
+
+  async resolveTeamRequest(teamId: string, reqId: string, status: string) {
+    return this.request<any>(`/teams/${teamId}/requests/${reqId}`, {
+      method: 'PATCH',
+      body: { status }
+    });
+  }
+
+  async updateTeamProject(teamId: string, data: any) {
+    return this.request<any>(`/teams/${teamId}/project`, { method: 'PATCH', body: data });
+  }
+
+  // ─── Elections ──────────────────────────────────────
+
+  async startElection(teamId: string, data?: { instructions?: string; deadline?: string; questionIds?: string[] }) {
+    return this.request<any>(`/admin/elections/team/${teamId}/start`, { method: 'POST', body: data || {} });
+  }
+
+  async startBatchElections(batchId: string, data?: { instructions?: string; deadline?: string; questionIds?: string[] }) {
+    return this.request<any>(`/admin/elections/batch/${batchId}/start`, { method: 'POST', body: data || {} });
+  }
+
+  async getActiveElection(teamId: string) {
+    return this.request<any>(`/elections/team/${teamId}/active`);
+  }
+
+  async getElection(id: string) {
+    return this.request<any>(`/elections/${id}`);
+  }
+
+  async nominate(electionId: string, nomineeId: string, reason?: string) {
+    return this.request<any>(`/elections/${electionId}/nominate`, {
+      method: 'POST',
+      body: { nomineeId, reason }
+    });
+  }
+
+  async selfNominate(electionId: string, nomineeId: string, pitch?: string, answers?: { questionId: string; value: any }[]) {
+    return this.request<any>(`/elections/${electionId}/self-nominate`, {
+      method: 'POST',
+      body: { nomineeId, pitch, answers }
+    });
+  }
+
+  async getNominees(electionId: string) {
+    return this.request<any[]>(`/elections/${electionId}/nominees`);
+  }
+
+  async submitElectionPitch(electionId: string, nomineeId: string, pitch: string) {
+    return this.request<any>(`/elections/${electionId}/pitch`, {
+      method: 'PUT',
+      body: { nomineeId, pitch }
+    });
+  }
+
+  async castVote(electionId: string, nomineeId: string, voterId?: string) {
+    return this.request<any>(`/elections/${electionId}/vote`, {
+      method: 'POST',
+      body: { nomineeId, voterId }
+    });
+  }
+
+  async advanceElection(electionId: string) {
+    return this.request<any>(`/admin/elections/${electionId}/advance`, { method: 'PUT' });
+  }
+
+  async getElectionResults(electionId: string) {
+    return this.request<any>(`/elections/${electionId}/results`);
+  }
+
+  // Election Question Templates
+  async getElectionQuestionTemplates() {
+    return this.request<any[]>('/admin/election-questions/templates');
+  }
+
+  async createElectionQuestionTemplate(data: { label: string; helpText?: string; type?: string; options?: any; isRequired?: boolean }) {
+    return this.request<any>('/admin/election-questions/templates', { method: 'POST', body: data });
+  }
+
+  async deleteElectionQuestionTemplate(id: string) {
+    return this.request<any>(`/admin/election-questions/templates/${id}`, { method: 'DELETE' });
+  }
+
+  async addElectionCustomQuestion(electionId: string, data: { label: string; helpText?: string; type?: string; options?: any; isRequired?: boolean; sortOrder?: number }) {
+    return this.request<any>(`/admin/elections/${electionId}/questions`, { method: 'POST', body: data });
+  }
+
+  // ─── Announcements ──────────────────────────────────
+
+  async getAnnouncements(batchId?: string) {
+    const qs = batchId ? `?batchId=${batchId}` : '';
+    return this.request<any[]>(`/admin/announcements${qs}`);
+  }
+
+  async createAnnouncement(data: { batchId?: string; title: string; content: string; deadline?: string; sendEmail?: boolean }) {
+    return this.request<any>('/admin/announcements', { method: 'POST', body: data });
+  }
+
+  async updateAnnouncement(id: string, data: { title?: string; content?: string; deadline?: string; isActive?: boolean }) {
+    return this.request<any>(`/admin/announcements/${id}`, { method: 'PUT', body: data });
+  }
+
+  async deleteAnnouncement(id: string) {
+    return this.request<any>(`/admin/announcements/${id}`, { method: 'DELETE' });
+  }
+
+  async getActiveAnnouncements(batchId?: string) {
+    const qs = batchId ? `?batchId=${batchId}` : '';
+    return this.request<any[]>(`/announcements/active${qs}`);
+  }
+
+  // ─── Documents ──────────────────────────────────────
 
   async confirmUpload(documentId: string, fileSize?: number) {
     return this.request<any>(`/documents/${documentId}/confirm`, {
@@ -417,6 +572,46 @@ class ApiClient {
 
   async trackPageView(data: { sessionId: string; path: string; referrer?: string; screenWidth?: number; screenHeight?: number; language?: string; applicantId?: string; applicantEmail?: string; applicantName?: string }) {
     return this.request<void>('/track/pageview', { method: 'POST', body: data });
+  }
+
+  // ─── Member Profile (Hub) ──────────────────────────
+
+  async getMemberProfile(memberId: string) {
+    return this.request<any>(`/applicants/${memberId}/profile`);
+  }
+
+  async getPendingQuestionnaires() {
+    return this.request<{ instructions: any[] }>('/applicants/me/pending-questions');
+  }
+
+  async getBatchTeams(batchId: string) {
+    return this.request<any[]>(`/admin/teams/batch/${batchId}`);
+  }
+
+  // ─── Danger Zone ──────────────────────────────────────────
+
+  async getDangerZoneTables() {
+    return this.request<{ table_name: string; row_count: number }[]>('/admin/danger-zone/tables');
+  }
+
+  async truncateTable(tableName: string) {
+    return this.request<{ success: boolean; message: string }>(`/admin/danger-zone/truncate/${tableName}`, { method: 'POST' });
+  }
+
+  async truncateAllTables() {
+    return this.request<{ success: boolean; message: string }>('/admin/danger-zone/truncate-all', { method: 'POST' });
+  }
+
+  async getDangerZoneTableData(tableName: string) {
+    return this.request<any>(`/admin/danger-zone/tables/${tableName}/data`);
+  }
+
+  async deleteDangerZoneRow(tableName: string, pkColumn: string, id: string) {
+    return this.request<any>(`/admin/danger-zone/tables/${tableName}/rows?pkColumn=${encodeURIComponent(pkColumn)}&id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+  }
+
+  async clearDangerZoneColumn(tableName: string, columnName: string) {
+    return this.request<any>(`/admin/danger-zone/tables/${tableName}/columns/${encodeURIComponent(columnName)}`, { method: 'DELETE' });
   }
 }
 

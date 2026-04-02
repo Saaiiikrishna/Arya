@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma';
 import { ApplicantStatus } from '@prisma/client';
 
@@ -230,4 +230,109 @@ export class TeamService {
     if (!team) throw new NotFoundException('Team not found');
     return team;
   }
+  // ─── Team Requests ─────────────────────────────────
+
+  async createTeamRequest(teamId: string, requesterId: string, body: { type: string; title: string; details: string }) {
+    const team = await this.prisma.team.findUnique({ where: { id: teamId } });
+    if (!team) throw new NotFoundException('Team not found');
+
+    const requester = await this.prisma.applicant.findUnique({ where: { id: requesterId } });
+    if (!requester || requester.teamId !== teamId) throw new ForbiddenException('You are not in this team');
+
+    return (this.prisma as any).teamRequest.create({
+      data: {
+        teamId,
+        requesterId,
+        type: body.type,
+        title: body.title,
+        details: body.details,
+      },
+    });
+  }
+
+  async getTeamRequests(teamId: string, status?: string) {
+    const where: any = { teamId };
+    if (status) where.status = status;
+
+    const requests = await (this.prisma as any).teamRequest.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Enrich with requester info
+    const requesterIds = [...new Set(requests.map((r: any) => r.requesterId))] as string[];
+    const applicants = await this.prisma.applicant.findMany({
+      where: { id: { in: requesterIds } },
+      select: { id: true, firstName: true, lastName: true, avatarUrl: true },
+    });
+    const applicantMap = new Map(applicants.map(a => [a.id, a]));
+
+    return requests.map((r: any) => ({
+      ...r,
+      requester: applicantMap.get(r.requesterId) || null,
+    }));
+  }
+
+  async resolveTeamRequest(teamId: string, reqId: string, resolverId: string, status: string) {
+    if (!['APPROVED', 'REJECTED'].includes(status)) {
+      throw new BadRequestException('Status must be APPROVED or REJECTED');
+    }
+
+    // Verify resolver is team leader
+    const team = await this.prisma.team.findUnique({ where: { id: teamId } });
+    if (!team) throw new NotFoundException('Team not found');
+    if ((team as any).leaderId !== resolverId) {
+      throw new ForbiddenException('Only the team leader can resolve requests');
+    }
+
+    const request = await (this.prisma as any).teamRequest.findUnique({ where: { id: reqId } });
+    if (!request || request.teamId !== teamId) throw new NotFoundException('Request not found');
+
+    return (this.prisma as any).teamRequest.update({
+      where: { id: reqId },
+      data: {
+        status,
+        resolvedById: resolverId,
+        resolvedAt: new Date(),
+      },
+    });
+  }
+
+  // ─── Leader: Edit Project ─────────────────────────
+
+  async updateProjectAsLeader(teamId: string, callerId: string, body: any) {
+    const team = await this.prisma.team.findUnique({
+      where: { id: teamId },
+      include: { project: true },
+    });
+    if (!team) throw new NotFoundException('Team not found');
+    if ((team as any).leaderId !== callerId) {
+      throw new ForbiddenException('Only the team leader can edit project details');
+    }
+
+    if (team.project) {
+      // Update existing project
+      return this.prisma.project.update({
+        where: { id: team.project.id },
+        data: {
+          ...(body.projectName && { projectName: body.projectName }),
+          ...(body.targetMarket && { targetMarket: body.targetMarket }),
+          ...(body.description && { description: body.description }),
+          ...(body.estimatedFunds !== undefined && { estimatedFunds: body.estimatedFunds }),
+        },
+      });
+    } else {
+      // Create new project
+      return this.prisma.project.create({
+        data: {
+          teamId,
+          projectName: body.projectName || 'Untitled Project',
+          targetMarket: body.targetMarket || 'TBD',
+          description: body.description || '',
+          estimatedFunds: body.estimatedFunds || 0,
+        },
+      });
+    }
+  }
 }
+

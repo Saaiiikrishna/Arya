@@ -8,6 +8,8 @@ import { VisitorProcessor } from './visitor.processor';
 import { SettingsController } from './settings.controller';
 import { TrackingController } from './tracking.controller';
 import { VisitorScheduler } from './visitor.scheduler';
+import { DangerZoneController } from './danger-zone.controller';
+import { DangerZoneService } from './danger-zone.service';
 
 @Module({
   imports: [
@@ -15,12 +17,13 @@ import { VisitorScheduler } from './visitor.scheduler';
     BullModule.registerQueue({ name: 'visitor-queue' }),
     ScheduleModule.forRoot(),
   ],
-  controllers: [SettingsController, TrackingController],
+  controllers: [SettingsController, TrackingController, DangerZoneController],
   providers: [
     SettingsService,
     VisitorService,
     VisitorProcessor,
     VisitorScheduler,
+    DangerZoneService,
   ],
   exports: [SettingsService, VisitorService],
 })

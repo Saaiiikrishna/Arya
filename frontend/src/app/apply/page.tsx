@@ -38,12 +38,14 @@ export default function ApplyPage() {
         const data = await api.getMyDossier();
         if (!mounted) return;
         
+        // Always store the dossier data for read-only rendering
+        setDossierData(data);
+        
         if (data.status !== 'PENDING') {
+          // CONSENTED, FINALIZED, etc. — application is submitted & paid
           setIsSubmitted(true);
         } else if (data.agreementAccepted) {
           setPaymentPending(true);
-        } else {
-          setDossierData(data);
         }
       } catch (err) {
         console.error('Failed to fetch dossier draft', err);

@@ -99,6 +99,96 @@ async function main() {
         <p>Best regards,<br/>The Arya Team</p>
       `,
     },
+    {
+      slug: 'screening-questionnaire',
+      subject: 'Screening Questionnaire — Action Required by {{deadline}}',
+      body: `
+        <h2>Hi {{firstName}},</h2>
+        <p><strong>{{title}}</strong></p>
+        <p>{{explanation}}</p>
+        <div>{{content}}</div>
+        <p><strong>⏰ Deadline: {{deadline}}</strong></p>
+        <p>Please complete the questionnaire before the deadline. Failure to respond may result in removal from Batch {{batchNumber}}.</p>
+        <p><a href="{{statusUrl}}">Complete Questionnaire →</a></p>
+        <br/>
+        <p>Best regards,<br/>The Arya Team</p>
+      `,
+    },
+    {
+      slug: 'screening-deadline-warning',
+      subject: '⚠️ Screening Deadline Approaching — Respond Now',
+      body: `
+        <h2>Hi {{firstName}},</h2>
+        <p>This is a reminder that the screening questionnaire deadline is approaching.</p>
+        <p><strong>⏰ Deadline: {{deadline}}</strong></p>
+        <p>If you haven't responded yet, please complete it now to remain in Batch {{batchNumber}}.</p>
+        <p><a href="{{statusUrl}}">Complete Questionnaire →</a></p>
+        <br/>
+        <p>Best regards,<br/>The Arya Team</p>
+      `,
+    },
+    {
+      slug: 'team-formed',
+      subject: 'You Have Been Assigned to a Team! 🎉',
+      body: `
+        <h2>Hi {{firstName}},</h2>
+        <p>Great news! You have been assigned to <strong>{{teamName}}</strong> in Batch {{batchNumber}}.</p>
+        <p>Head over to your Hub to meet your teammates and get started.</p>
+        <p><a href="{{hubUrl}}">Visit Your Hub →</a></p>
+        <br/>
+        <p>Best regards,<br/>The Arya Team</p>
+      `,
+    },
+    {
+      slug: 'election-started',
+      subject: 'Leadership Election Started — {{teamName}}',
+      body: `
+        <h2>Hi {{firstName}},</h2>
+        <p>A leadership election has been initiated for your team <strong>{{teamName}}</strong>.</p>
+        <p>{{instructions}}</p>
+        <p><strong>⏰ Deadline: {{deadline}}</strong></p>
+        <p>Visit your Hub to participate in the election process.</p>
+        <p><a href="{{hubUrl}}">Go to Hub →</a></p>
+        <br/>
+        <p>Best regards,<br/>The Arya Team</p>
+      `,
+    },
+    {
+      slug: 'election-result',
+      subject: 'Election Results — {{teamName}}',
+      body: `
+        <h2>Hi {{firstName}},</h2>
+        <p>The leadership election for <strong>{{teamName}}</strong> has concluded.</p>
+        <p>🏆 <strong>{{winnerName}}</strong> has been elected as your team leader.</p>
+        <p>Congratulations to the new leader! Visit the Hub for more details.</p>
+        <p><a href="{{hubUrl}}">Go to Hub →</a></p>
+        <br/>
+        <p>Best regards,<br/>The Arya Team</p>
+      `,
+    },
+    {
+      slug: 'announcement',
+      subject: '📢 {{title}}',
+      body: `
+        <h2>Hi {{firstName}},</h2>
+        <p>{{content}}</p>
+        <p><strong>⏰ Deadline: {{deadline}}</strong></p>
+        <br/>
+        <p>Best regards,<br/>The Arya Team</p>
+      `,
+    },
+    {
+      slug: 'batch-registration-closed',
+      subject: 'Batch {{batchNumber}} — Registrations Closed',
+      body: `
+        <h2>Hi {{firstName}},</h2>
+        <p>Batch <strong>{{batchNumber}}</strong> has reached capacity and registrations are now closed.</p>
+        <p>Don't worry — you can still apply for the upcoming batch!</p>
+        <p><a href="{{applyUrl}}">Apply for Next Batch →</a></p>
+        <br/>
+        <p>Best regards,<br/>The Arya Team</p>
+      `,
+    },
   ];
 
   for (const template of templates) {

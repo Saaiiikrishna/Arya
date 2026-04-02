@@ -78,48 +78,36 @@ export class VisitorService {
 
     const [totalViews, uniqueSessions, todayViews, topPages, recentVisitors] =
       await Promise.all([
-        // Total views in period
-        this.prisma.pageView.count({
-          where: { timestamp: { gte: since } },
-        }),
+        // Total views in period (approximate using visitor count if precise view not needed, or parsing JSON)
+        // Since we want total page views, we can query raw
+        this.prisma.$queryRawUnsafe<{ total: number }[]>(`SELECT COALESCE(SUM(jsonb_array_length(history)), 0)::int as total FROM visitors WHERE last_visit_at >= '${since.toISOString()}'`).then(res => res[0]?.total || 0),
 
-        // Unique sessions
-        this.prisma.pageView
-          .findMany({
-            where: { timestamp: { gte: since } },
-            distinct: ['sessionId'],
-            select: { sessionId: true },
-          })
-          .then((r) => r.length),
+        // Unique sessions (Unique IPs)
+        this.prisma.visitor.count({
+          where: { lastVisitAt: { gte: since } },
+        }),
 
         // Today's views
-        this.prisma.pageView.count({
-          where: {
-            timestamp: {
-              gte: new Date(new Date().toISOString().split('T')[0]),
-            },
-          },
-        }),
+        this.prisma.$queryRawUnsafe<{ total: number }[]>(`SELECT COALESCE(SUM(jsonb_array_length(history)), 0)::int as total FROM visitors WHERE last_visit_at >= '${new Date(new Date().toISOString().split('T')[0]).toISOString()}'`).then(res => res[0]?.total || 0),
 
         // Top pages
         this.prisma.$queryRaw`
-          SELECT path, COUNT(*)::int as views,
-                 COUNT(DISTINCT session_id)::int as unique_sessions
-          FROM page_views
-          WHERE timestamp >= ${since}
-          GROUP BY path
+          SELECT arr.elem->>'path' as path, COUNT(*)::int as views,
+                 COUNT(DISTINCT v.ip)::int as unique_sessions
+          FROM visitors v,
+          jsonb_array_elements(v.history) as arr(elem)
+          WHERE v.last_visit_at >= ${since}
+          GROUP BY arr.elem->>'path'
           ORDER BY views DESC
           LIMIT 10
         ` as Promise<any[]>,
 
         // Recent visitors (last 20)
-        this.prisma.pageView.findMany({
-          orderBy: { timestamp: 'desc' },
+        this.prisma.visitor.findMany({
+          orderBy: { lastVisitAt: 'desc' },
           take: 20,
           select: {
             id: true,
-            sessionId: true,
-            path: true,
             ip: true,
             country: true,
             city: true,
@@ -128,9 +116,17 @@ export class VisitorService {
             device: true,
             applicantName: true,
             applicantEmail: true,
-            timestamp: true,
+            lastVisitAt: true,
+            history: true,
           },
-        }),
+        }).then((v: any[]) => v.map((visitor: any) => {
+            const hist = (visitor.history as any) || [];
+            return {
+              ...visitor,
+              path: hist[hist.length - 1]?.path || '/', // Mock latest path for UI
+              timestamp: visitor.lastVisitAt
+            };
+        })),
       ]);
 
     // Daily trend (last N days from aggregated stats)
@@ -164,45 +160,105 @@ export class VisitorService {
   }
 
   /**
-   * Paginated page views for admin detail table.
+   * Paginated page views for admin detail table, aggregated by session/IP.
    */
   async getPageViews(filters: PageViewFilters) {
     const page = Math.max(1, filters.page || 1);
     const limit = Math.min(100, Math.max(1, filters.limit || 50));
     const skip = (page - 1) * limit;
 
-    const where: any = {};
-
-    if (filters.path) {
-      where.path = { contains: filters.path, mode: 'insensitive' };
-    }
-
-    if (filters.startDate || filters.endDate) {
-      where.timestamp = {};
-      if (filters.startDate) where.timestamp.gte = new Date(filters.startDate);
-      if (filters.endDate) where.timestamp.lte = new Date(filters.endDate);
-    }
+    let searchFilter = '';
+    let startFilter = '';
+    let endFilter = '';
+    let pathFilter = '';
 
     if (filters.search) {
-      where.OR = [
-        { ip: { contains: filters.search, mode: 'insensitive' } },
-        { applicantEmail: { contains: filters.search, mode: 'insensitive' } },
-        { applicantName: { contains: filters.search, mode: 'insensitive' } },
-        { city: { contains: filters.search, mode: 'insensitive' } },
-        { country: { contains: filters.search, mode: 'insensitive' } },
-        { path: { contains: filters.search, mode: 'insensitive' } },
-      ];
+      const search = `%${filters.search}%`;
+      searchFilter = `AND (
+        ip ILIKE '${search}' OR
+        applicant_email ILIKE '${search}' OR
+        applicant_name ILIKE '${search}' OR
+        city ILIKE '${search}' OR
+        country ILIKE '${search}' OR
+        path ILIKE '${search}'
+      )`;
     }
 
-    const [data, total] = await Promise.all([
-      this.prisma.pageView.findMany({
-        where,
-        orderBy: { timestamp: 'desc' },
-        skip,
-        take: limit,
-      }),
-      this.prisma.pageView.count({ where }),
+    if (filters.startDate) {
+      startFilter = `AND last_visit_at >= '${new Date(filters.startDate).toISOString()}'`;
+    }
+    if (filters.endDate) {
+      endFilter = `AND last_visit_at <= '${new Date(filters.endDate).toISOString()}'`;
+    }
+    if (filters.path) {
+      pathFilter = `AND history::text ILIKE '%${filters.path}%'`;
+    }
+
+    const baseWhere = `WHERE 1=1 ${pathFilter} ${startFilter} ${endFilter} ${searchFilter}`;
+
+    // Count total unique visitors
+    const countQuery = `
+      SELECT COUNT(*)::int as total
+      FROM visitors
+      ${baseWhere}
+    `;
+
+    const dataQuery = `
+      SELECT 
+        id,
+        ip,
+        ip as "sessionId",
+        country,
+        city,
+        region,
+        browser,
+        os,
+        device,
+        screen_width as "screenWidth",
+        screen_height as "screenHeight",
+        language,
+        applicant_name as "applicantName",
+        applicant_email as "applicantEmail",
+        total_duration as duration,
+        first_visit_at as "firstVisitAt",
+        last_visit_at as timestamp,
+        history
+      FROM visitors
+      ${baseWhere}
+      ORDER BY last_visit_at DESC
+      LIMIT ${limit} OFFSET ${skip}
+    `;
+
+    const [totalResult, dataRaw] = await Promise.all([
+      this.prisma.$queryRawUnsafe<{ total: number }[]>(countQuery),
+      this.prisma.$queryRawUnsafe<any[]>(dataQuery),
     ]);
+
+    const total = totalResult[0]?.total || 0;
+
+    // Process paths array to aggregate identical paths with counts
+    const data = dataRaw.map((row: any) => {
+      const pathCounts: Record<string, number> = {};
+      
+      // history is already parsed JSON in prisma object, but via queryRawUnsafe it might be string/json
+      const history = typeof row.history === 'string' ? JSON.parse(row.history) : row.history || [];
+      if (Array.isArray(history)) {
+        history.forEach((p: any) => {
+          pathCounts[p.path] = (pathCounts[p.path] || 0) + 1;
+        });
+      }
+
+      // Convert back to structured array
+      const aggregatedPaths = Object.entries(pathCounts)
+        .map(([path, count]) => ({ path, count }))
+        .sort((a, b) => b.count - a.count);
+
+      return {
+        ...row,
+        history: undefined, // remove raw history to save bandwidth
+        aggregatedPaths,
+      };
+    });
 
     return {
       data,

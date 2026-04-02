@@ -149,6 +149,25 @@ enum PaymentStatus {
   REFUNDED
 }
 
+enum ElectionStatus {
+  NOMINATION
+  VOTING
+  COMPLETED
+  CANCELLED
+}
+
+enum TeamRequestType {
+  SWAP
+  RESOURCE
+  COMPLAINT
+}
+
+enum TeamRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 // ─── MODELS ──────────────────────────────────────────────
 
 model Admin {
@@ -216,9 +235,9 @@ model Applicant {
   teamId         String?         @map("team_id") @db.Uuid
   consentGiven   Boolean         @default(false) @map("consent_given")
   consentDocUrl  String?         @map("consent_doc_url")
-  accessToken    String          @unique @map("access_token") @db.Uuid // Unique token for user-specific links
+  accessToken    String          @unique @map("access_token") @db.Uuid
   appliedAt      DateTime        @default(now()) @map("applied_at")
-  movedAt        DateTime?       @map("moved_at") // When moved between batches
+  movedAt        DateTime?       @map("moved_at")
   removedAt      DateTime?       @map("removed_at")
   role           String?
   timezone       String?
@@ -230,6 +249,7 @@ model Applicant {
   city           String?
   age            Int?
   agreementAccepted Boolean      @default(false) @map("agreement_accepted")
+  isTeamLeader   Boolean         @default(false) @map("is_team_leader")
   vocation       String?         @db.Text
   obsession      String?         @db.Text
   heresy         String?         @db.Text
@@ -237,12 +257,13 @@ model Applicant {
   updatedAt      DateTime        @updatedAt @map("updated_at")
 
   batch           Batch?           @relation(fields: [batchId], references: [id])
-  team            Team?            @relation(fields: [teamId], references: [id])
+  team            Team?            @relation("TeamMembers", fields: [teamId], references: [id])
   answers         Answer[]
   notifications   Notification[]
   documents       Document[]
   payments        Payment[]
   matchingProfile MatchingProfile?
+  ledTeam         Team?            @relation("TeamLeader")
 
   @@index([status])
   @@index([batchId])
@@ -273,6 +294,8 @@ model Answer {
 model Batch {
   id                  String      @id @default(uuid()) @db.Uuid
   batchNumber         Int         @unique @map("batch_number")
+  name                String?     // Admin-defined batch name
+  nickname            String?     // Admin-defined short nickname
   status              BatchStatus @default(FILLING)
   capacity            Int         @default(1000)
   currentCount        Int         @default(0) @map("current_count")
@@ -285,9 +308,10 @@ model Batch {
   productionAt        DateTime?   @map("production_at")
   updatedAt           DateTime    @updatedAt @map("updated_at")
 
-  applicants   Applicant[]
-  teams        Team[]
-  instructions BatchInstruction[]
+  applicants    Applicant[]
+  teams         Team[]
+  instructions  BatchInstruction[]
+  announcements Announcement[]
 
   @@index([status])
   @@index([batchNumber])
@@ -299,17 +323,21 @@ model Team {
   batchId          String    @map("batch_id") @db.Uuid
   name             String
   teamType         TeamType  @default(BUILDER_POOL) @map("team_type")
+  leaderId         String?   @unique @map("leader_id") @db.Uuid
   memberCount      Int       @default(0) @map("member_count")
-  matchingCriteria Json?     @map("matching_criteria") // Snapshot of criteria used for formation
-  matchScore       Float?    @map("match_score") // Average compatibility score
-  ideaCategory     IdeaCategory? @map("idea_category") // Primary category for IDEA_BASED teams
+  matchingCriteria Json?     @map("matching_criteria")
+  matchScore       Float?    @map("match_score")
+  ideaCategory     IdeaCategory? @map("idea_category")
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
-  batch   Batch       @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  members Applicant[]
-  project Project?
-  sprints Sprint[]
+  batch      Batch            @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  leader     Applicant?       @relation("TeamLeader", fields: [leaderId], references: [id])
+  members    Applicant[]      @relation("TeamMembers")
+  project    Project?
+  sprints    Sprint[]
+  elections  LeaderElection[]
+  requests   TeamRequest[]
 
   @@index([batchId])
   @@index([teamType])
@@ -317,13 +345,15 @@ model Team {
 }
 
 model BatchInstruction {
-  id                    String   @id @default(uuid()) @db.Uuid
-  batchId               String   @map("batch_id") @db.Uuid
+  id                    String    @id @default(uuid()) @db.Uuid
+  batchId               String    @map("batch_id") @db.Uuid
   title                 String
-  content               String   @db.Text
-  additionalQuestionIds String[] @map("additional_question_ids") @db.Uuid
-  sentAt                DateTime @default(now()) @map("sent_at")
-  createdAt             DateTime @default(now()) @map("created_at")
+  content               String    @db.Text
+  explanation           String?   @db.Text // Why participants need to answer
+  additionalQuestionIds String[]  @map("additional_question_ids") @db.Uuid
+  deadline              DateTime? // Deadline for questionnaire response
+  sentAt                DateTime  @default(now()) @map("sent_at")
+  createdAt             DateTime  @default(now()) @map("created_at")
 
   batch Batch @relation(fields: [batchId], references: [id], onDelete: Cascade)
 
@@ -644,6 +674,143 @@ model ChatMessage {
   @@map("chat_messages")
 }
 
+// ─── LEADER ELECTION SYSTEM ──────────────────────────────
+
+model LeaderElection {
+  id            String         @id @default(uuid()) @db.Uuid
+  teamId        String         @map("team_id") @db.Uuid
+  status        ElectionStatus @default(NOMINATION)
+  instructions  String?        @db.Text // Instructions from admin about the process
+  deadline      DateTime?      // Deadline for entire election process
+  startedAt     DateTime       @default(now()) @map("started_at")
+  completedAt   DateTime?      @map("completed_at")
+  winnerId      String?        @map("winner_id") @db.Uuid
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+
+  team        Team                @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  nominations Nomination[]
+  votes       LeaderVote[]
+  questions   ElectionQuestion[]
+
+  @@index([teamId])
+  @@index([status])
+  @@map("leader_elections")
+}
+
+model ElectionQuestion {
+  id           String         @id @default(uuid()) @db.Uuid
+  electionId   String?        @map("election_id") @db.Uuid
+  label        String
+  helpText     String?        @map("help_text")
+  type         QuestionType   @default(TEXTAREA)
+  options      Json?          // For SELECT/MULTISELECT
+  isRequired   Boolean        @default(true) @map("is_required")
+  isTemplate   Boolean        @default(false) @map("is_template") // Reusable template questions
+  sortOrder    Int            @default(0) @map("sort_order")
+  createdAt    DateTime       @default(now()) @map("created_at")
+
+  election LeaderElection? @relation(fields: [electionId], references: [id], onDelete: Cascade)
+  answers  NominationAnswer[]
+
+  @@index([electionId])
+  @@index([isTemplate])
+  @@map("election_questions")
+}
+
+model NominationAnswer {
+  id            String    @id @default(uuid()) @db.Uuid
+  nominationId  String    @map("nomination_id") @db.Uuid
+  questionId    String    @map("question_id") @db.Uuid
+  value         Json
+  answeredAt    DateTime  @default(now()) @map("answered_at")
+
+  nomination Nomination       @relation(fields: [nominationId], references: [id], onDelete: Cascade)
+  question   ElectionQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([nominationId, questionId])
+  @@index([nominationId])
+  @@index([questionId])
+  @@map("nomination_answers")
+}
+
+model Nomination {
+  id            String             @id @default(uuid()) @db.Uuid
+  electionId    String             @map("election_id") @db.Uuid
+  nomineeId     String             @map("nominee_id") @db.Uuid
+  nominatedById String?            @map("nominated_by_id") @db.Uuid
+  isSelfNomination Boolean         @default(false) @map("is_self_nomination")
+  reason        String?            @db.Text
+  pitch         String?            @db.Text
+  skills        Json?
+  createdAt     DateTime           @default(now()) @map("created_at")
+
+  election LeaderElection     @relation(fields: [electionId], references: [id], onDelete: Cascade)
+  answers  NominationAnswer[]
+
+  @@unique([electionId, nomineeId])
+  @@index([electionId])
+  @@index([nomineeId])
+  @@map("nominations")
+}
+
+model LeaderVote {
+  id         String         @id @default(uuid()) @db.Uuid
+  electionId String         @map("election_id") @db.Uuid
+  voterId    String         @map("voter_id") @db.Uuid
+  nomineeId  String         @map("nominee_id") @db.Uuid
+  castAt     DateTime       @default(now()) @map("cast_at")
+
+  election LeaderElection @relation(fields: [electionId], references: [id], onDelete: Cascade)
+
+  @@unique([electionId, voterId])
+  @@index([electionId])
+  @@index([nomineeId])
+  @@map("leader_votes")
+}
+
+// ─── TEAM REQUESTS ───────────────────────────────────────
+
+model TeamRequest {
+  id           String            @id @default(uuid()) @db.Uuid
+  teamId       String            @map("team_id") @db.Uuid
+  requesterId  String            @map("requester_id") @db.Uuid
+  type         TeamRequestType
+  status       TeamRequestStatus @default(PENDING)
+  title        String
+  details      String            @db.Text
+  resolvedById String?           @map("resolved_by_id") @db.Uuid
+  resolvedAt   DateTime?         @map("resolved_at")
+  createdAt    DateTime          @default(now()) @map("created_at")
+  updatedAt    DateTime          @updatedAt @map("updated_at")
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([teamId])
+  @@index([requesterId])
+  @@index([status])
+  @@map("team_requests")
+}
+
+// ─── ANNOUNCEMENTS ────────────────────────────────────────
+
+model Announcement {
+  id        String    @id @default(uuid()) @db.Uuid
+  batchId   String?   @map("batch_id") @db.Uuid
+  title     String
+  content   String    @db.Text
+  deadline  DateTime?
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  batch Batch? @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId])
+  @@index([isActive])
+  @@map("announcements")
+}
+
 // ─── SITE SETTINGS ────────────────────────────────────────
 
 model SiteSetting {
@@ -656,12 +823,12 @@ model SiteSetting {
 
 // ─── VISITOR ANALYTICS ────────────────────────────────────
 
-model PageView {
+model Visitor {
   id             String   @id @default(uuid()) @db.Uuid
-  sessionId      String   @map("session_id")
-  path           String
-  referrer       String?
-  ip             String?
+  sessionId      String   @unique @map("session_id")
+  ip             String
+  history        Json     @default("[]") // Array of { path, timestamp, duration }
+  totalDuration  Int      @default(0)    @map("total_duration")
   country        String?
   city           String?
   region         String?
@@ -672,19 +839,19 @@ model PageView {
   screenWidth    Int?     @map("screen_width")
   screenHeight   Int?     @map("screen_height")
   language       String?
-  // Logged-in user info (nullable for anonymous visitors)
+  
+  // Logged-in user info (if they log in during this session/IP)
   applicantId    String?  @map("applicant_id") @db.Uuid
   applicantEmail String?  @map("applicant_email")
   applicantName  String?  @map("applicant_name")
-  // Timing
-  duration       Int?              // time on page in seconds
-  timestamp      DateTime @default(now())
+  
+  firstVisitAt   DateTime @default(now()) @map("first_visit_at")
+  lastVisitAt    DateTime @default(now()) @map("last_visit_at")
 
-  @@index([timestamp])
-  @@index([sessionId])
-  @@index([path])
+  @@index([ip])
+  @@index([lastVisitAt])
   @@index([applicantId])
-  @@map("page_views")
+  @@map("visitors")
 }
 
 model DailyPageStat {

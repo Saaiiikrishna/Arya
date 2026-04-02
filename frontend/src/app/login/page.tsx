@@ -6,12 +6,14 @@ import { GoogleLogin } from '@react-oauth/google';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useSettings } from '@/lib/settings';
+import { useAuth } from '@/lib/auth';
 
 const TEST_EMAIL = 'test@arya.com';
 
 function LoginContent() {
   const router = useRouter();
   const { settings } = useSettings();
+  const { isAuthenticated, admin, loading: authLoading, role } = useAuth();
   const logoMode = settings?.logoMode || 'text';
   
   const [error, setError] = useState<string | null>(null);
@@ -22,6 +24,41 @@ function LoginContent() {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Redirect authenticated users — prevent re-login
+  useEffect(() => {
+    if (!authLoading && isAuthenticated && admin) {
+      if (role === 'APPLICANT') {
+        router.push('/apply');
+      } else {
+        router.push('/admin/dashboard');
+      }
+    }
+  }, [authLoading, isAuthenticated, admin, role, router]);
+
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-parchment">
+        <div className="w-8 h-8 border-2 border-forest border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // Show redirect message if authenticated
+  if (isAuthenticated && admin) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-parchment p-8">
+        <div className="bg-white border border-hairline p-12 max-w-md w-full text-center shadow-sm">
+          <h2 className="font-serif text-2xl font-bold mb-4 text-forest">Active Session</h2>
+          <p className="text-ink/60 mb-6 text-sm">
+            You are logged in as <strong>{admin.email}</strong>.
+          </p>
+          <p className="text-xs uppercase tracking-widest text-forest font-bold animate-pulse">Redirecting...</p>
+        </div>
+      </div>
+    );
+  }
   const [otpDigits, setOtpDigits] = useState(['', '', '', '', '', '']);
   const [otpLoading, setOtpLoading] = useState(false);
   const [testOtpCode, setTestOtpCode] = useState<string | null>(null);

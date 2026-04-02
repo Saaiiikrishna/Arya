@@ -3,29 +3,42 @@ import {
   Get,
   Post,
   Put,
-  Param,
   Body,
+  Param,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { BatchService } from './batch.service';
 import { JwtAuthGuard } from '../auth/guards';
-import { BatchStatus } from '@prisma/client';
 
 @Controller('api')
 export class BatchController {
   constructor(private readonly batchService: BatchService) {}
 
-  // ─── Public ────────────────────────────────────────
-  @Get('batches/:batchNumber/status')
-  async getPublicStatus(@Param('batchNumber') batchNumber: string) {
-    return this.batchService.getPublicBatchStatus(parseInt(batchNumber));
+  // ─── Public endpoints ──────────────────────────────────
+  @Get('batches/current')
+  async getCurrentBatch() {
+    return this.batchService.getCurrentFillingBatch();
   }
 
-  // ─── Admin ─────────────────────────────────────────
+  @Get('batches/:batchNumber/status')
+  async getBatchStatus(@Param('batchNumber') batchNumber: string) {
+    return this.batchService.getPublicBatchStatus(parseInt(batchNumber, 10));
+  }
+
+  // ─── Admin endpoints ──────────────────────────────────
   @UseGuards(JwtAuthGuard)
   @Get('admin/batches')
   async findAll() {
     return this.batchService.findAll();
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('admin/batches')
+  async createBatch(
+    @Body() body: { name: string; nickname?: string; capacity: number },
+  ) {
+    return this.batchService.createBatch(body);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -35,37 +48,64 @@ export class BatchController {
   }
 
   @UseGuards(JwtAuthGuard)
-  @Get('admin/batches/:id/applicants')
-  async getApplicants(@Param('id') id: string) {
-    return this.batchService.getApplicantsForBatch(id);
+  @Put('admin/batches/:id')
+  async updateBatch(
+    @Param('id') id: string,
+    @Body() body: { name?: string; nickname?: string; capacity?: number },
+  ) {
+    return this.batchService.updateBatch(id, body);
   }
 
   @UseGuards(JwtAuthGuard)
-  @Put('admin/batches/:id/status')
+  @Put('admin/batches/:id/transition')
   async transitionStatus(
     @Param('id') id: string,
-    @Body('status') status: BatchStatus,
+    @Body('status') status: string,
   ) {
-    return this.batchService.transitionStatus(id, status);
+    return this.batchService.transitionStatus(id, status as any);
   }
 
   @UseGuards(JwtAuthGuard)
   @Post('admin/batches/:id/instructions')
   async sendInstructions(
     @Param('id') id: string,
-    @Body() body: { title: string; content: string; additionalQuestionIds?: string[] },
+    @Body()
+    body: {
+      title: string;
+      content: string;
+      additionalQuestionIds?: string[];
+      explanation?: string;
+      deadline?: string;
+    },
   ) {
     return this.batchService.sendInstructions(
       id,
       body.title,
       body.content,
-      body.additionalQuestionIds,
+      body.additionalQuestionIds || [],
+      body.explanation,
+      body.deadline,
     );
   }
 
   @UseGuards(JwtAuthGuard)
+  @Post('admin/batches/:id/remove-non-responders')
+  async removeNonResponders(
+    @Param('id') id: string,
+    @Body('instructionId') instructionId: string,
+  ) {
+    return this.batchService.removeNonResponders(id, instructionId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('admin/batches/:id/applicants')
+  async getApplicants(@Param('id') id: string) {
+    return this.batchService.getApplicantsForBatch(id);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Post('admin/batches/:id/approve')
-  async approve(@Param('id') id: string) {
+  async approveBatch(@Param('id') id: string) {
     return this.batchService.approveBatch(id);
   }
 }

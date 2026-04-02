@@ -42,6 +42,12 @@ export default function SupportPage() {
           name: form.isAnonymous ? "Anonymous Donor" : form.donorName,
           email: form.isAnonymous ? "" : form.donorEmail,
         },
+        modal: {
+          ondismiss: function () {
+            // Reset to IDLE so user can retry — prevents frozen button
+            setPaymentStatus('IDLE');
+          }
+        },
         theme: {
           color: "#0a0a0a"
         }

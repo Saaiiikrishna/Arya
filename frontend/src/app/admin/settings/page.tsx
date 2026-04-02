@@ -35,6 +35,7 @@ interface PageViewRecord {
   applicantName: string | null;
   duration: number | null;
   timestamp: string;
+  aggregatedPaths?: { path: string; count: number }[];
 }
 
 export default function AdminSettingsPage() {
@@ -57,6 +58,7 @@ export default function AdminSettingsPage() {
   const [pvMeta, setPvMeta] = useState({ page: 1, limit: 50, total: 0, totalPages: 0 });
   const [pvLoading, setPvLoading] = useState(false);
   const [pvSearch, setPvSearch] = useState('');
+  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
 
   // Pledge Pricing State
   const [pledgePricing, setPledgePricing] = useState<{id: string, label: string, amount: number}[]>([]);
@@ -136,6 +138,7 @@ export default function AdminSettingsPage() {
       const result = await api.getVisitorPageViews(params);
       setPageViews(result.data);
       setPvMeta(result.meta);
+      setExpandedRows({});
     } catch {
       // ignore
     } finally {
@@ -484,27 +487,76 @@ export default function AdminSettingsPage() {
                 <table className="w-full text-[13px]">
                   <thead>
                     <tr className="border-b border-hairline text-left bg-alabaster">
-                      {['Time', 'Page', 'IP', 'Location', 'Browser', 'OS', 'Device', 'Screen', 'Language', 'User', 'Email', 'Session'].map((h) => (
+                      {['User / IP', 'Last Active', 'Location', 'System Details', 'Paths Visited', 'Duration'].map((h) => (
                         <th key={h} className="px-4 py-3 text-[10px] uppercase tracking-widest text-ink/40 font-semibold whitespace-nowrap">{h}</th>
                       ))}
+                      <th className="px-4 py-3 w-10"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {pageViews.map((pv) => (
-                      <tr key={pv.id} className="border-b border-hairline/50 hover:bg-alabaster/50 transition-colors">
-                        <td className="px-4 py-3 whitespace-nowrap text-xs text-ink/60">{new Date(pv.timestamp).toLocaleString()}</td>
-                        <td className="px-4 py-3 font-mono text-xs max-w-[200px] truncate">{pv.path}</td>
-                        <td className="px-4 py-3 font-mono text-xs">{pv.ip || '—'}</td>
-                        <td className="px-4 py-3 text-xs whitespace-nowrap">{[pv.city, pv.region, pv.country].filter(Boolean).join(', ') || '—'}</td>
-                        <td className="px-4 py-3 text-xs">{pv.browser || '—'}</td>
-                        <td className="px-4 py-3 text-xs">{pv.os || '—'}</td>
-                        <td className="px-4 py-3 text-xs">{pv.device || '—'}</td>
-                        <td className="px-4 py-3 text-xs whitespace-nowrap">{pv.screenWidth && pv.screenHeight ? `${pv.screenWidth}×${pv.screenHeight}` : '—'}</td>
-                        <td className="px-4 py-3 text-xs">{pv.language || '—'}</td>
-                        <td className="px-4 py-3 text-xs">{pv.applicantName || <span className="text-ink/30">Anon</span>}</td>
-                        <td className="px-4 py-3 text-xs">{pv.applicantEmail || '—'}</td>
-                        <td className="px-4 py-3 font-mono text-[10px] text-ink/30 max-w-[100px] truncate">{pv.sessionId}</td>
-                      </tr>
+                      <div key={pv.id} className="contents">
+                        <tr 
+                          onClick={() => setExpandedRows(prev => ({ ...prev, [pv.id]: !prev[pv.id] }))}
+                          className="border-b border-hairline/50 hover:bg-alabaster/50 transition-colors cursor-pointer"
+                        >
+                          <td className="px-4 py-4">
+                            <div className="font-serif text-sm text-ink mb-1">{pv.applicantName || pv.applicantEmail || 'Anonymous'}</div>
+                            <div className="font-mono text-[10px] text-ink/40 flex items-center gap-2">
+                              <span className="bg-alabaster border border-hairline px-1.5 py-0.5 rounded">{pv.ip || 'Unknown IP'}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-4 whitespace-nowrap text-xs text-ink/60">
+                            {new Date(pv.timestamp).toLocaleString()}
+                          </td>
+                          <td className="px-4 py-4">
+                            <div className="text-xs font-semibold text-ink/80">{[pv.city, pv.country].filter(Boolean).join(', ') || 'Unknown Location'}</div>
+                            <div className="text-[10px] text-ink/40 uppercase tracking-widest">{pv.region || '—'}</div>
+                          </td>
+                          <td className="px-4 py-4">
+                            <div className="text-xs text-ink/80">{[pv.browser, pv.os, pv.device].filter(Boolean).join(' • ') || '—'}</div>
+                            <div className="text-[10px] text-ink/40 font-mono mt-1">{pv.screenWidth && pv.screenHeight ? `${pv.screenWidth}×${pv.screenHeight}` : '—'}</div>
+                          </td>
+                          <td className="px-4 py-4">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-xs font-semibold text-forest">
+                                {pv.aggregatedPaths ? pv.aggregatedPaths.reduce((acc, p) => acc + p.count, 0) : 0} Hits
+                              </span>
+                              <span className="text-[10px] text-ink/40 uppercase tracking-widest">
+                                ({pv.aggregatedPaths?.length || 0} unique)
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-4">
+                            <div className="font-mono text-xs text-ink/60">
+                              {Math.floor((pv.duration || 0) / 60)}m {(pv.duration || 0) % 60}s
+                            </div>
+                          </td>
+                          <td className="px-4 py-4 text-right">
+                            <span className={`inline-block transition-transform ${expandedRows[pv.id] ? 'rotate-180' : ''}`}>▼</span>
+                          </td>
+                        </tr>
+                        {expandedRows[pv.id] && (
+                          <tr className="bg-forest/5 border-b border-hairline/50">
+                            <td colSpan={6} className="px-6 py-6 border-l-4 border-forest">
+                              <h4 className="text-[10px] uppercase tracking-widest text-forest font-bold mb-4">Accessed URLs & Frequencies</h4>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 max-w-4xl">
+                                {pv.aggregatedPaths?.map((p, idx) => (
+                                  <div key={idx} className="flex justify-between items-center py-2 border-b border-forest/10 last:border-0 hover:bg-forest/5 px-2 -mx-2 transition-colors">
+                                    <span className="font-mono text-xs text-ink/70 truncate mr-4" title={p.path}>{p.path}</span>
+                                    <span className="font-mono text-[10px] bg-forest/10 px-2 py-0.5 rounded-sm text-forest font-bold flex-shrink-0">
+                                      {p.count} ×
+                                    </span>
+                                  </div>
+                                ))}
+                                {(!pv.aggregatedPaths || pv.aggregatedPaths.length === 0) && (
+                                  <span className="text-xs text-ink/40 italic">No valid paths aggregated.</span>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </div>
                     ))}
                     {pageViews.length === 0 && (
                       <tr><td colSpan={12} className="text-ink/40 text-center py-12">No records found</td></tr>

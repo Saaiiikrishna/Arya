@@ -48,10 +48,40 @@ export class ApplicantController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Get('applicants/me/profile')
+  async getMyProfileEndpoint(@Req() req: any) {
+    const applicantId = req.user.id || req.user.sub;
+    const applicant = await this.applicantService.getMyProfile(applicantId);
+    const hasPaid = applicant.payments?.some((p: any) => p.status === 'CAPTURED') ?? false;
+    return {
+      id: applicant.id,
+      email: applicant.email,
+      firstName: applicant.firstName,
+      lastName: applicant.lastName,
+      phone: applicant.phone,
+      city: applicant.city,
+      age: applicant.age,
+      status: applicant.status,
+      teamId: applicant.teamId,
+      batchId: applicant.batchId,
+      avatarUrl: applicant.avatarUrl,
+      role: 'APPLICANT',
+      hasPaid,
+    };
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get('applicants/me/dossier')
   async getMyDossierEndpoint(@Req() req: any) {
     const applicantId = req.user.id || req.user.sub;
     return this.applicantService.getMyProfile(applicantId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('applicants/me/hub')
+  async getMyHubData(@Req() req: any) {
+    const applicantId = req.user.id || req.user.sub;
+    return this.applicantService.getHubData(applicantId);
   }
 
   @Post('applicants/answers/:accessToken')
@@ -60,6 +90,19 @@ export class ApplicantController {
     @Body() dto: SubmitAdditionalAnswersDto,
   ) {
     return this.applicantService.submitAdditionalAnswers(accessToken, dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('applicants/me/pending-questions')
+  async getPendingQuestionnaires(@Req() req: any) {
+    const applicantId = req.user.id || req.user.sub;
+    return this.applicantService.getPendingQuestionnaires(applicantId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('applicants/:memberId/profile')
+  async getMemberProfile(@Param('memberId') memberId: string) {
+    return this.applicantService.getMemberProfile(memberId);
   }
 
   @Post('applicants/consent/:accessToken')

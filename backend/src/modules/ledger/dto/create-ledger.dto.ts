@@ -5,4 +5,5 @@ export class CreateLedgerDto {
   amount: number;
   type: LedgerTransactionType;
   description: string;
+  date?: Date;
 }

@@ -27,6 +27,22 @@ export default function LoginPage() {
   };
 
   if (isAuthenticated && admin) {
+    // If user is applicant, redirect them away from admin
+    if (admin.role === 'APPLICANT') {
+      router.push('/hub');
+      return (
+        <div className="min-h-screen bg-parchment flex items-center justify-center p-8">
+          <div className="w-full max-w-md bg-white border border-hairline p-12 text-center shadow-sm">
+            <h2 className="font-serif text-2xl font-bold mb-4 text-terracotta">Access Restricted</h2>
+            <p className="text-ink/60 mb-6 text-sm">
+              This area is reserved for administrators. Redirecting you to your Hub...
+            </p>
+            <p className="text-xs uppercase tracking-widest text-forest font-bold animate-pulse">Redirecting...</p>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen bg-parchment flex items-center justify-center p-8 selection:bg-forest selection:text-parchment">
         <div className="w-full max-w-md bg-white border border-hairline p-12 text-center shadow-sm relative overflow-hidden">

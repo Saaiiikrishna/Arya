@@ -27,13 +27,13 @@ function getApplicantInfo(): {
 } {
   if (typeof window === 'undefined') return {};
   try {
-    const raw = localStorage.getItem('arya_admin');
+    const raw = localStorage.getItem('arya_profile');
     if (raw) {
-      const admin = JSON.parse(raw);
+      const profile = JSON.parse(raw);
       return {
-        applicantId: admin.id,
-        applicantEmail: admin.email,
-        applicantName: `${admin.firstName || ''} ${admin.lastName || ''}`.trim() || undefined,
+        applicantId: profile.id,
+        applicantEmail: profile.email,
+        applicantName: `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || undefined,
       };
     }
   } catch {
