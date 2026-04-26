@@ -94,7 +94,11 @@ function LoginContent() {
         setTestOtpCode((result as any).otp);
       }
     } catch (e: any) {
-      setError(e.message || 'Failed to send OTP');
+      if (e?.message?.toLowerCase().includes('too many requests')) {
+        setError('Rate limit exceeded. Please wait a minute.');
+      } else {
+        setError(e.message || 'Failed to send OTP');
+      }
     } finally {
       setOtpLoading(false);
     }
@@ -145,7 +149,11 @@ function LoginContent() {
       }
       window.location.href = '/apply';
     } catch (e: any) {
-      setError(e.message || 'Invalid OTP');
+      if (e?.message?.toLowerCase().includes('too many requests')) {
+        setError('Rate limit exceeded. Please wait a minute.');
+      } else {
+        setError(e.message || 'Invalid OTP');
+      }
       setOtpDigits(['', '', '', '', '', '']);
       inputRefs.current[0]?.focus();
     } finally {
@@ -164,7 +172,11 @@ function LoginContent() {
         setTestOtpCode((result as any).otp);
       }
     } catch (e: any) {
-      setError(e.message || 'Failed to resend OTP');
+      if (e?.message?.toLowerCase().includes('too many requests')) {
+        setError('Rate limit exceeded. Please wait a minute.');
+      } else {
+        setError(e.message || 'Failed to resend OTP');
+      }
     } finally {
       setOtpLoading(false);
     }

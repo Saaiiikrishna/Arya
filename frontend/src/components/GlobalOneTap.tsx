@@ -7,10 +7,10 @@ import { useAuth } from '@/lib/auth';
 
 export default function GlobalOneTap() {
   const router = useRouter();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
 
   useGoogleOneTapLogin({
-    disabled: isAuthenticated,
+    disabled: isAuthenticated || loading,
     onSuccess: async (credentialResponse) => {
       console.log('Google One Tap Success');
       try {

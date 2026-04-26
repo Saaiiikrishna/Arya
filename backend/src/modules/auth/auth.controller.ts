@@ -10,7 +10,7 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('login')
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Throttle({ short: { limit: 5, ttl: 60000 } })
   async login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
   }
@@ -21,7 +21,7 @@ export class AuthController {
   }
 
   @Post('refresh')
-  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Throttle({ short: { limit: 10, ttl: 60000 } })
   async refresh(@Body('refreshToken') refreshToken: string) {
     return this.authService.refreshToken(refreshToken);
   }

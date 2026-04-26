@@ -27,16 +27,29 @@ import { SettingsModule } from './modules/settings/settings.module';
 
 import { ElectionModule } from './modules/election/election.module';
 import { AnnouncementModule } from './modules/announcement';
+import { ReferralModule } from './modules/referral/referral.module';
+import { EquityModule } from './modules/equity/equity.module';
+import { WhatsappModule } from './modules/whatsapp/whatsapp.module';
+import { RewardsModule } from './modules/rewards/rewards.module';
 
 @Module({
   imports: [
     // Config
     ConfigModule.forRoot({ isGlobal: true }),
 
-    // Rate limiting
+    // Rate limiting: multi-tier configuration
     ThrottlerModule.forRoot([{
+      name: 'short', // 6 requests per min (useful for OTPs, strict APIs)
       ttl: 60000,
-      limit: 30,
+      limit: 6,
+    }, {
+      name: 'medium', // 100 requests per min (standard endpoints)
+      ttl: 60000,
+      limit: 100,
+    }, {
+      name: 'long', // 1000 requests per hour
+      ttl: 3600000,
+      limit: 1000,
     }]),
 
     // Redis / BullMQ
@@ -93,6 +106,10 @@ import { AnnouncementModule } from './modules/announcement';
     // Phase 3 module
     ElectionModule,
     AnnouncementModule,
+    ReferralModule,
+    EquityModule,
+    WhatsappModule,
+    RewardsModule,
   ],
 })
 export class AppModule {}

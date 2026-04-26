@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation';
 import { 
   FileQuestion, Package, Users, ShieldCheck, 
   BookOpen, BarChart2, Megaphone, Settings, 
-  AlertCircle, CheckCircle2 
+  AlertCircle, CheckCircle2, UserPlus, Scale
 } from 'lucide-react';
 
 interface Stats {
@@ -184,6 +184,20 @@ export default function DashboardPage() {
                   <span className="font-serif text-lg font-bold group-hover:text-forest transition-colors">Analytics</span>
                 </div>
                 <span className="text-[10px] uppercase tracking-widest text-ink/60 leading-relaxed mt-auto">Platform telemetry & data</span>
+              </Link>
+              <Link href="/admin/referrals" className="border border-hairline p-5 bg-white hover:border-terracotta hover:shadow-md shadow-sm transition-all group flex flex-col border-l-4 border-l-terracotta/30">
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="group-hover:scale-110 transition-transform text-ink/40 group-hover:text-terracotta"><UserPlus size={22} strokeWidth={1.5} /></span>
+                  <span className="font-serif text-lg font-bold group-hover:text-terracotta transition-colors">Referrals</span>
+                </div>
+                <span className="text-[10px] uppercase tracking-widest text-ink/60 leading-relaxed mt-auto">Affiliate engine & tracking</span>
+              </Link>
+              <Link href="/admin/equity" className="border border-hairline p-5 bg-white hover:border-forest hover:shadow-md shadow-sm transition-all group flex flex-col border-l-4 border-l-forest/30">
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="group-hover:scale-110 transition-transform text-ink/40 group-hover:text-forest"><Scale size={22} strokeWidth={1.5} /></span>
+                  <span className="font-serif text-lg font-bold group-hover:text-forest transition-colors">Equity Vault</span>
+                </div>
+                <span className="text-[10px] uppercase tracking-widest text-ink/60 leading-relaxed mt-auto">1000-day company lifecycles</span>
               </Link>
               <Link href="/admin/announcements" className="border border-hairline p-5 bg-white hover:border-forest hover:shadow-md shadow-sm transition-all group flex flex-col">
                 <div className="flex items-center gap-3 mb-3">

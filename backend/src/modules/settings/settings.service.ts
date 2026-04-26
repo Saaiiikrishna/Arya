@@ -45,7 +45,7 @@ export class SettingsService {
    * Returns only settings safe for public consumption (no secrets).
    */
   async getPublicSettings(): Promise<Record<string, string>> {
-    const publicKeys = ['logoMode', 'pledgePricing'];
+    const publicKeys = ['logoMode', 'pledgePricing', 'next_batch_date'];
     const settings = await this.prisma.siteSetting.findMany({
       where: { key: { in: publicKeys } },
     });

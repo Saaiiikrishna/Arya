@@ -11,7 +11,16 @@ export class PrismaService
 {
   constructor(configService: ConfigService) {
     const connectionString = configService.get<string>('DATABASE_URL');
-    const pool = new Pool({ connectionString });
+    
+    // Explicit Node.js pool tailored for Serverless / Azure Container Apps limits
+    const pool = new Pool({ 
+      connectionString,
+      max: process.env.NODE_ENV === 'production' ? 20 : 5, // Reserve connections per instance
+      idleTimeoutMillis: 10000, 
+      connectionTimeoutMillis: 5000,
+      allowExitOnIdle: true
+    });
+    
     const adapter = new PrismaPg(pool as any);
     super({ adapter });
   }

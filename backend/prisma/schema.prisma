@@ -98,6 +98,7 @@ enum BatchStatus {
 enum NotificationType {
   EMAIL
   IN_APP
+  WHATSAPP
 }
 
 enum NotificationStatus {
@@ -254,7 +255,16 @@ model Applicant {
   obsession      String?         @db.Text
   heresy         String?         @db.Text
   scarTissue     String?         @db.Text @map("scar_tissue")
+  whatsappPhone  String?         @map("whatsapp_phone")
+  whatsappVerified Boolean       @default(false) @map("whatsapp_verified")
+  whatsappPresenceChecked Boolean @default(false) @map("whatsapp_presence_checked")
   updatedAt      DateTime        @updatedAt @map("updated_at")
+
+  // Referral tracking
+  referredById    String?         @map("referred_by_id") @db.Uuid
+  referredBy      Applicant?      @relation("Referrals", fields: [referredById], references: [id])
+  referrals       Applicant[]     @relation("Referrals")
+  referralProfile ReferralProfile?
 
   batch           Batch?           @relation(fields: [batchId], references: [id])
   team            Team?            @relation("TeamMembers", fields: [teamId], references: [id])
@@ -264,13 +274,31 @@ model Applicant {
   payments        Payment[]
   matchingProfile MatchingProfile?
   ledTeam         Team?            @relation("TeamLeader")
+  equityHoldings  EquityHolder[]
+  badges          ApplicantBadge[]
+  certificates    Certificate[]
 
   @@index([status])
   @@index([batchId])
   @@index([teamId])
   @@index([appliedAt])
   @@index([accessToken])
+  @@index([referredById])
   @@map("applicants")
+}
+
+model ReferralProfile {
+  id             String    @id @default(uuid()) @db.Uuid
+  applicantId    String    @unique @map("applicant_id") @db.Uuid
+  referralCode   String    @unique @map("referral_code")
+  isActive       Boolean   @default(true) @map("is_active")
+  totalReferrals Int       @default(0) @map("total_referrals")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  applicant Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+
+  @@map("referral_profiles")
 }
 
 model Answer {
@@ -335,6 +363,7 @@ model Team {
   leader     Applicant?       @relation("TeamLeader", fields: [leaderId], references: [id])
   members    Applicant[]      @relation("TeamMembers")
   project    Project?
+  companyEntity CompanyEntity?
   sprints    Sprint[]
   elections  LeaderElection[]
   requests   TeamRequest[]
@@ -867,8 +896,6 @@ model DailyPageStat {
   @@map("daily_page_stats")
 }
 
-// ─── REFRESH TOKEN ROTATION ──────────────────────────────
-
 model RefreshToken {
   id        String   @id @default(uuid()) @db.Uuid
   userId    String   @map("user_id") @db.Uuid
@@ -880,4 +907,204 @@ model RefreshToken {
   @@index([userId])
   @@index([token])
   @@map("refresh_tokens")
+}
+
+// ─── EQUITY & COMPANY SYSTEM ─────────────────────────────
+
+enum CompanyStatus {
+  FORMATION        // Team formed, company being set up
+  INCORPORATED     // Legally incorporated
+  ACTIVE           // Operating with platform equity stake
+  SUSPENDED        // Temporarily suspended
+  HANDED_OVER      // 1000-day period complete, equity transferred
+  DISSOLVED        // Company dissolved
+}
+
+enum EquityEventType {
+  GRANT            // Initial equity allocation
+  VEST             // Equity vesting milestone
+  DILUTE           // Dilution event (funding round)
+  TRANSFER         // Transfer between holders
+  HANDOVER         // 1000-day handover from platform to founders
+  BUYOUT           // Early buyout of platform stake
+}
+
+enum AgreementStatus {
+  DRAFT            // Agreement being prepared
+  PENDING_SIGNATURE // Sent for signatures
+  ACTIVE           // Fully executed and active
+  AMENDED          // Original amended with new terms
+  EXPIRED          // Agreement term ended
+  TERMINATED       // Prematurely terminated
+}
+
+model CompanyEntity {
+  id                 String        @id @default(uuid()) @db.Uuid
+  teamId             String        @unique @map("team_id") @db.Uuid
+  companyName        String        @map("company_name")
+  registrationNumber String?       @map("registration_number") // CIN or company reg number
+  incorporationDate  DateTime?     @map("incorporation_date")
+  status             CompanyStatus @default(FORMATION)
+
+  // 1000-day timer
+  timerStartDate     DateTime?     @map("timer_start_date")
+  timerEndDate       DateTime?     @map("timer_end_date")   // Computed: timerStartDate + 1000 days
+  daysElapsed        Int           @default(0) @map("days_elapsed") // Cached, updated by cron
+  handoverDate       DateTime?     @map("handover_date")    // Actual date when handover occurred
+
+  // Platform's equity stake
+  platformEquityPct  Float         @default(51.0) @map("platform_equity_pct")  // Current platform %
+  foundersEquityPct  Float         @default(49.0) @map("founders_equity_pct")  // Current founders %
+
+  // Company details
+  sector             String?
+  description        String?       @db.Text
+  registeredAddress  String?       @map("registered_address") @db.Text
+  gstin              String?       // GST Identification Number
+  panNumber          String?       @map("pan_number") // Company PAN
+
+  // Metadata
+  notes              String?       @db.Text // Admin notes
+  createdAt          DateTime      @default(now()) @map("created_at")
+  updatedAt          DateTime      @updatedAt @map("updated_at")
+
+  team               Team          @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  equityHolders      EquityHolder[]
+  equityAgreements   EquityAgreement[]
+  equityEvents       EquityEvent[]
+
+  @@index([status])
+  @@index([timerEndDate])
+  @@map("company_entities")
+}
+
+model EquityHolder {
+  id              String        @id @default(uuid()) @db.Uuid
+  companyId       String        @map("company_id") @db.Uuid
+  applicantId     String?       @map("applicant_id") @db.Uuid    // null = platform itself
+  holderName      String        @map("holder_name")               // "Aryavartham Platform" or person name
+  holderType      String        @map("holder_type")               // "PLATFORM" | "FOUNDER" | "INVESTOR"
+  equityPct       Float         @map("equity_pct")                // Current equity percentage
+  vestedPct       Float         @default(0) @map("vested_pct")    // How much has vested
+  vestingSchedule Json?         @map("vesting_schedule")          // { cliff, duration, intervals }
+  isActive        Boolean       @default(true) @map("is_active")
+  grantedAt       DateTime      @default(now()) @map("granted_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  company         CompanyEntity @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  applicant       Applicant?    @relation(fields: [applicantId], references: [id])
+
+  @@unique([companyId, applicantId])
+  @@index([companyId])
+  @@index([applicantId])
+  @@map("equity_holders")
+}
+
+model EquityAgreement {
+  id              String          @id @default(uuid()) @db.Uuid
+  companyId       String          @map("company_id") @db.Uuid
+  agreementType   String          @map("agreement_type")          // "FOUNDING" | "VESTING" | "HANDOVER" | "BUYOUT"
+  title           String
+  status          AgreementStatus @default(DRAFT)
+
+  // Agreement terms
+  terms           Json?           // Flexible JSON for specific terms
+  equityPct       Float?          @map("equity_pct")              // Equity percentage this agreement covers
+  duration        Int?            // Duration in days (e.g., 1000)
+  startDate       DateTime?       @map("start_date")
+  endDate         DateTime?       @map("end_date")
+
+  // Signatures
+  platformSignedAt   DateTime?    @map("platform_signed_at")
+  platformSignedBy   String?      @map("platform_signed_by")      // Admin who signed
+  founderSignedAt    DateTime?    @map("founder_signed_at")
+  founderSignedBy    String?      @map("founder_signed_by") @db.Uuid // Applicant ID
+  
+  // Document
+  documentUrl     String?         @map("document_url")            // Link to agreement PDF
+  
+  notes           String?         @db.Text
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  company         CompanyEntity   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([status])
+  @@map("equity_agreements")
+}
+
+model EquityEvent {
+  id              String          @id @default(uuid()) @db.Uuid
+  companyId       String          @map("company_id") @db.Uuid
+  eventType       EquityEventType @map("event_type")
+  
+  // Transfer details
+  fromHolder      String?         @map("from_holder")             // Holder name (for audit trail)
+  toHolder        String?         @map("to_holder")               // Holder name (for audit trail)
+  percentageAmount Float          @map("percentage_amount")       // % transferred or changed
+  
+  // Resulting state
+  platformEquityAfter Float?      @map("platform_equity_after")   // Platform % after event
+  foundersEquityAfter Float?      @map("founders_equity_after")   // Founders % after event
+  
+  // Context
+  description     String          @db.Text
+  metadata        Json?           // Additional event-specific data
+  triggeredBy     String?         @map("triggered_by")            // Admin ID or "SYSTEM"
+  dayNumber       Int?            @map("day_number")              // Day of the 1000-day timer
+  
+  createdAt       DateTime        @default(now()) @map("created_at")
+
+  company         CompanyEntity   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@map("equity_events")
+}
+
+model Badge {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique
+  description String?  @db.Text
+  icon        String?  // SVG path or emoji
+  criteria    Json?    // e.g., { "referrals": 5 }
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  applicants  ApplicantBadge[]
+
+  @@map("badges")
+}
+
+model ApplicantBadge {
+  id          String   @id @default(uuid()) @db.Uuid
+  applicantId String   @map("applicant_id") @db.Uuid
+  badgeId     String   @map("badge_id") @db.Uuid
+  issuedAt    DateTime @default(now()) @map("issued_at")
+
+  applicant   Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  badge       Badge     @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@unique([applicantId, badgeId])
+  @@map("applicant_badges")
+}
+
+model Certificate {
+  id             String   @id @default(uuid()) @db.Uuid
+  applicantId    String   @map("applicant_id") @db.Uuid
+  title          String
+  credentialId   String   @unique @map("credential_id") // For LinkedIn external ID
+  issueDate      DateTime @default(now()) @map("issue_date")
+  expiryDate     DateTime? @map("expiry_date")
+  url            String?  // Link to certificate PDF/Image
+  linkedinUrl    String?  @map("linkedin_url") // The Add-to-Profile URL
+  metadata       Json?    
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  applicant      Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+
+  @@index([applicantId])
+  @@map("certificates")
 }
