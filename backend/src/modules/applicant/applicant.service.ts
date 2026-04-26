@@ -3,12 +3,24 @@ import { PrismaService } from '../../prisma';
 import { ApplyDto, SubmitAdditionalAnswersDto } from './dto';
 import { v4 as uuidv4 } from 'uuid';
 import { ApplicantStatus, PhaseTag } from '@prisma/client';
+import { WhatsappService } from '../whatsapp/whatsapp.service';
+import { BadgeService } from '../rewards/badge.service';
+
+// Simple XSS sanitization — strip HTML tags from user input
+function sanitizeText(input: string | null | undefined): string | null {
+  if (!input) return null;
+  return input.replace(/<[^>]*>/g, '').trim();
+}
 
 @Injectable()
 export class ApplicantService {
   private readonly logger = new Logger(ApplicantService.name);
 
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly whatsappService: WhatsappService,
+    private readonly badgeService: BadgeService,
+  ) { }
 
   async apply(dto: ApplyDto) {
     // Check if email already exists
@@ -168,7 +180,7 @@ export class ApplicantService {
       throw new NotFoundException('Applicant not found');
     }
 
-    if (applicant.status !== 'PENDING') {
+    if (applicant.status !== ApplicantStatus.PENDING) {
       throw new BadRequestException('Application corresponds to a finalized dossier and cannot be edited');
     }
 
@@ -179,25 +191,61 @@ export class ApplicantService {
       return isNaN(n) ? null : n;
     };
 
+    // Sanitize all text inputs to prevent XSS
+    const sFirstName = sanitizeText(data.firstName);
+    const sLastName = sanitizeText(data.lastName);
+    const sCity = sanitizeText(data.city);
+    const sVocation = sanitizeText(data.vocation);
+    const sObsession = sanitizeText(data.obsession);
+    const sHeresy = sanitizeText(data.heresy);
+    const sScarTissue = sanitizeText(data.scarTissue);
+
     // Update applicant with all dossier fields (multi-step form data)
     const updated = await this.prisma.applicant.update({
       where: { id: applicantId },
       data: {
         // Step 1: Personal Info
-        ...(data.firstName && { firstName: data.firstName }),
-        ...(data.lastName && { lastName: data.lastName }),
+        ...(sFirstName && { firstName: sFirstName }),
+        ...(sLastName && { lastName: sLastName }),
         ...(data.phone && { phone: data.phone }),
-        ...(data.city && { city: data.city }),
+        ...(sCity && { city: sCity }),
         ...(safeInt(data.age) !== null && { age: safeInt(data.age) }),
         // Step 4: Creative Assessment
-        ...(data.vocation && { vocation: data.vocation }),
-        ...(data.obsession && { obsession: data.obsession }),
-        ...(data.heresy && { heresy: data.heresy }),
-        ...(data.scarTissue && { scarTissue: data.scarTissue }),
+        ...(sVocation && { vocation: sVocation }),
+        ...(sObsession && { obsession: sObsession }),
+        ...(sHeresy && { heresy: sHeresy }),
+        ...(sScarTissue && { scarTissue: sScarTissue }),
         // Step 5: Agreement
         ...(data.agreementAccepted !== undefined && { agreementAccepted: data.agreementAccepted }),
-      } as any,
+        // WhatsApp verification
+        ...(data.whatsappVerified !== undefined && { whatsappVerified: data.whatsappVerified }),
+        // Referral: set referrer if provided and not already set
+        ...(data.referrerId && !applicant.referredById && { referredById: data.referrerId }),
+      },
     });
+
+    // Trigger Referral Rewards logic if referrerId was newly set
+    if (data.referrerId && !applicant.referredById) {
+      // Reward the referrer
+      this.badgeService.checkReferralMilestones(data.referrerId).catch(err => 
+        this.logger.error(`Milestone check failed for referrer ${data.referrerId}`, err)
+      );
+    }
+
+    // Send WhatsApp Welcome if verified for the first time
+    if (data.whatsappVerified && !applicant.whatsappVerified && updated.phone) {
+      this.whatsappService.sendWelcome(updated.phone, updated.firstName, applicantId).catch(err =>
+        this.logger.error(`WhatsApp welcome failed for ${applicantId}`, err)
+      );
+    }
+
+    // If referrerId was newly set, increment the referrer's count
+    if (data.referrerId && !applicant.referredById) {
+      await this.prisma.referralProfile.updateMany({
+        where: { applicantId: data.referrerId },
+        data: { totalReferrals: { increment: 1 } },
+      });
+    }
 
     // Upsert MatchingProfile with skills/commitment/idea data (Step 2 & 3)
     if (data.skills || data.commitmentLevel || data.ideaCategory || data.hasIdea !== undefined) {
@@ -570,11 +618,13 @@ export class ApplicantService {
         where: { applicantId: id },
       });
 
-      await (tx as any).pageView.deleteMany({
+      // Clean up visitor tracking records linked to this applicant
+      await tx.visitor.updateMany({
         where: { applicantId: id },
+        data: { applicantId: null, applicantEmail: null, applicantName: null },
       });
 
-      await (tx as any).trainingAssignment.deleteMany({
+      await tx.trainingAssignment.deleteMany({
         where: { applicantId: id },
       });
 
@@ -647,8 +697,8 @@ export class ApplicantService {
     });
     if (!applicant) throw new NotFoundException('Applicant not found');
 
-    const validStatuses: ApplicantStatus[] = [
-      'PENDING', 'ELIGIBLE', 'INELIGIBLE', 'ACTIVE', 'REMOVED', 'HELD' as any,
+    const validStatuses: string[] = [
+      'PENDING', 'ELIGIBLE', 'INELIGIBLE', 'ACTIVE', 'REMOVED', 'HELD', 'CONSENTED',
     ];
     if (!validStatuses.includes(status)) {
       throw new BadRequestException(`Invalid status: ${status}`);
@@ -658,13 +708,13 @@ export class ApplicantService {
       where: { id },
       data: {
         status,
-        ...(status === ('REMOVED' as any) && { removedAt: new Date(), teamId: null }),
-        ...(status === ('HELD' as any) && { movedAt: new Date() }),
-      } as any,
+        ...(status === ApplicantStatus.REMOVED && { removedAt: new Date(), teamId: null }),
+        ...(status === ('HELD' as ApplicantStatus) && { movedAt: new Date() }),
+      },
     });
 
     // If removing, decrement batch count
-    if (status === ('REMOVED' as any) && applicant.batchId) {
+    if (status === ApplicantStatus.REMOVED && applicant.batchId) {
       await this.prisma.batch.update({
         where: { id: applicant.batchId },
         data: { currentCount: { decrement: 1 } },

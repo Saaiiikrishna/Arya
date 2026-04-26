@@ -131,6 +131,36 @@ export default function TermsPage() {
             </p>
           </article>
 
+          <article id="refund" className="scroll-mt-24 bg-terracotta/5 border border-terracotta/20 p-6">
+            <h3 className="font-serif text-2xl font-bold mb-4 text-terracotta border-l-4 border-terracotta pl-4">REFUND POLICY</h3>
+            <div className="space-y-4">
+              <p className="font-bold">
+                All registration fees paid to Aryavartham (The Founder&apos;s Club) are strictly non-refundable.
+              </p>
+              <p>
+                The registration fee of ₹1,299/- (Indian Rupees One Thousand Two Hundred and Ninety-Nine only) is a one-time processing fee that covers the following services:
+              </p>
+              <ul className="list-disc pl-8 space-y-2">
+                <li>Profile screening and eligibility evaluation</li>
+                <li>Skill profiling and experience assessment</li>
+                <li>Team matching and placement algorithms</li>
+                <li>Access to the Aryavartham platform and resources</li>
+                <li>Administrative processing of the application</li>
+              </ul>
+              <p>
+                By completing payment, you acknowledge and agree that:
+              </p>
+              <ol className="list-decimal pl-8 space-y-2 font-semibold">
+                <li>No refunds will be issued under any circumstances, including but not limited to change of mind, inability to participate, or dissatisfaction with team placement.</li>
+                <li>The fee is non-transferable and applies solely to the registered applicant.</li>
+                <li>Processing of your application commences immediately upon payment, thereby constituting commencement of the service.</li>
+              </ol>
+              <p className="text-sm text-ink/60 italic">
+                This policy is in compliance with the Consumer Protection Act, 2019 (India) and applicable digital services regulations. For queries regarding this policy, please contact support@aryavartham.com.
+              </p>
+            </div>
+          </article>
+
           <article id="disputes" className="scroll-mt-24">
             <h3 className="font-serif text-2xl font-bold mb-4 text-forest border-l-4 border-forest pl-4">16. DISPUTE RESOLUTION</h3>
             <div className="space-y-4">

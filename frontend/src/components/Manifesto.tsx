@@ -1,64 +1,310 @@
 "use client";
 
+import { useState } from 'react';
 import { ArrowRight, Edit3, Users, Layers, Compass, CheckCircle2, XCircle } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface ManifestoProps {
   onApply: () => void;
+  batchInfo?: any;
+  settings?: any;
 }
 
-export default function Manifesto({ onApply }: ManifestoProps) {
+export default function Manifesto({ onApply, batchInfo, settings }: ManifestoProps) {
+  const STAGES = [
+    { step: "01", title: "Apply", desc: "Submit your vision.", longDesc: "Present your raw, unfiltered idea. We're looking for obsession, profound insight, and the relentless drive to solve a hard problem. We evaluate your potential to execute." },
+    { step: "02", title: "Team Formation", desc: "Find your co-builders.", longDesc: "Connect with complimentary minds. A startup is a team sport; we help you find the technical or operational co-founder who matches your intensity. We facilitate these critical connections." },
+    { step: "03", title: "Idea Validation", desc: "Stress-test the hypothesis.", longDesc: "Go beyond theory. We relentlessly test assumptions, speak with real prospective users, and validate if there is true market pull before writing a single line of code." },
+    { step: "04", title: "Build (90 Days)", desc: "Hardcore MVP execution.", longDesc: "Immerse yourself into a 90-day pure build phase. No distractions, no networking. Just you and your co-founders writing code and building the core product architecture." },
+    { step: "05", title: "Launch (Next 90)", desc: "Go-to-market scale.", longDesc: "Bring it to the world. A focused go-to-market strategy aiming for early traction and operational stability. This is where execution meets reality." },
+  ];
+
+  const [activeStep, setActiveStep] = useState(2);
+
+  const STAGE_SWIPE_CONFIDENCE_THRESHOLD = 8000;
+  const swipePower = (offset: number, velocity: number) => {
+    return Math.abs(offset) * velocity;
+  };
+
+  const swipeHandlers = {
+    onDragEnd: (e: any, { offset, velocity }: any) => {
+      const swipe = swipePower(offset.x, velocity.x);
+      if (swipe < -STAGE_SWIPE_CONFIDENCE_THRESHOLD && activeStep < STAGES.length - 1) {
+        setActiveStep(activeStep + 1);
+      } else if (swipe > STAGE_SWIPE_CONFIDENCE_THRESHOLD && activeStep > 0) {
+        setActiveStep(activeStep - 1);
+      }
+    }
+  };
+
+  const filled = batchInfo?.currentCount || 0;
+  const total = batchInfo?.capacity || 1;
+  const fillPercent = Math.round((filled / total) * 100);
+  const batchNum = batchInfo?.batchNumber || 1;
+
+  let bannerText = `Application Open for Batch #${batchNum}`;
+  let badgeBorder = 'border-forest/20';
+  let dotColor = 'bg-forest';
+  let glowColor = 'rgba(31,60,44,0.4)';  // Forest green tint
+  let bgClass = 'bg-white/90 backdrop-blur-xl';
+  let textColor = 'text-forest';
+  let isClosed = false;
+
+  if (batchInfo === null) {
+    bannerText = 'Registrations Currently Closed';
+    badgeBorder = 'border-ink/10';
+    dotColor = 'bg-ink/30';
+    bgClass = 'bg-alabaster/90 backdrop-blur-xl';
+    textColor = 'text-ink/60';
+    glowColor = 'transparent';
+    isClosed = true;
+  } else if (fillPercent >= 100) {
+    bannerText = `Batch #${batchNum} Registrations Closed`;
+    badgeBorder = 'border-ink/10';
+    dotColor = 'bg-ink/30';
+    bgClass = 'bg-alabaster/90 backdrop-blur-xl';
+    textColor = 'text-ink/60';
+    glowColor = 'transparent';
+    isClosed = true;
+  } else if (fillPercent >= 90) {
+    bannerText = `Almost Full — Batch #${batchNum}`;
+    badgeBorder = 'border-red-900/30';
+    dotColor = 'bg-red-600';
+    bgClass = 'bg-red-50/95 backdrop-blur-xl';
+    textColor = 'text-red-900';
+    glowColor = 'rgba(220,38,38,0.7)';
+  } else if (fillPercent >= 75) {
+    bannerText = `Filling Fast — Batch #${batchNum}`;
+    badgeBorder = 'border-amber-900/30';
+    dotColor = 'bg-amber-600';
+    bgClass = 'bg-amber-50/95 backdrop-blur-xl';
+    textColor = 'text-amber-900';
+    glowColor = 'rgba(217,119,6,0.5)';
+  } else if (fillPercent >= 50) {
+    bannerText = `Applications Open for Batch #${batchNum}`;
+    badgeBorder = 'border-emerald-900/30';
+    dotColor = 'bg-emerald-600';
+    bgClass = 'bg-emerald-50/95 backdrop-blur-xl';
+    textColor = 'text-emerald-900';
+    glowColor = 'rgba(5,150,105,0.4)';
+  }
+
   return (
-    <div className="max-w-screen-2xl mx-auto px-8">
+    <div className="max-w-screen-2xl mx-auto px-8 relative">
+
       {/* Hero Section */}
-      <section className="pt-24 pb-32">
-        <div className="grid grid-cols-12 gap-8 lg:gap-16">
-          <div className="col-span-12 md:col-span-5 lg:col-span-5 flex flex-col justify-end order-2 md:order-1 pt-8 md:pt-0">
-            <span className="font-sans text-[10px] uppercase tracking-[0.2em] text-terracotta block mb-6">
-              Timeline
-            </span>
-            <h2 className="text-6xl md:text-[5rem] font-serif leading-[0.9] text-forest tracking-tighter mb-6 italic">
-              Build a Startup in <span className="text-terracotta not-italic">180 Days.</span>
-            </h2>
-            <p className="text-lg font-sans leading-relaxed text-ink/80 mb-8">
-              We don&rsquo;t invest in you. <span className="font-bold text-forest underline decoration-terracotta/30">We build with you.</span>
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4">
-              <button
-                onClick={onApply}
-                className="px-8 py-4 bg-forest text-parchment font-sans text-[10px] uppercase tracking-widest hover:bg-forest/90 transition-all shadow-[4px_4px_0px_0px_rgba(91,9,2,0.2)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
+      <motion.section
+        className="relative min-h-[calc(100vh-80px)] flex flex-col justify-center pt-24 pb-16"
+        initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.1 }} transition={{ duration: 0.8 }}
+      >
+
+        {/* Batch Status Badge - Floating Centered at Top of Hero */}
+        <div className="absolute top-8 left-1/2 -translate-x-1/2 z-30 flex justify-center mt-4 w-full px-4">
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.2 }}
+            className={`relative group p-[1px] rounded-full flex items-center justify-center shadow-[0_4px_20px_rgb(0,0,0,0.04)] ${isClosed ? '' : 'overflow-hidden'}`}
+          >
+            {/* Animated rotating gradient border */}
+            {!isClosed && (
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
+                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] z-0"
+                style={{ background: `conic-gradient(from 0deg, transparent 0 270deg, ${glowColor} 360deg)` }}
+              />
+            )}
+            {/* Inner Container */}
+            <div className={`relative z-10 w-full inline-flex justify-center items-center px-4 md:px-5 py-2 rounded-full border ${badgeBorder} ${bgClass} cursor-default transition-colors duration-500`}>
+              <span className="relative flex items-center justify-center h-2 w-2 mr-3 shrink-0">
+                {!isClosed && <span className={`animate-ping absolute inline-flex h-3 w-3 rounded-full opacity-60 ${dotColor}`}></span>}
+                <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${dotColor}`}></span>
+              </span>
+              <motion.span
+                className={`font-sans text-[10px] md:text-[11px] uppercase tracking-[0.2em] font-bold whitespace-nowrap ${textColor}`}
+                animate={!isClosed ? { opacity: [0.8, 1, 0.8] } : { opacity: 1 }}
+                transition={!isClosed ? { duration: 2.5, repeat: Infinity, ease: "easeInOut" } : {}}
               >
-                Apply Now
-              </button>
-              <button
-                onClick={() => document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })}
-                className="px-8 py-4 border border-forest text-forest font-sans text-[10px] uppercase tracking-widest hover:bg-forest/5 transition-all outline-none"
-              >
-                How It Works
-              </button>
+                {bannerText}
+              </motion.span>
+            </div>
+          </motion.div>
+        </div>
+
+        <div className="flex flex-col items-center text-center max-w-4xl mx-auto mt-20 md:mt-12 px-4 relative z-10">
+          <span className="font-sans text-[10px] sm:text-xs uppercase tracking-[0.2em] text-terracotta block mb-6 md:mb-8 font-bold">
+            Timeline & Philosophy
+          </span>
+          <h1 className="text-6xl md:text-7xl lg:text-[7rem] font-serif leading-[0.9] text-forest tracking-tighter mb-4 md:mb-6">
+            Build a Startup in <span className="text-terracotta italic">180 Days.</span>
+          </h1>
+          <h2 className="text-2xl md:text-4xl font-serif italic leading-tight text-forest/80 mb-8 max-w-3xl mx-auto">
+            Passion is the only prerequisite.
+          </h2>
+          <p className="text-base md:text-lg lg:text-xl font-sans leading-relaxed text-ink/80 mb-10 max-w-3xl mx-auto">
+            We don&rsquo;t invest in you. <span className="font-bold text-forest underline decoration-terracotta/30">We build with you.</span> &quot;We are not looking for polished pitch decks or three-year financial projections. We are looking for the obsessive, the restless, and the relentlessly curious.&quot;
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 mb-4 justify-center w-full sm:w-auto">
+            <button
+              onClick={onApply}
+              className="px-8 py-4 md:px-10 md:py-5 bg-forest text-parchment font-sans text-[10px] uppercase tracking-widest font-bold hover:bg-forest/90 transition-all shadow-[4px_4px_0px_0px_rgba(91,9,2,0.2)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none w-full sm:w-auto"
+            >
+              Apply Now
+            </button>
+            <button
+              onClick={() => document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })}
+              className="px-8 py-4 md:px-10 md:py-5 border border-forest text-forest font-sans text-[10px] uppercase tracking-widest font-bold hover:bg-forest/5 transition-all outline-none w-full sm:w-auto"
+            >
+              How It Works
+            </button>
+          </div>
+        </div>
+
+      </motion.section>
+
+      {/* How This Works (Timeline UI) - Moved up */}
+      <motion.section
+        id="how-it-works" className="py-24 -mx-8 px-8 border-b border-hairline overflow-hidden relative"
+        initial={{ opacity: 0, y: 40 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.1 }} transition={{ duration: 0.8 }}
+      >
+        <div className="max-w-screen-2xl mx-auto">
+          <h2 className="text-4xl md:text-5xl font-serif text-forest mb-20 text-center tracking-tighter">How This <span className="text-terracotta italic">Works</span></h2>
+
+          {/* Desktop Timeline */}
+          <div className="hidden md:block relative pt-12 pb-16">
+            <div className="absolute top-[60px] left-0 w-full h-[2px] bg-forest/10" />
+            <motion.div
+              className="absolute top-[59px] left-0 h-[4px] bg-gradient-to-r from-terracotta/80 to-terracotta rounded-r-full shadow-[0_0_12px_rgba(201,74,56,0.3)] origin-left"
+              animate={{ width: `${(activeStep / (STAGES.length - 1)) * 100}%` }}
+              transition={{ duration: 0.6, type: "spring", bounce: 0.2 }}
+            />
+
+            <div className="grid grid-cols-5 gap-4 relative z-10">
+              {STAGES.map((item, i) => {
+                const isActive = activeStep === i;
+                const isPassed = i <= activeStep;
+                return (
+                  <div key={i} className="relative pt-12 text-center group cursor-pointer select-none" onClick={() => setActiveStep(i)}>
+                    <div className="absolute top-[-6px] left-1/2 -translate-x-1/2 z-10 flex flex-col items-center justify-center">
+                      <motion.div
+                        className={`rounded-full shadow-md flex items-center justify-center transition-colors duration-300 ${isActive ? 'w-8 h-8 bg-terracotta border-4 border-white' : (isPassed ? 'w-5 h-5 bg-terracotta border-2 border-white mt-1.5' : 'w-4 h-4 bg-forest/20 mt-2 border-2 border-white')}`}
+                        whileHover={{ scale: 1.15 }}
+                      >
+                        {isActive && <div className="w-2 h-2 bg-white rounded-full" />}
+                        {(isPassed && !isActive) && <CheckCircle2 className="w-3 h-3 text-white" strokeWidth={3} />}
+                      </motion.div>
+                    </div>
+                    <motion.span
+                      className="font-serif text-sm italic block mb-2 transition-colors duration-300"
+                      animate={{ color: isActive ? '#C94A38' : '#8B8B8B' }}
+                    >{item.step}</motion.span>
+                    <motion.h4
+                      className="font-serif text-xl mb-2 transition-colors duration-300 truncate px-2"
+                      animate={{ color: isActive ? '#1F3C2C' : '#8B8B8B' }}
+                    >{item.title}</motion.h4>
+                    <p className="font-sans text-[10px] uppercase tracking-widest text-ink/50 px-4 line-clamp-2 md:line-clamp-none">{item.desc}</p>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
-          <div className="col-span-12 md:col-span-7 lg:col-span-7 order-1 md:order-2 flex flex-col justify-center pb-12 md:pb-0 md:pl-12 lg:pl-16">
-            <span className="font-sans text-[10px] uppercase tracking-[0.2em] text-terracotta block mb-8">
-              Philosophy
-            </span>
-            <h1 className="text-5xl md:text-6xl lg:text-7xl font-serif leading-[0.9] text-forest tracking-tighter mb-8 max-w-2xl">
-              Passion is the only <span className="italic text-terracotta">prerequisite.</span>
-            </h1>
-            <p className="text-xl md:text-2xl font-serif italic leading-relaxed text-forest/90 max-w-2xl">
-              &quot;We are not looking for polished pitch decks or three-year financial projections. We are looking for the obsessive, the restless, and the relentlessly curious.&quot;
-            </p>
+          {/* Mobile Timeline */}
+          <div className="md:hidden space-y-8 mb-16 relative">
+            <div className="absolute left-[5.5px] top-[10px] bottom-[10px] w-[2px] bg-forest/10" />
+            {STAGES.map((item, i) => {
+              const isActive = activeStep === i;
+              const isPassed = i <= activeStep;
+              return (
+                <div key={i} className="flex gap-6 relative z-10 cursor-pointer" onClick={() => setActiveStep(i)}>
+                  <div className="flex flex-col items-center mt-1">
+                    <motion.div
+                      className={`rounded-full border-2 border-white shadow-sm flex items-center justify-center transition-colors duration-300 ${isActive ? 'w-6 h-6 bg-terracotta' : (isPassed ? 'w-5 h-5 bg-terracotta' : 'w-4 h-4 bg-forest/20')} shrink-0`}
+                    >
+                      {isActive && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
+                      {(isPassed && !isActive) && <CheckCircle2 className="w-3 h-3 text-white" strokeWidth={3} />}
+                    </motion.div>
+                  </div>
+                  <div>
+                    <span className={`font-serif text-xs italic block mb-1 transition-colors duration-300 ${isActive ? 'text-terracotta' : 'text-ink/40'}`}>{item.step}</span>
+                    <h4 className={`font-serif text-xl mb-1 transition-colors duration-300 ${isActive ? 'text-forest' : 'text-ink/60'}`}>{item.title}</h4>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Swipable Stack Cards */}
+          <div className="relative w-full h-[550px] flex items-center justify-center overflow-hidden">
+            <AnimatePresence initial={false}>
+              {STAGES.map((stage, i) => {
+                const offset = i - activeStep;
+                // Render only nearby cards
+                if (Math.abs(offset) > 2) return null;
+
+                // Active Card styling
+                const isCenter = offset === 0;
+
+                return (
+                  <motion.div
+                    key={i}
+                    drag={isCenter ? "x" : false}
+                    dragConstraints={{ left: 0, right: 0 }}
+                    dragElastic={1}
+                    onDragEnd={isCenter ? swipeHandlers.onDragEnd : undefined}
+                    className="absolute w-full max-w-lg lg:max-w-2xl bg-white border border-hairline/40 rounded-sm overflow-hidden flex flex-col shadow-2xl cursor-grab active:cursor-grabbing will-change-[transform,opacity,filter]"
+                    animate={{
+                      x: `${offset * 70}%`,
+                      y: `${Math.abs(offset) * 4}%`,
+                      scale: 1 - Math.abs(offset) * 0.15,
+                      zIndex: STAGES.length - Math.abs(offset),
+                      opacity: 1 - Math.abs(offset) * 0.3,
+                      filter: `blur(${Math.abs(offset) * 3}px)`,
+                    }}
+                    transition={{
+                      type: "spring",
+                      stiffness: 300,
+                      damping: 30,
+                    }}
+                    onClick={() => setActiveStep(i)}
+                  >
+                    {/* Media Placeholder section (Admin controllable later) */}
+                    <div className="w-full h-[240px] bg-forest/5 border-b border-hairline/20 relative flex items-center justify-center overflow-hidden">
+                      {/* Abstract placeholder visual */}
+                      <div className="absolute inset-0 bg-gradient-to-tr from-forest/10 to-transparent mix-blend-multiply opacity-50" />
+                      <div className="w-24 h-24 rounded-full border border-terracotta/30 flex items-center justify-center opacity-70">
+                        <span className="font-serif text-terracotta italic text-3xl">{stage.step}</span>
+                      </div>
+                    </div>
+                    {/* Card Content */}
+                    <div className="p-8 md:p-10 flex flex-col flex-1 bg-white">
+                      <div className="flex items-center justify-between mb-4">
+                        <span className="font-sans text-[10px] uppercase tracking-widest text-ink/40">Phase {stage.step}</span>
+                        <span className="w-8 h-px bg-terracotta/30" />
+                      </div>
+                      <h3 className="font-serif text-3xl md:text-4xl text-forest mb-4 leading-tight">{stage.title}</h3>
+                      <p className="font-sans text-ink/70 leading-relaxed text-sm md:text-base">
+                        {stage.longDesc}
+                      </p>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </AnimatePresence>
+
           </div>
         </div>
-      </section>
+      </motion.section>
 
-      <div className="w-full border-t border-hairline" />
-
-      {/* The Pact Section */}
-      <section className="py-24">
+      {/* Promise Section */}
+      <motion.section
+        className="py-24"
+        initial={{ opacity: 0, y: 40 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.1 }} transition={{ duration: 0.8 }}
+      >
         <div className="grid grid-cols-1 md:grid-cols-12 gap-12">
           <div className="md:col-span-3 border-r border-hairline pr-8">
-            <h2 className="font-serif text-3xl italic text-forest mb-6">The Pact</h2>
+            <h2 className="font-serif text-3xl italic text-forest mb-6">We Promise</h2>
             <p className="font-sans text-[10px] uppercase tracking-widest leading-loose text-ink/60">
               A three-year co-founder commitment that transcends traditional incubation.
             </p>
@@ -66,12 +312,12 @@ export default function Manifesto({ onApply }: ManifestoProps) {
           <div className="md:col-span-9 grid grid-cols-1 md:grid-cols-3 gap-12">
             {[
               {
-                title: 'I. Radical Tenure',
-                text: 'The startup cycle is broken. We replace the 3-month demo day sprint with a 36-month architectural build. We are your co-founders from day zero to exit.',
+                title: 'I. Breaking Imported Hipocrisy',
+                text: 'We go back to our roots. Indian entrepreneurs ruled the world for centuries. They built empires and trade routes that connected the world. We replace the so called "Modern Business System" with actual Indian way of building businesses.',
               },
               {
-                title: 'II. Shared Risk',
-                text: "We don&rsquo;t take &quot;advisory shares.&quot; We invest capital, labor, and reputation. When you bleed, we bleed. When you win, we rebuild the world together.",
+                title: 'II. Shared Risk & Commitment',
+                text: "We are not capatalists without morals. We are community builders with shared interests. We belive in Live & Let-Live. We invest capital, labor, and reputation. When you bleed, we bleed. When you win, we rebuild the world together.",
               },
               {
                 title: 'III. Unyielding Focus',
@@ -85,17 +331,20 @@ export default function Manifesto({ onApply }: ManifestoProps) {
             ))}
           </div>
         </div>
-      </section>
+      </motion.section>
 
       <div className="w-full border-t border-hairline" />
 
       {/* Stats Section */}
-      <section className="py-32 bg-alabaster -mx-8 px-8">
+      <motion.section
+        className="py-32 bg-alabaster -mx-8 px-8"
+        initial={{ opacity: 0, y: 40 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.1 }} transition={{ duration: 0.8 }}
+      >
         <div className="max-w-screen-2xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-16 items-center">
           <div className="lg:col-span-6 space-y-8">
             <blockquote className="border-l-2 border-terracotta pl-8">
               <p className="font-serif text-4xl text-forest italic leading-snug">
-                &quot;The most dangerous founders aren&rsquo;t the ones with the best ideas, but the ones with the longest horizons.&quot;
+                "The most dangerous founders aren't the ones with the best ideas, but the ones with the mindset and execution."
               </p>
             </blockquote>
           </div>
@@ -108,12 +357,13 @@ export default function Manifesto({ onApply }: ManifestoProps) {
             </div>
           </div>
         </div>
-      </section>
-
-
+      </motion.section>
 
       {/* Problem Section */}
-      <section className="py-24">
+      <motion.section
+        className="py-24"
+        initial={{ opacity: 0, y: 40 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.1 }} transition={{ duration: 0.8 }}
+      >
         <div className="grid grid-cols-1 md:grid-cols-12 gap-12">
           <div className="md:col-span-12 mb-12">
             <h2 className="text-4xl md:text-5xl font-serif text-forest leading-tight max-w-3xl">
@@ -124,7 +374,7 @@ export default function Manifesto({ onApply }: ManifestoProps) {
             {[
               { title: "No Team", text: "Brilliant minds working in isolation eventually burn out.", icon: <Users className="w-6 h-6 text-terracotta mb-4" /> },
               { title: "No Structure", text: "Chaos is the enemy of scale. We provide the architectural blueprint.", icon: <Layers className="w-6 h-6 text-terracotta mb-4" /> },
-              { title: "No Guidance", text: "The path is treacherous. We&apos;ve navigated it before.", icon: <Compass className="w-6 h-6 text-terracotta mb-4" /> },
+              { title: "No Guidance", text: "The path is treacherous. We've navigated it before.", icon: <Compass className="w-6 h-6 text-terracotta mb-4" /> },
             ].map((item) => (
               <div key={item.title} className="p-8 border border-hairline bg-alabaster/50 hover:bg-alabaster transition-all hover:-translate-y-1">
                 {item.icon}
@@ -134,117 +384,15 @@ export default function Manifesto({ onApply }: ManifestoProps) {
             ))}
           </div>
         </div>
-      </section>
-
-      <div className="w-full border-t border-hairline" />
-
-      {/* How It Works (Timeline UI) */}
-      <section id="how-it-works" className="py-24 bg-alabaster -mx-8 px-8">
-        <div className="max-w-screen-2xl mx-auto">
-          <h2 className="text-4xl md:text-5xl font-serif text-forest mb-20 text-center tracking-tighter">The <span className="text-terracotta italic">180-Day</span> Visual</h2>
-
-          {/* Desktop Timeline */}
-          <div className="hidden md:block relative pt-12 pb-24">
-            <div className="absolute top-[60px] left-0 w-full h-[2px] bg-forest/10" />
-            <div className="absolute top-[60px] left-0 h-[2px] bg-terracotta w-full origin-left animate-in fade-in slide-in-from-left duration-1000 shadow-[0_0_10px_rgba(91,9,0,0.3)]" />
-
-            <div className="grid grid-cols-5 gap-4">
-              {[
-                { step: "01", title: "Apply", desc: "Submit your vision." },
-                { step: "02", title: "Team Formation", desc: "Find your co-builders." },
-                { step: "03", title: "Idea Validation", desc: "Stress-test the hypothesis." },
-                { step: "04", title: "Build (90 Days)", desc: "Hardcore MVP execution." },
-                { step: "05", title: "Launch (Next 90)", desc: "Go-to-market scale." },
-              ].map((item, i) => (
-                <div key={i} className="relative pt-12 text-center group">
-                  <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-forest border-2 border-parchment z-10 group-hover:scale-150 transition-transform" />
-                  <span className="font-serif text-terracotta text-sm italic block mb-2">{item.step}</span>
-                  <h4 className="font-serif text-xl text-forest mb-2">{item.title}</h4>
-                  <p className="font-sans text-[10px] uppercase tracking-widest text-ink/50 px-4">{item.desc}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Mobile Timeline */}
-          <div className="md:hidden space-y-12">
-            {[
-              { step: "01", title: "Apply", desc: "Submit your vision." },
-              { step: "02", title: "Team Formation", desc: "Find your co-builders." },
-              { step: "03", title: "Idea Validation", desc: "Stress-test the hypothesis." },
-              { step: "04", title: "Build (90 Days)", desc: "Hardcore MVP execution." },
-              { step: "05", title: "Launch (Next 90)", desc: "Go-to-market scale." },
-            ].map((item, i) => (
-              <div key={i} className="flex gap-6">
-                <div className="flex flex-col items-center">
-                  <div className="w-3 h-3 rounded-full bg-forest shrink-0" />
-                  {i !== 4 && <div className="w-px grow bg-hairline my-2" />}
-                </div>
-                <div>
-                  <span className="font-serif text-terracotta text-xs italic block mb-1">{item.step}</span>
-                  <h4 className="font-serif text-xl text-forest mb-1">{item.title}</h4>
-                  <p className="font-sans text-xs text-ink/60">{item.desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* 180 Day Visual - Progress */}
-      <section className="py-24 border-t border-hairline">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-          <div>
-            <h2 className="text-4xl md:text-5xl font-serif text-forest mb-12 tracking-tighter">
-              Progress Animation <span className="text-terracotta italic text-3xl block mt-2">(Feels Real)</span>
-            </h2>
-            <div className="space-y-12">
-              <div>
-                <div className="flex justify-between mb-2 font-sans text-[10px] uppercase tracking-widest text-ink/60">
-                  <span>Phase 1: MVP</span>
-                  <span>90 Days</span>
-                </div>
-                <div className="h-1.5 bg-forest/5 w-full relative overflow-hidden rounded-full">
-                  <div className="absolute top-0 left-0 h-full bg-terracotta w-1/2 rounded-full shadow-[0_0_8px_rgba(91,9,0,0.2)]" />
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between mb-2 font-sans text-[10px] uppercase tracking-widest text-ink/60">
-                  <span>Phase 2: Market Launch</span>
-                  <span>180 Days</span>
-                </div>
-                <div className="h-1.5 bg-forest/5 w-full relative overflow-hidden rounded-full">
-                  <div className="absolute top-0 left-0 h-full bg-terracotta w-full rounded-full shadow-[0_0_8px_rgba(91,9,0,0.2)]" />
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="p-12 border border-hairline bg-white shadow-[20px_20px_60px_-15px_rgba(0,0,0,0.05)] relative group overflow-hidden">
-            <div className="text-[10rem] font-serif text-forest/10 absolute -right-8 -bottom-8 italic font-bold pointer-events-none select-none">180</div>
-            <div className="relative z-10 space-y-8">
-              <div className="flex gap-6 items-start">
-                <div className="w-10 h-10 shrink-0 border border-terracotta flex items-center justify-center font-serif text-terracotta italic">0-90</div>
-                <div>
-                  <h4 className="font-serif text-2xl text-forest mb-2">MVP Development</h4>
-                  <p className="font-sans text-ink/70 leading-relaxed text-sm">Rapid prototyping, user testing, and core feature hardening.</p>
-                </div>
-              </div>
-              <div className="flex gap-6 items-start">
-                <div className="w-10 h-10 shrink-0 border border-terracotta flex items-center justify-center font-serif text-terracotta italic">90-180</div>
-                <div>
-                  <h4 className="font-serif text-2xl text-forest mb-2">Market Launch</h4>
-                  <p className="font-sans text-ink/70 leading-relaxed text-sm">Distribution strategy, acquisition, and scaling stability.</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+      </motion.section>
 
       <div className="w-full border-t border-hairline" />
 
       {/* Partnership Model */}
-      <section className="py-32 bg-forest -mx-8 px-8 text-parchment">
+      <motion.section
+        className="py-32 bg-forest -mx-8 px-8 text-parchment"
+        initial={{ opacity: 0, y: 40 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.1 }} transition={{ duration: 0.8 }}
+      >
         <div className="max-w-screen-2xl mx-auto text-center">
           <h2 className="text-5xl md:text-7xl font-serif tracking-tighter mb-16 leading-tight">
             We Build <span className="italic text-alabaster">With You.</span><br /> Not For You.
@@ -268,13 +416,16 @@ export default function Manifesto({ onApply }: ManifestoProps) {
             </div>
           </div>
           <div className="mt-20">
-            <p className="font-serif text-3xl italic text-alabaster/60">&quot;We win only if you win.&quot;</p>
+            <p className="font-serif text-3xl italic text-alabaster/60">"We win only if you win."</p>
           </div>
         </div>
-      </section>
+      </motion.section>
 
       {/* Who This Is For & Eligibility */}
-      <section className="py-24 border-b border-hairline">
+      <motion.section
+        className="py-24 border-b border-hairline"
+        initial={{ opacity: 0, y: 40 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.1 }} transition={{ duration: 0.8 }}
+      >
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-16">
           <div className="lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="p-10 border border-hairline bg-alabaster group">
@@ -308,13 +459,16 @@ export default function Manifesto({ onApply }: ManifestoProps) {
             </ul>
           </div>
         </div>
-      </section>
+      </motion.section>
 
       {/* Philosophy Section */}
-      <section className="py-40 text-center">
+      <motion.section
+        className="py-40 text-center"
+        initial={{ opacity: 0, y: 40 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.1 }} transition={{ duration: 0.8 }}
+      >
         <div className="max-w-3xl mx-auto px-6">
           <h3 className="text-4xl md:text-5xl font-serif italic mb-12 text-forest tracking-tighter">
-            &quot;Yatra Naryasthu Pujyanthe,<br />Ramante Tatra Devatha&quot;
+            "Yatra Naryasthu Pujyanthe,<br />Ramante Tatra Devatha"
           </h3>
           <div className="w-32 h-[2px] bg-terracotta mx-auto mb-12 opacity-30" />
           <p className="text-2xl md:text-3xl font-sans text-ink/80 leading-relaxed mb-6">
@@ -324,10 +478,13 @@ export default function Manifesto({ onApply }: ManifestoProps) {
             We build with respect, equality, and strength.
           </p>
         </div>
-      </section>
+      </motion.section>
 
       {/* Final CTA Section */}
-      <section className="border-t border-hairline relative overflow-hidden bg-forest -mx-8 px-8">
+      <motion.section
+        className="border-t border-hairline relative overflow-hidden bg-forest -mx-8 px-8"
+        initial={{ opacity: 0, y: 40 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.1 }} transition={{ duration: 0.8 }}
+      >
         <div className="py-40 flex flex-col items-center text-center">
           <h2 className="font-serif text-6xl md:text-8xl text-parchment mb-16 max-w-5xl tracking-tighter leading-[0.9]">
             Ready to Build Your <span className="text-alabaster italic underline decoration-parchment/20">Startup?</span>
@@ -340,7 +497,7 @@ export default function Manifesto({ onApply }: ManifestoProps) {
             <ArrowRight className="ml-6 w-5 h-5 group-hover:translate-x-2 transition-transform" />
           </button>
         </div>
-      </section>
+      </motion.section>
 
       {/* Sticky Apply Button (Mobile) */}
       <div className="fixed bottom-8 right-8 z-40 md:hidden">

@@ -613,6 +613,132 @@ class ApiClient {
   async clearDangerZoneColumn(tableName: string, columnName: string) {
     return this.request<any>(`/admin/danger-zone/tables/${tableName}/columns/${encodeURIComponent(columnName)}`, { method: 'DELETE' });
   }
+
+  // ─── Referral System ──────────────────────────────────
+
+  async verifyReferrer(query: string) {
+    return this.request<{ found: boolean; referrerId: string | null; name: string | null; method: string | null }>('/referrals/verify', {
+      method: 'POST',
+      body: { query },
+    });
+  }
+
+  async setReferrer(applicantId: string, referrerId: string) {
+    return this.request<{ success: boolean }>('/referrals/set', {
+      method: 'POST',
+      body: { applicantId, referrerId },
+    });
+  }
+
+  async enableAffiliate(applicantId: string) {
+    return this.request<{ referralCode: string; referralLink: string; alreadyEnabled: boolean }>('/referrals/enable-affiliate', {
+      method: 'POST',
+      body: { applicantId },
+    });
+  }
+
+  async getMyReferralProfile(applicantId: string) {
+    return this.request<any>(`/referrals/my-profile/${applicantId}`);
+  }
+
+  async getAdminReferralStats() {
+    return this.request<any>('/admin/referrals/stats');
+  }
+
+  async getAdminReferrals(params: Record<string, string> = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.request<{ data: any[]; meta: any }>(`/admin/referrals?${qs}`);
+  }
+
+  async getAffiliateDetail(applicantId: string) {
+    return this.request<any>(`/admin/referrals/affiliate/${applicantId}`);
+  }
+
+  async toggleAffiliateStatus(applicantId: string, isActive: boolean) {
+    return this.request<any>(`/admin/referrals/affiliate/${applicantId}/toggle`, {
+      method: 'PATCH',
+      body: { isActive },
+    });
+  }
+
+  // ─── Equity & Company System ──────────────────────────────
+
+  async getEquityStats() {
+    return this.request<any>('/admin/equity/stats');
+  }
+
+  async getEquityCompanies(params: Record<string, string> = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.request<{ data: any[]; meta: any }>(`/admin/equity/companies?${qs}`);
+  }
+
+  async getEquityCompanyDetail(companyId: string) {
+    return this.request<any>(`/admin/equity/companies/${companyId}`);
+  }
+
+  async createEquityCompany(body: {
+    teamId: string;
+    companyName: string;
+    sector?: string;
+    description?: string;
+    registrationNumber?: string;
+    registeredAddress?: string;
+    gstin?: string;
+    panNumber?: string;
+    notes?: string;
+  }) {
+    return this.request<any>('/admin/equity/companies', {
+      method: 'POST',
+      body,
+    });
+  }
+
+  async updateEquityCompany(companyId: string, body: Record<string, any>) {
+    return this.request<any>(`/admin/equity/companies/${companyId}`, {
+      method: 'PATCH',
+      body,
+    });
+  }
+
+  async startEquityTimer(companyId: string, adminId?: string) {
+    return this.request<any>(`/admin/equity/companies/${companyId}/start-timer`, {
+      method: 'POST',
+      body: { adminId },
+    });
+  }
+
+  async executeHandover(companyId: string, adminId?: string) {
+    return this.request<any>(`/admin/equity/companies/${companyId}/handover`, {
+      method: 'POST',
+      body: { adminId },
+    });
+  }
+
+  async updateEquityTimers() {
+    return this.request<any>('/admin/equity/update-timers', { method: 'POST' });
+  }
+
+  async createEquityAgreement(body: {
+    companyId: string;
+    agreementType: string;
+    title: string;
+    equityPct?: number;
+    duration?: number;
+    terms?: any;
+    notes?: string;
+  }) {
+    return this.request<any>('/admin/equity/agreements', {
+      method: 'POST',
+      body,
+    });
+  }
+
+  async signAgreementPlatform(agreementId: string, adminName: string) {
+    return this.request<any>(`/admin/equity/agreements/${agreementId}/sign-platform`, {
+      method: 'POST',
+      body: { adminName },
+    });
+  }
 }
 
 export const api = new ApiClient();

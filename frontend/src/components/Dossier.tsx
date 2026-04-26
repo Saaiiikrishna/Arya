@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { api } from '@/lib/api';
+import { CheckCircle, Loader2, Search } from 'lucide-react';
 
 interface ApplicationFormProps {
   onSubmit: (data: any) => void;
@@ -71,6 +73,7 @@ export default function ApplicationForm({ onSubmit, defaultData, userInfo, readO
   const [phone, setPhone] = useState('');
   const [city, setCity] = useState('');
   const [age, setAge] = useState('');
+  const [whatsappVerified, setWhatsappVerified] = useState(false);
 
   // Step 2: Skills & Experience
   const [skills, setSkills] = useState<string[]>([]);
@@ -92,6 +95,14 @@ export default function ApplicationForm({ onSubmit, defaultData, userInfo, readO
 
   // Step 5: Agreement
   const [agreementAccepted, setAgreementAccepted] = useState(false);
+
+  // Referral tracking
+  const [referralInput, setReferralInput] = useState('');
+  const [referralVerifying, setReferralVerifying] = useState(false);
+  const [verifiedReferrer, setVerifiedReferrer] = useState<{ id: string; name: string } | null>(null);
+  const [referralLocked, setReferralLocked] = useState(false); // locked when came via ?ref= link
+  const [referralError, setReferralError] = useState('');
+  const searchParams = useSearchParams();
 
   // Load draft from localStorage on mount
   useEffect(() => {
@@ -116,6 +127,7 @@ export default function ApplicationForm({ onSubmit, defaultData, userInfo, readO
         if (d.obsession) setObsession(d.obsession);
         if (d.heresy) setHeresy(d.heresy);
         if (d.scarTissue) setScarTissue(d.scarTissue);
+        if (d.whatsappVerified) setWhatsappVerified(d.whatsappVerified);
       } catch {}
     }
   }, []);
@@ -132,6 +144,37 @@ export default function ApplicationForm({ onSubmit, defaultData, userInfo, readO
     if (admin?.firstName && !firstName) setFirstName(admin.firstName);
     if (admin?.lastName && !lastName) setLastName(admin.lastName);
   }, [admin]);
+
+  // Auto-populate referral from URL ?ref=CODE
+  useEffect(() => {
+    const refCode = searchParams?.get('ref');
+    if (refCode && !verifiedReferrer) {
+      setReferralInput(refCode);
+      setReferralLocked(true);
+      // Auto-verify
+      (async () => {
+        setReferralVerifying(true);
+        try {
+          const result = await api.verifyReferrer(refCode);
+          if (result.found && result.referrerId && result.name) {
+            setVerifiedReferrer({ id: result.referrerId, name: result.name });
+          } else {
+            setReferralError('Referral code not found');
+            setReferralLocked(false);
+          }
+        } catch (e: any) {
+          if (e?.message?.toLowerCase().includes('too many requests')) {
+            setReferralError('Rate limit exceeded. Please wait a minute before trying again.');
+          } else {
+            setReferralError('Unable to verify referral code');
+          }
+          setReferralLocked(false);
+        } finally {
+          setReferralVerifying(false);
+        }
+      })();
+    }
+  }, [searchParams]);
 
   // Pre-fill from defaultData
   useEffect(() => {
@@ -158,6 +201,7 @@ export default function ApplicationForm({ onSubmit, defaultData, userInfo, readO
       if (defaultData.obsession) setObsession(defaultData.obsession);
       if (defaultData.heresy) setHeresy(defaultData.heresy);
       if (defaultData.scarTissue) setScarTissue(defaultData.scarTissue);
+      if (defaultData.whatsappVerified !== undefined) setWhatsappVerified(defaultData.whatsappVerified);
     }
   }, [defaultData]);
 
@@ -168,6 +212,7 @@ export default function ApplicationForm({ onSubmit, defaultData, userInfo, readO
       skills, experienceYears, hoursPerDay, commitmentLevel,
       hasIdea, ideaSummary, ideaCategory,
       vocation, obsession, heresy, scarTissue,
+      whatsappVerified,
     };
     
     if (isAuthenticated) {
@@ -185,7 +230,7 @@ export default function ApplicationForm({ onSubmit, defaultData, userInfo, readO
     } else {
       localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
     }
-  }, [firstName, lastName, email, phone, city, age, skills, experienceYears, hoursPerDay, commitmentLevel, hasIdea, ideaSummary, ideaCategory, vocation, obsession, heresy, scarTissue, isAuthenticated]);
+  }, [firstName, lastName, email, phone, city, age, skills, experienceYears, hoursPerDay, commitmentLevel, hasIdea, ideaSummary, ideaCategory, vocation, obsession, heresy, scarTissue, whatsappVerified, isAuthenticated]);
 
   useEffect(() => {
     const timeout = setTimeout(saveDraft, 500);
@@ -268,6 +313,8 @@ export default function ApplicationForm({ onSubmit, defaultData, userInfo, readO
       hasIdea, ideaSummary, ideaCategory: ideaCategory || null,
       vocation, obsession, heresy, scarTissue,
       agreementAccepted: true,
+      referrerId: verifiedReferrer?.id || null,
+      whatsappVerified,
     };
     localStorage.removeItem(DRAFT_KEY);
     onSubmit(data);
@@ -464,6 +511,24 @@ export default function ApplicationForm({ onSubmit, defaultData, userInfo, readO
                   />
                 </div>
                 {errors.phone && <p className="text-terracotta text-[10px] mt-1.5 uppercase tracking-widest">{errors.phone}</p>}
+                
+                <div className="mt-4 flex items-center gap-3 bg-forest/5 p-4 border border-forest/10">
+                  <input
+                    type="checkbox"
+                    id="whatsapp-toggle"
+                    className="w-4 h-4 accent-forest cursor-pointer"
+                    checked={whatsappVerified}
+                    onChange={(e) => setWhatsappVerified(e.target.checked)}
+                  />
+                  <label htmlFor="whatsapp-toggle" className="text-xs font-sans text-ink/70 cursor-pointer select-none">
+                    Yes, I have an active <span className="text-forest font-bold">WhatsApp</span> account on this number and consent to receiving updates.
+                  </label>
+                  {phone.length === 10 && whatsappVerified && (
+                    <span className="ml-auto flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-[#25D366] animate-pulse">
+                      <CheckCircle className="w-3 h-3" /> WhatsApp Pill
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-6">
@@ -493,6 +558,86 @@ export default function ApplicationForm({ onSubmit, defaultData, userInfo, readO
                 </div>
               </div>
             </div>
+
+              {/* Referred By field */}
+              <div className="mt-8 pt-6 border-t border-hairline/30">
+                <label className="block font-sans text-[10px] uppercase tracking-widest text-ink/60 mb-2 font-semibold">
+                  Referred By <span className="text-ink/30">(optional)</span>
+                </label>
+                <p className="text-[10px] text-ink/40 mb-3 font-sans">
+                  Enter the referral code, email, or phone number of who referred you.
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Referral code, email, or phone"
+                    className={`flex-1 bg-transparent border border-hairline px-4 py-3.5 focus:outline-none focus:border-forest text-lg font-serif placeholder:text-ink/25 transition-all ${
+                      referralError ? 'border-terracotta' : verifiedReferrer ? 'border-forest bg-forest/5' : ''
+                    }`}
+                    value={referralInput}
+                    onChange={e => {
+                      if (!referralLocked) {
+                        setReferralInput(e.target.value);
+                        setReferralError('');
+                        setVerifiedReferrer(null);
+                      }
+                    }}
+                    readOnly={referralLocked || !!verifiedReferrer}
+                    style={(referralLocked || verifiedReferrer) ? { opacity: 0.7 } : {}}
+                  />
+                  {!verifiedReferrer && (
+                    <button
+                      type="button"
+                      disabled={!referralInput.trim() || referralVerifying}
+                      onClick={async () => {
+                        setReferralVerifying(true);
+                        setReferralError('');
+                        try {
+                          const result = await api.verifyReferrer(referralInput.trim());
+                          if (result.found && result.referrerId && result.name) {
+                            setVerifiedReferrer({ id: result.referrerId, name: result.name });
+                          } else {
+                            setReferralError('No member found with this code, email, or phone');
+                          }
+                        } catch (e: any) {
+                          if (e?.message?.toLowerCase().includes('too many requests')) {
+                            setReferralError('Rate limit exceeded. Please wait a minute before trying again.');
+                          } else {
+                            setReferralError('Unable to verify referrer');
+                          }
+                        } finally {
+                          setReferralVerifying(false);
+                        }
+                      }}
+                      className="px-6 py-3.5 border border-forest text-forest text-[10px] uppercase tracking-widest font-bold hover:bg-forest hover:text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      {referralVerifying ? (
+                        <><Loader2 className="w-3 h-3 animate-spin" /> Verifying</>
+                      ) : (
+                        <><Search className="w-3 h-3" /> Verify</>
+                      )}
+                    </button>
+                  )}
+                </div>
+                {referralError && (
+                  <p className="text-terracotta text-[10px] mt-1.5 uppercase tracking-widest">{referralError}</p>
+                )}
+                {verifiedReferrer && (
+                  <div className="mt-3 flex items-center gap-2 text-forest">
+                    <CheckCircle className="w-4 h-4" />
+                    <span className="text-sm font-serif italic">Referred by <strong>{verifiedReferrer.name}</strong></span>
+                    {!referralLocked && (
+                      <button
+                        type="button"
+                        onClick={() => { setVerifiedReferrer(null); setReferralInput(''); }}
+                        className="ml-auto text-[10px] text-ink/40 uppercase tracking-widest hover:text-terracotta transition-colors"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
           </div>
         )}
 

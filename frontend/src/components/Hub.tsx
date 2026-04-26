@@ -1,6 +1,6 @@
 "use client";
 
-import { FileText, Users, Share2, LogOut, Check, Plus, ArrowRight } from 'lucide-react';
+import { FileText, Users, Share2, LogOut, Check, Plus, ArrowRight, Award } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
@@ -96,6 +96,7 @@ export default function Hub() {
               { label: 'Team Roster', active: false, href: '/hub/team' },
               { label: 'Batch View', active: false, href: '/hub/batch' },
               { label: 'Training Modules', active: false, href: '/hub/training' },
+              { label: 'Referrals & Rewards', active: false, href: '/hub/referrals' },
             ].map((item) => (
               <a
                 key={item.label}
