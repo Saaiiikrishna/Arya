@@ -30,6 +30,15 @@ jobs:
           az acr show --name ${{ env.ACR_NAME }} --resource-group ${{ env.RESOURCE_GROUP }} 2>/dev/null || \
           az acr create --name ${{ env.ACR_NAME }} --resource-group ${{ env.RESOURCE_GROUP }} --location ${{ env.LOCATION }} --sku Basic --admin-enabled true
 
+      - name: Get ACR Credentials
+        id: acr-creds
+        run: |
+          ACR_USERNAME=$(az acr credential show --name ${{ env.ACR_NAME }} --query username -o tsv)
+          ACR_PASSWORD=$(az acr credential show --name ${{ env.ACR_NAME }} --query "passwords[0].value" -o tsv)
+          echo "::add-mask::${ACR_PASSWORD}"
+          echo "acr_username=${ACR_USERNAME}" >> $GITHUB_OUTPUT
+          echo "acr_password=${ACR_PASSWORD}" >> $GITHUB_OUTPUT
+
       - name: Run Prisma Migrations
         run: |
           cd backend
@@ -59,9 +68,19 @@ jobs:
         run: |
           ACR_SERVER=${{ env.ACR_NAME }}.azurecr.io
           IMAGE="${ACR_SERVER}/arya-backend-api:${{ github.sha }}"
+          ACR_USER="${{ steps.acr-creds.outputs.acr_username }}"
+          ACR_PASS="${{ steps.acr-creds.outputs.acr_password }}"
 
           # Check if container app exists
           if az containerapp show --name arya-backend-api --resource-group ${{ env.RESOURCE_GROUP }} &>/dev/null; then
+            # Register ACR credentials with the existing container app
+            az containerapp registry set \
+              --name arya-backend-api \
+              --resource-group ${{ env.RESOURCE_GROUP }} \
+              --server "${ACR_SERVER}" \
+              --username "${ACR_USER}" \
+              --password "${ACR_PASS}"
+
             az containerapp update \
               --name arya-backend-api \
               --resource-group ${{ env.RESOURCE_GROUP }} \
@@ -98,6 +117,8 @@ jobs:
               --environment arya-backend-api-env \
               --image "$IMAGE" \
               --registry-server "${ACR_SERVER}" \
+              --registry-username "${ACR_USER}" \
+              --registry-password "${ACR_PASS}" \
               --ingress external \
               --target-port 3001 \
               --env-vars \
@@ -152,8 +173,18 @@ jobs:
         run: |
           ACR_SERVER=${{ env.ACR_NAME }}.azurecr.io
           IMAGE="${ACR_SERVER}/arya-frontend-web:${{ github.sha }}"
+          ACR_USER="${{ steps.acr-creds.outputs.acr_username }}"
+          ACR_PASS="${{ steps.acr-creds.outputs.acr_password }}"
 
           if az containerapp show --name arya-frontend-web --resource-group ${{ env.RESOURCE_GROUP }} &>/dev/null; then
+            # Register ACR credentials with the existing container app
+            az containerapp registry set \
+              --name arya-frontend-web \
+              --resource-group ${{ env.RESOURCE_GROUP }} \
+              --server "${ACR_SERVER}" \
+              --username "${ACR_USER}" \
+              --password "${ACR_PASS}"
+
             az containerapp update \
               --name arya-frontend-web \
               --resource-group ${{ env.RESOURCE_GROUP }} \
@@ -166,6 +197,8 @@ jobs:
               --environment arya-backend-api-env \
               --image "$IMAGE" \
               --registry-server "${ACR_SERVER}" \
+              --registry-username "${ACR_USER}" \
+              --registry-password "${ACR_PASS}" \
               --ingress external \
               --target-port 3000 \
               --env-vars "NEXT_PUBLIC_API_URL=${{ env.backend_url }}/api"
