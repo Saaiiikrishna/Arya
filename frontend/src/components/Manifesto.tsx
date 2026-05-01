@@ -1,16 +1,18 @@
 "use client";
 
 import { useState } from 'react';
-import { ArrowRight, Edit3, Users, Layers, Compass, CheckCircle2, XCircle } from 'lucide-react';
+import { ArrowRight, Edit3, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface ManifestoProps {
   onApply: () => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   batchInfo?: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   settings?: any;
 }
 
-export default function Manifesto({ onApply, batchInfo, settings }: ManifestoProps) {
+export default function Manifesto({ onApply, batchInfo }: ManifestoProps) {
   const STAGES = [
     { step: "01", title: "Apply", desc: "Submit your vision.", longDesc: "Present your raw, unfiltered idea. We're looking for obsession, profound insight, and the relentless drive to solve a hard problem. We evaluate your potential to execute." },
     { step: "02", title: "Team Formation", desc: "Find your co-builders.", longDesc: "Connect with complimentary minds. A startup is a team sport; we help you find the technical or operational co-founder who matches your intensity. We facilitate these critical connections." },
@@ -19,7 +21,7 @@ export default function Manifesto({ onApply, batchInfo, settings }: ManifestoPro
     { step: "05", title: "Launch (Next 90)", desc: "Go-to-market scale.", longDesc: "Bring it to the world. A focused go-to-market strategy aiming for early traction and operational stability. This is where execution meets reality." },
   ];
 
-  const [activeStep, setActiveStep] = useState(2);
+  const [activeStep, setActiveStep] = useState(0);
 
   const STAGE_SWIPE_CONFIDENCE_THRESHOLD = 8000;
   const swipePower = (offset: number, velocity: number) => {
@@ -27,6 +29,7 @@ export default function Manifesto({ onApply, batchInfo, settings }: ManifestoPro
   };
 
   const swipeHandlers = {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onDragEnd: (e: any, { offset, velocity }: any) => {
       const swipe = swipePower(offset.x, velocity.x);
       if (swipe < -STAGE_SWIPE_CONFIDENCE_THRESHOLD && activeStep < STAGES.length - 1) {
@@ -176,7 +179,8 @@ export default function Manifesto({ onApply, batchInfo, settings }: ManifestoPro
             <div className="absolute top-[60px] left-0 w-full h-[2px] bg-forest/10" />
             <motion.div
               className="absolute top-[59px] left-0 h-[4px] bg-gradient-to-r from-terracotta/80 to-terracotta rounded-r-full shadow-[0_0_12px_rgba(201,74,56,0.3)] origin-left"
-              animate={{ width: `${(activeStep / (STAGES.length - 1)) * 100}%` }}
+              initial={{ width: "10%" }}
+              animate={{ width: `${(activeStep * 20) + 10}%` }}
               transition={{ duration: 0.6, type: "spring", bounce: 0.2 }}
             />
 
@@ -337,58 +341,23 @@ export default function Manifesto({ onApply, batchInfo, settings }: ManifestoPro
 
       {/* Stats Section */}
       <motion.section
-        className="py-32 bg-alabaster -mx-8 px-8"
+        className="py-32"
         initial={{ opacity: 0, y: 40 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.1 }} transition={{ duration: 0.8 }}
       >
-        <div className="max-w-screen-2xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-16 items-center">
-          <div className="lg:col-span-6 space-y-8">
+        <div className="max-w-5xl mx-auto items-center">
+          <div className="space-y-8">
             <blockquote className="border-l-2 border-terracotta pl-8">
               <p className="font-serif text-4xl text-forest italic leading-snug">
-                "The most dangerous founders aren't the ones with the best ideas, but the ones with the mindset and execution."
+                &quot;The most dangerous founders aren&apos;t the ones with the best ideas, but the ones with the mindset and execution.&quot;
               </p>
             </blockquote>
           </div>
-          <div className="lg:col-span-6 flex flex-col items-center lg:items-end">
-            <div className="text-center lg:text-right">
-              <span className="text-[12rem] font-serif leading-none text-terracotta font-bold tracking-tighter">1000</span>
-              <p className="font-sans text-[12px] uppercase tracking-[0.4em] text-forest mt-[-2rem]">
-                Visionaries per batch
-              </p>
-            </div>
-          </div>
         </div>
       </motion.section>
 
-      {/* Problem Section */}
-      <motion.section
-        className="py-24"
-        initial={{ opacity: 0, y: 40 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.1 }} transition={{ duration: 0.8 }}
-      >
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-12">
-          <div className="md:col-span-12 mb-12">
-            <h2 className="text-4xl md:text-5xl font-serif text-forest leading-tight max-w-3xl">
-              Most people fail not because of ideas, but because of <span className="italic text-terracotta">execution.</span>
-            </h2>
-          </div>
-          <div className="md:col-span-12 grid grid-cols-1 md:grid-cols-3 gap-8">
-            {[
-              { title: "No Team", text: "Brilliant minds working in isolation eventually burn out.", icon: <Users className="w-6 h-6 text-terracotta mb-4" /> },
-              { title: "No Structure", text: "Chaos is the enemy of scale. We provide the architectural blueprint.", icon: <Layers className="w-6 h-6 text-terracotta mb-4" /> },
-              { title: "No Guidance", text: "The path is treacherous. We've navigated it before.", icon: <Compass className="w-6 h-6 text-terracotta mb-4" /> },
-            ].map((item) => (
-              <div key={item.title} className="p-8 border border-hairline bg-alabaster/50 hover:bg-alabaster transition-all hover:-translate-y-1">
-                {item.icon}
-                <h3 className="font-serif text-2xl text-forest mb-4">{item.title}</h3>
-                <p className="font-sans text-ink/70 leading-relaxed text-sm italic">{item.text}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </motion.section>
 
-      <div className="w-full border-t border-hairline" />
 
-      {/* Partnership Model */}
+      {/* Builder Model */}
       <motion.section
         className="py-32 bg-forest -mx-8 px-8 text-parchment"
         initial={{ opacity: 0, y: 40 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.1 }} transition={{ duration: 0.8 }}
@@ -400,76 +369,55 @@ export default function Manifesto({ onApply, batchInfo, settings }: ManifestoPro
 
           <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-12 text-left">
             <div className="space-y-6">
-              <div className="text-6xl font-serif text-alabaster italic font-bold">51%</div>
-              <h3 className="font-sans text-[10px] uppercase tracking-[0.3em] opacity-80">Stakeholding</h3>
-              <p className="font-sans text-parchment/60 leading-relaxed text-sm">We take 51% stake for 3 years. We win only if you win.</p>
+              <div className="text-6xl font-serif text-alabaster italic font-bold">180</div>
+              <h3 className="font-sans text-[10px] uppercase tracking-[0.3em] opacity-80">Day Sprint</h3>
+              <p className="font-sans text-parchment/60 leading-relaxed text-sm">An immersive six-month timeline to validate, build, and launch.</p>
             </div>
             <div className="space-y-6">
               <div className="h-[2px] bg-alabaster/30 w-12" />
-              <h3 className="font-sans text-[10px] uppercase tracking-[0.3em] opacity-80">Execution Control</h3>
-              <p className="font-sans text-parchment/60 leading-relaxed text-sm">You retain execution control. We provide the support vector.</p>
+              <h3 className="font-sans text-[10px] uppercase tracking-[0.3em] opacity-80">Co-Building</h3>
+              <p className="font-sans text-parchment/60 leading-relaxed text-sm">We provide the technical and operational muscle to turn hypotheses into reality.</p>
             </div>
             <div className="space-y-6">
               <div className="h-[2px] bg-alabaster/30 w-12" />
-              <h3 className="font-sans text-[10px] uppercase tracking-[0.3em] opacity-80">Buyback Option</h3>
-              <p className="font-sans text-parchment/60 leading-relaxed text-sm">Buyback option available after achieving operational stability.</p>
+              <h3 className="font-sans text-[10px] uppercase tracking-[0.3em] opacity-80">Zero Fluff</h3>
+              <p className="font-sans text-parchment/60 leading-relaxed text-sm">No vanity metrics or networking mixers. Pure, unadulterated execution.</p>
             </div>
           </div>
           <div className="mt-20">
-            <p className="font-serif text-3xl italic text-alabaster/60">"We win only if you win."</p>
+            <p className="font-serif text-3xl italic text-alabaster/60">&quot;Great companies are built in the trenches.&quot;</p>
           </div>
         </div>
       </motion.section>
 
-      {/* Who This Is For & Eligibility */}
-      <motion.section
-        className="py-24 border-b border-hairline"
-        initial={{ opacity: 0, y: 40 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.1 }} transition={{ duration: 0.8 }}
-      >
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-16">
-          <div className="lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="p-10 border border-hairline bg-alabaster group">
-              <h3 className="font-serif text-3xl text-forest mb-8 flex items-center gap-4">
-                <CheckCircle2 className="w-6 h-6 text-terracotta" /> For
-              </h3>
-              <ul className="space-y-6 font-sans text-ink/80 text-sm">
-                <li className="flex items-center gap-3"><span className="w-1 h-1 bg-terracotta rounded-full" /> Builders</li>
-                <li className="flex items-center gap-3"><span className="w-1 h-1 bg-terracotta rounded-full" /> Committed individuals</li>
-                <li className="flex items-center gap-3"><span className="w-1 h-1 bg-terracotta rounded-full" /> Long-term thinkers</li>
-              </ul>
-            </div>
-            <div className="p-10 border border-hairline bg-alabaster/40 opacity-70">
-              <h3 className="font-serif text-3xl text-ink/40 mb-8 flex items-center gap-4">
-                <XCircle className="w-6 h-6 text-ink/20" /> Not For
-              </h3>
-              <ul className="space-y-6 font-sans text-ink/40 text-sm">
-                <li className="flex items-center gap-3"><span className="w-1 h-1 bg-ink/20 rounded-full" /> Casual explorers</li>
-                <li className="flex items-center gap-3"><span className="w-1 h-1 bg-ink/20 rounded-full" /> Side hustlers</li>
-                <li className="flex items-center gap-3"><span className="w-1 h-1 bg-ink/20 rounded-full" /> Idea collectors</li>
-              </ul>
-            </div>
-          </div>
-          <div className="lg:col-span-4 border-l border-hairline pl-8">
-            <h3 className="font-serif text-3xl text-forest mb-8 italic">Eligibility</h3>
-            <ul className="space-y-6 font-sans text-ink/70 text-sm uppercase tracking-widest">
-              <li className="flex items-baseline gap-4"><span className="text-terracotta font-serif italic text-lg opacity-40">01</span> No degree required</li>
-              <li className="flex items-baseline gap-4"><span className="text-terracotta font-serif italic text-lg opacity-40">02</span> No age limit</li>
-              <li className="flex items-baseline gap-4"><span className="text-terracotta font-serif italic text-lg opacity-40">03</span> Must be Indian</li>
-              <li className="flex items-baseline gap-4"><span className="text-terracotta font-serif italic text-lg opacity-40">04</span> Must commit full-time</li>
-            </ul>
-          </div>
-        </div>
-      </motion.section>
+
 
       {/* Philosophy Section */}
       <motion.section
-        className="py-40 text-center"
+        className="py-40 text-center relative"
         initial={{ opacity: 0, y: 40 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.1 }} transition={{ duration: 0.8 }}
       >
         <div className="max-w-3xl mx-auto px-6">
           <h3 className="text-4xl md:text-5xl font-serif italic mb-12 text-forest tracking-tighter">
-            "Yatra Naryasthu Pujyanthe,<br />Ramante Tatra Devatha"
+            &quot;Yatra Naryasthu Pujyanthe,<br />Ramante Tatra Devatha&quot;
           </h3>
+
+          <motion.div
+            className="w-full max-w-lg mx-auto mb-12 relative rounded-2xl overflow-hidden shadow-2xl border border-hairline/20"
+            initial={{ scale: 0.95, opacity: 0 }}
+            whileInView={{ scale: 1, opacity: 1 }}
+            viewport={{ once: true, amount: 0.2 }}
+            transition={{ duration: 0.7, delay: 0.2 }}
+          >
+            <div className="absolute inset-0 bg-gradient-to-tr from-forest/20 to-transparent mix-blend-overlay z-10 pointer-events-none"></div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/women_leadership.png"
+              alt="Representation of women leadership and respect"
+              className="w-full h-auto object-cover transform hover:scale-105 transition-transform duration-700"
+            />
+          </motion.div>
+
           <div className="w-32 h-[2px] bg-terracotta mx-auto mb-12 opacity-30" />
           <p className="text-2xl md:text-3xl font-sans text-ink/80 leading-relaxed mb-6">
             We believe in empowering <span className="editorial-underline italic text-forest">women leaders.</span>
