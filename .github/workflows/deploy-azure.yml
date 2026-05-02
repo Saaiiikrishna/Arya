@@ -15,10 +15,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Source Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Log in to Azure
-        uses: azure/login@v1
+        uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
@@ -50,7 +50,9 @@ jobs:
       - name: Seed Database (idempotent upserts)
         run: |
           cd backend
-          npx cross-env TS_NODE_PROJECT=tsconfig.seed.json npx ts-node -r tsconfig-paths/register prisma/seed.ts || true
+          npx cross-env TS_NODE_PROJECT=tsconfig.seed.json npx ts-node -r tsconfig-paths/register prisma/seed.ts 2>&1 || {
+            echo "::warning::Database seed failed — check output above. Deployment will continue."
+          }
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
@@ -207,8 +209,8 @@ jobs:
       # ── Post-Deploy Configuration ───────────────────────────────────
       - name: Configure Scaling (min 1 replica to avoid cold starts)
         run: |
-          az containerapp update --name arya-backend-api --resource-group ${{ env.RESOURCE_GROUP }} --min-replicas 1 --max-replicas 50
-          az containerapp update --name arya-frontend-web --resource-group ${{ env.RESOURCE_GROUP }} --min-replicas 1 --max-replicas 50
+          az containerapp update --name arya-backend-api --resource-group ${{ env.RESOURCE_GROUP }} --min-replicas 1 --max-replicas 10
+          az containerapp update --name arya-frontend-web --resource-group ${{ env.RESOURCE_GROUP }} --min-replicas 1 --max-replicas 10
 
       - name: Deactivate old revisions (keep only latest active)
         run: |

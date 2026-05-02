@@ -12,11 +12,15 @@ RUN npm run build
 FROM node:20-alpine AS runner
 WORKDIR /app
 
-# Copy only production dependencies
+# Install production dependencies only, skip postinstall (prisma generate)
+# since prisma CLI is a devDependency and won't be available
 COPY package*.json ./
+RUN npm ci --omit=dev --ignore-scripts
+
+# Copy Prisma schema and pre-generated client from builder stage
 COPY prisma ./prisma/
-RUN npm ci --omit=dev
-RUN npx prisma generate
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/client
 
 # Copy built application
 COPY --from=builder /app/dist ./dist
