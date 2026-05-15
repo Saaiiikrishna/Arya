@@ -9,6 +9,7 @@ import ChatWidget from './ChatWidget';
 import ElectionCard from './ElectionCard';
 import TeamRequests from './TeamRequests';
 import PendingQuestionnaire from './PendingQuestionnaire';
+import DepartmentBoard from './DepartmentBoard';
 
 export default function Hub() {
   const router = useRouter();
@@ -96,6 +97,7 @@ export default function Hub() {
               { label: 'Team Roster', active: false, href: '/hub/team' },
               { label: 'Batch View', active: false, href: '/hub/batch' },
               { label: 'Training Modules', active: false, href: '/hub/training' },
+              { label: 'Interview', active: false, href: '/hub/interview' },
               { label: 'Referrals & Rewards', active: false, href: '/hub/referrals' },
             ].map((item) => (
               <a
@@ -249,6 +251,16 @@ export default function Hub() {
 
               {team?.id && (
                 <TeamRequests team={team} userId={applicant?.id} />
+              )}
+
+              {team?.id && (
+                <section>
+                  <h2 className="font-serif text-2xl font-bold mb-6 flex items-center gap-3">
+                    <Users className="w-6 h-6 text-forest" />
+                    Department Roles
+                  </h2>
+                  <DepartmentBoard teamId={team.id} />
+                </section>
               )}
             </div>
 
