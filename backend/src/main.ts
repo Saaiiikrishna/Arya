@@ -75,7 +75,18 @@ async function bootstrap() {
 
   // Security headers
   app.use(helmet({
-    contentSecurityPolicy: false, // Allow inline scripts for admin dashboard
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'https:'],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'", 'https:'],
+        objectSrc: ["'none'"],
+        frameSrc: ["'none'"],
+      },
+    },
     crossOriginEmbedderPolicy: false,
     crossOriginOpenerPolicy: false, // Prevents blocking Google Auth popups
     crossOriginResourcePolicy: false, // Allows cross-origin API fetches

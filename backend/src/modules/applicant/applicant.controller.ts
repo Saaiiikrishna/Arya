@@ -10,6 +10,7 @@ import {
   UseGuards,
   Req,
 } from '@nestjs/common';
+import { ThrottlerGuard, Throttle } from '@nestjs/throttler';
 import { ApplicantService } from './applicant.service';
 import { ApplyDto, SubmitAdditionalAnswersDto } from './dto';
 import { JwtAuthGuard, AdminGuard } from '../auth/guards';
@@ -20,11 +21,15 @@ export class ApplicantController {
   constructor(private readonly applicantService: ApplicantService) {}
 
   // ─── Public ────────────────────────────────────────
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ short: { limit: 3, ttl: 60000 } })
   @Post('applicants/apply')
   async apply(@Body() dto: ApplyDto) {
     return this.applicantService.apply(dto);
   }
 
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ short: { limit: 10, ttl: 60000 } })
   @Get('applicants/status/:accessToken')
   async getStatus(@Param('accessToken') accessToken: string) {
     return this.applicantService.findByAccessToken(accessToken);

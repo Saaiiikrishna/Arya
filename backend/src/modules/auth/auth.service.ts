@@ -60,12 +60,15 @@ export class AuthService {
       role: admin.role,
     };
 
+    const refreshToken = this.jwtService.sign(payload, {
+      secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+      expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRATION') as any,
+    });
+    await this.storeRefreshToken(admin.id, refreshToken);
+
     return {
       accessToken: this.jwtService.sign(payload),
-      refreshToken: this.jwtService.sign(payload, {
-        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
-        expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRATION') as any,
-      }),
+      refreshToken,
       admin: {
         id: admin.id,
         email: admin.email,
@@ -103,16 +106,18 @@ export class AuthService {
         }
 
         const jwtPayload: JwtPayload = { sub: (admin as any).id, email: (admin as any).email, role: (admin as any).role };
+        const refreshToken = this.jwtService.sign(jwtPayload, { secret: this.configService.get<string>('JWT_REFRESH_SECRET'), expiresIn: '7d' as any });
+        await this.storeRefreshToken((admin as any).id, refreshToken);
         return {
           accessToken: this.jwtService.sign(jwtPayload),
-          refreshToken: this.jwtService.sign(jwtPayload, { secret: this.configService.get<string>('JWT_REFRESH_SECRET'), expiresIn: '7d' as any }),
-          admin: { 
-            id: (admin as any).id, 
-            email: (admin as any).email, 
-            firstName: (admin as any).firstName, 
-            lastName: (admin as any).lastName, 
+          refreshToken,
+          admin: {
+            id: (admin as any).id,
+            email: (admin as any).email,
+            firstName: (admin as any).firstName,
+            lastName: (admin as any).lastName,
             role: (admin as any).role,
-            avatarUrl: (admin as any).avatarUrl 
+            avatarUrl: (admin as any).avatarUrl
           },
         };
       }
@@ -136,7 +141,6 @@ export class AuthService {
           } as any
         });
       } else if (avatarUrl && (applicant as any).avatarUrl !== avatarUrl) {
-        // Update avatar if changed
         applicant = await this.prisma.applicant.update({
           where: { id: (applicant as any).id },
           data: { avatarUrl } as any,
@@ -144,16 +148,18 @@ export class AuthService {
       }
 
       const jwtPayload: JwtPayload = { sub: (applicant as any).id, email: (applicant as any).email, role: 'APPLICANT' };
+      const refreshToken = this.jwtService.sign(jwtPayload, { secret: this.configService.get<string>('JWT_REFRESH_SECRET'), expiresIn: '7d' as any });
+      await this.storeRefreshToken((applicant as any).id, refreshToken);
       return {
         accessToken: this.jwtService.sign(jwtPayload),
-        refreshToken: this.jwtService.sign(jwtPayload, { secret: this.configService.get<string>('JWT_REFRESH_SECRET'), expiresIn: '7d' as any }),
-        admin: { 
-          id: (applicant as any).id, 
-          email: (applicant as any).email, 
-          firstName: (applicant as any).firstName, 
-          lastName: (applicant as any).lastName, 
+        refreshToken,
+        admin: {
+          id: (applicant as any).id,
+          email: (applicant as any).email,
+          firstName: (applicant as any).firstName,
+          lastName: (applicant as any).lastName,
           role: 'APPLICANT',
-          avatarUrl: (applicant as any).avatarUrl 
+          avatarUrl: (applicant as any).avatarUrl
         },
       };
     } catch (e) {
@@ -162,36 +168,70 @@ export class AuthService {
     }
   }
 
-  async refreshToken(refreshToken: string) {
+  async refreshToken(token: string) {
+    // Verify the JWT signature first
+    let payload: JwtPayload;
     try {
-      const payload = this.jwtService.verify<JwtPayload>(refreshToken, {
+      payload = this.jwtService.verify<JwtPayload>(token, {
         secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
       });
-
-      const admin = await this.prisma.admin.findUnique({
-        where: { id: payload.sub },
-      });
-
-      if (!admin || !admin.isActive) {
-        throw new UnauthorizedException('Invalid token');
-      }
-
-      const newPayload: JwtPayload = {
-        sub: admin.id,
-        email: admin.email,
-        role: admin.role,
-      };
-
-      return {
-        accessToken: this.jwtService.sign(newPayload),
-        refreshToken: this.jwtService.sign(newPayload, {
-          secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
-          expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRATION') as any,
-        }),
-      };
     } catch {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
+
+    // Verify the token exists in the DB and hasn't been revoked
+    const stored = await (this.prisma as any).refreshToken.findUnique({ where: { token } });
+    if (!stored || stored.revokedAt || stored.expiresAt < new Date()) {
+      throw new UnauthorizedException('Refresh token revoked or expired');
+    }
+
+    // Verify user is still active
+    let newPayload: JwtPayload;
+    if (payload.role === 'APPLICANT') {
+      const applicant = await this.prisma.applicant.findUnique({ where: { id: payload.sub } });
+      if (!applicant) throw new UnauthorizedException('User not found');
+      newPayload = { sub: applicant.id, email: applicant.email, role: 'APPLICANT' };
+    } else {
+      const admin = await this.prisma.admin.findUnique({ where: { id: payload.sub } });
+      if (!admin || !admin.isActive) throw new UnauthorizedException('User not found or inactive');
+      newPayload = { sub: admin.id, email: admin.email, role: admin.role };
+    }
+
+    // Rotate: delete old token, issue new one
+    await (this.prisma as any).refreshToken.delete({ where: { id: stored.id } });
+    const newRefresh = this.jwtService.sign(newPayload, {
+      secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+      expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRATION') as any,
+    });
+    await this.storeRefreshToken(newPayload.sub, newRefresh);
+
+    return {
+      accessToken: this.jwtService.sign(newPayload),
+      refreshToken: newRefresh,
+    };
+  }
+
+  async logout(token: string) {
+    await (this.prisma as any).refreshToken.updateMany({
+      where: { token },
+      data: { revokedAt: new Date() },
+    });
+    return { success: true };
+  }
+
+  private parseExpirationMs(expStr: string): number {
+    const value = parseInt(expStr, 10);
+    const unit = expStr.slice(-1);
+    if (unit === 'd') return value * 86_400_000;
+    if (unit === 'h') return value * 3_600_000;
+    if (unit === 'm') return value * 60_000;
+    return value * 1_000;
+  }
+
+  private async storeRefreshToken(userId: string, token: string): Promise<void> {
+    const expStr = this.configService.get<string>('JWT_REFRESH_EXPIRATION', '7d');
+    const expiresAt = new Date(Date.now() + this.parseExpirationMs(expStr));
+    await (this.prisma as any).refreshToken.create({ data: { userId, token, expiresAt } });
   }
 
   async createAdmin(dto: CreateAdminDto) {
@@ -298,12 +338,14 @@ export class AuthService {
     if (admin) {
       if (!admin.isActive) throw new UnauthorizedException('Account is disabled');
       const payload: JwtPayload = { sub: admin.id, email: admin.email, role: admin.role };
+      const refreshToken = this.jwtService.sign(payload, {
+        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+        expiresIn: '7d' as any,
+      });
+      await this.storeRefreshToken(admin.id, refreshToken);
       return {
         accessToken: this.jwtService.sign(payload),
-        refreshToken: this.jwtService.sign(payload, {
-          secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
-          expiresIn: '7d' as any,
-        }),
+        refreshToken,
         admin: {
           id: admin.id,
           email: admin.email,
@@ -335,12 +377,14 @@ export class AuthService {
     }
 
     const jwtPayload: JwtPayload = { sub: (applicant as any).id, email: (applicant as any).email, role: 'APPLICANT' };
+    const refreshToken = this.jwtService.sign(jwtPayload, {
+      secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+      expiresIn: '7d' as any,
+    });
+    await this.storeRefreshToken((applicant as any).id, refreshToken);
     return {
       accessToken: this.jwtService.sign(jwtPayload),
-      refreshToken: this.jwtService.sign(jwtPayload, {
-        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
-        expiresIn: '7d' as any,
-      }),
+      refreshToken,
       admin: {
         id: (applicant as any).id,
         email: (applicant as any).email,

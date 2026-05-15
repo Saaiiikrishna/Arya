@@ -107,19 +107,24 @@ export class TeamService {
     minSize: number,
     maxSize: number,
   ): TeamAssignment[] {
-    // Shuffle for random distribution
-    const shuffled = [...applicants].sort(() => Math.random() - 0.5);
+    // Fisher-Yates shuffle for unbiased random distribution
+    const shuffled = [...applicants];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
     const totalApplicants = shuffled.length;
 
-    // Calculate optimal team size and count
+    // Calculate how many teams of targetSize fit, ensuring no team has fewer than minSize members.
+    // If the remainder from integer division is non-zero but less than minSize, reduce numTeams by
+    // one so the extras are absorbed into existing teams (each gets +1 member) rather than forming
+    // an undersized team or being silently dropped.
     const targetSize = Math.floor((minSize + maxSize) / 2);
-    let numTeams = Math.floor(totalApplicants / targetSize);
-    if (numTeams === 0) numTeams = 1;
+    let numTeams = Math.max(1, Math.floor(totalApplicants / targetSize));
 
-    // Adjust if remainder would be too small
     const remainder = totalApplicants - numTeams * targetSize;
-    if (remainder > 0 && remainder < minSize) {
-      // Distribute remainder across existing teams
+    if (remainder > 0 && remainder < minSize && numTeams > 1) {
+      numTeams -= 1;
     }
 
     const assignments: TeamAssignment[] = [];
@@ -138,14 +143,13 @@ export class TeamService {
       index += teamSize;
     }
 
-    // Handle any remaining applicants
+    // Distribute any remaining applicants (from rounding) into teams with room.
+    // If every team is at maxSize, expand the smallest team rather than dropping anyone.
     while (index < totalApplicants) {
       const smallestTeam = assignments.reduce((prev, curr) =>
         prev.memberIds.length <= curr.memberIds.length ? prev : curr,
       );
-      if (smallestTeam.memberIds.length < maxSize) {
-        smallestTeam.memberIds.push(shuffled[index].id);
-      }
+      smallestTeam.memberIds.push(shuffled[index].id);
       index++;
     }
 
@@ -157,27 +161,30 @@ export class TeamService {
    * Finds the team with the fewest members and adds the user there.
    */
   async matchToExistingTeam(applicantId: string, batchId: string) {
-    const teams = await this.prisma.team.findMany({
-      where: { batchId },
-      include: { _count: { select: { members: true } } },
-      orderBy: { memberCount: 'asc' },
-    });
+    const [teams, batch] = await Promise.all([
+      this.prisma.team.findMany({
+        where: { batchId },
+        include: { _count: { select: { members: true } } },
+      }),
+      this.prisma.batch.findUnique({ where: { id: batchId } }),
+    ]);
 
     if (teams.length === 0) {
       this.logger.warn(`No teams exist for batch. Cannot match applicant.`);
       return null;
     }
 
-    // Find team with fewest members that hasn't hit max
-    const batch = await this.prisma.batch.findUnique({ where: { id: batchId } });
     const maxSize = batch?.teamMaxSize ?? 25;
 
-    const targetTeam = teams.find((t) => t._count.members < maxSize);
+    // Sort by real member count (not potentially-stale memberCount field)
+    const sorted = teams.sort((a, b) => a._count.members - b._count.members);
+    const targetTeam = sorted.find((t) => t._count.members < maxSize);
     if (!targetTeam) {
       this.logger.warn('All teams are at max capacity');
       return null;
     }
 
+    const newCount = targetTeam._count.members + 1;
     await this.prisma.$transaction([
       this.prisma.applicant.update({
         where: { id: applicantId },
@@ -185,7 +192,7 @@ export class TeamService {
       }),
       this.prisma.team.update({
         where: { id: targetTeam.id },
-        data: { memberCount: { increment: 1 } },
+        data: { memberCount: newCount },
       }),
     ]);
 

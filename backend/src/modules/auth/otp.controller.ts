@@ -18,4 +18,9 @@ export class OtpController {
   async verifyOtp(@Body() body: { email: string; otp: string }) {
     return this.authService.verifyOtp(body.email, body.otp);
   }
+
+  @Post('logout')
+  async logout(@Body('refreshToken') refreshToken: string) {
+    return this.authService.logout(refreshToken);
+  }
 }
