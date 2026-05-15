@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Param, Body, UseGuards, Query } from '@nestjs/common';
+import { ThrottlerGuard, Throttle } from '@nestjs/throttler';
 import { DocumentService } from './document.service';
 import { AdminGuard } from '../auth/guards';
 
@@ -7,6 +8,8 @@ export class DocumentController {
   constructor(private readonly documentService: DocumentService) {}
 
   // ─── Public (via access token) ────────────────────
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ short: { limit: 10, ttl: 60000 } })
   @Post('documents/upload-url')
   async getUploadUrl(
     @Body() body: { applicantId: string; fileName: string; mimeType: string },
@@ -14,6 +17,8 @@ export class DocumentController {
     return this.documentService.getUploadUrl(body.applicantId, body.fileName, body.mimeType);
   }
 
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ short: { limit: 10, ttl: 60000 } })
   @Post('documents/:id/confirm')
   async confirmUpload(
     @Param('id') id: string,

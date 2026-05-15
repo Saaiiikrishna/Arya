@@ -16,6 +16,7 @@ export class AuthController {
   }
 
   @Post('google/callback')
+  @Throttle({ short: { limit: 5, ttl: 60000 } })
   async googleCallback(@Body('token') token: string) {
     return this.authService.googleLogin(token);
   }
@@ -30,6 +31,11 @@ export class AuthController {
   @Post('create')
   async createAdmin(@Body() dto: CreateAdminDto) {
     return this.authService.createAdmin(dto);
+  }
+
+  @Post('logout')
+  async logout(@Body('refreshToken') refreshToken: string) {
+    return this.authService.logout(refreshToken);
   }
 
   @UseGuards(JwtAuthGuard)
