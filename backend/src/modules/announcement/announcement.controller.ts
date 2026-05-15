@@ -10,7 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AnnouncementService } from './announcement.service';
-import { JwtAuthGuard } from '../auth/guards';
+import { AdminGuard } from '../auth/guards';
 
 @Controller('api')
 export class AnnouncementController {
@@ -23,13 +23,13 @@ export class AnnouncementController {
   }
 
   // ─── Admin ─────────────────────────────────────────────
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Get('admin/announcements')
   async findAll(@Query('batchId') batchId?: string) {
     return this.announcementService.findAll(batchId);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Post('admin/announcements')
   async create(
     @Body()
@@ -44,7 +44,7 @@ export class AnnouncementController {
     return this.announcementService.create(body);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Put('admin/announcements/:id')
   async update(
     @Param('id') id: string,
@@ -59,7 +59,7 @@ export class AnnouncementController {
     return this.announcementService.update(id, body);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Delete('admin/announcements/:id')
   async delete(@Param('id') id: string) {
     return this.announcementService.delete(id);

@@ -9,7 +9,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { BatchService } from './batch.service';
-import { JwtAuthGuard } from '../auth/guards';
+import { AdminGuard } from '../auth/guards';
 
 @Controller('api')
 export class BatchController {
@@ -27,13 +27,13 @@ export class BatchController {
   }
 
   // ─── Admin endpoints ──────────────────────────────────
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Get('admin/batches')
   async findAll() {
     return this.batchService.findAll();
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Post('admin/batches')
   async createBatch(
     @Body() body: { name: string; nickname?: string; capacity: number },
@@ -41,13 +41,13 @@ export class BatchController {
     return this.batchService.createBatch(body);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Get('admin/batches/:id')
   async findOne(@Param('id') id: string) {
     return this.batchService.findOne(id);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Put('admin/batches/:id')
   async updateBatch(
     @Param('id') id: string,
@@ -56,7 +56,7 @@ export class BatchController {
     return this.batchService.updateBatch(id, body);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Put('admin/batches/:id/transition')
   async transitionStatus(
     @Param('id') id: string,
@@ -65,7 +65,7 @@ export class BatchController {
     return this.batchService.transitionStatus(id, status as any);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Post('admin/batches/:id/instructions')
   async sendInstructions(
     @Param('id') id: string,
@@ -88,7 +88,7 @@ export class BatchController {
     );
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Post('admin/batches/:id/remove-non-responders')
   async removeNonResponders(
     @Param('id') id: string,
@@ -97,13 +97,13 @@ export class BatchController {
     return this.batchService.removeNonResponders(id, instructionId);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Get('admin/batches/:id/applicants')
   async getApplicants(@Param('id') id: string) {
     return this.batchService.getApplicantsForBatch(id);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Post('admin/batches/:id/approve')
   async approveBatch(@Param('id') id: string) {
     return this.batchService.approveBatch(id);

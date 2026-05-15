@@ -1,10 +1,10 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards } from '@nestjs/common';
 import { EligibilityService } from './eligibility.service';
-import { JwtAuthGuard } from '../auth/guards';
+import { AdminGuard } from '../auth/guards';
 import { CriteriaOperator } from '@prisma/client';
 
 @Controller('api/admin/eligibility')
-@UseGuards(JwtAuthGuard)
+@UseGuards(AdminGuard)
 export class EligibilityController {
   constructor(private readonly eligibilityService: EligibilityService) {}
 

@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 import * as bcrypt from 'bcrypt';
+import { randomInt } from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
 import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../../prisma';
@@ -242,14 +243,11 @@ export class AuthService {
 
     const normalizedEmail = email.toLowerCase().trim();
 
-    // Generate 6-digit OTP
-    const otp = String(Math.floor(100000 + Math.random() * 900000));
-    
+    // Generate cryptographically secure 6-digit OTP
+    const otp = String(randomInt(100000, 1000000));
+
     // Store in Redis with 5 minute expiration (300 seconds)
     await this.redis.set(`otp:${normalizedEmail}`, otp, 'EX', 300);
-
-    // Always log OTP in development for testing
-    this.logger.log(`[OTP] Code for ${normalizedEmail}: ${otp}`);
 
     // Send OTP email via SES
     try {
@@ -270,12 +268,10 @@ export class AuthService {
         `,
       });
     } catch (error) {
-      this.logger.warn(`Failed to send OTP email to ${normalizedEmail}, but OTP is logged above for dev use`);
+      this.logger.warn(`Failed to send OTP email to ${normalizedEmail}: ${(error as any)?.message}`);
     }
 
-    // For test account, include OTP in response so it can be shown on screen
-    const isTestAccount = normalizedEmail === 'test@arya.com';
-    return { success: true, message: 'OTP sent to your email', ...(isTestAccount && { otp }) };
+    return { success: true, message: 'OTP sent to your email' };
   }
 
   async verifyOtp(email: string, otp: string) {

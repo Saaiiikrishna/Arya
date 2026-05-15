@@ -1,9 +1,9 @@
 import { Controller, Post, Get, Patch, Param, Body, UseGuards, Query } from '@nestjs/common';
 import { MatchingService } from './matching.service';
-import { JwtAuthGuard } from '../auth/guards';
+import { AdminGuard } from '../auth/guards';
 
 @Controller('api/admin/matching')
-@UseGuards(JwtAuthGuard)
+@UseGuards(AdminGuard)
 export class MatchingController {
   constructor(private readonly matchingService: MatchingService) {}
 

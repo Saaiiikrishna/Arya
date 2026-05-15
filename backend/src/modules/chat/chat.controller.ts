@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Param, Body, Query, UseGuards } from '@nestjs/common';
 import { ChatService } from './chat.service';
-import { JwtAuthGuard } from '../auth/guards';
+import { JwtAuthGuard, AdminGuard } from '../auth/guards';
 
 @Controller('api')
 export class ChatController {
@@ -33,7 +33,7 @@ export class ChatController {
 
   // ─── Admin ─────────────────────────────────────────
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Post('admin/chat/announcement')
   async sendAnnouncement(
     @Body('senderId') senderId: string,

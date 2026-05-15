@@ -16,8 +16,10 @@ export class PaymentController {
   @HttpCode(HttpStatus.OK)
   async razorpayWebhook(
     @Headers('x-razorpay-signature') signature: string,
-    @Body() body: any
+    @Req() req: any,
+    @Body() body: any,
   ) {
-    return this.paymentService.handleWebhook(signature, body);
+    const rawBody: Buffer | undefined = req.rawBody;
+    return this.paymentService.handleWebhook(signature, rawBody ?? body);
   }
 }
