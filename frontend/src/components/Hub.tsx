@@ -12,7 +12,7 @@ import PendingQuestionnaire from './PendingQuestionnaire';
 
 export default function Hub() {
   const router = useRouter();
-  const { admin, logout, isAuthenticated, loading: authLoading } = useAuth();
+  const { user, logout, isAuthenticated, loading: authLoading } = useAuth();
   const [hubData, setHubData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -56,7 +56,7 @@ export default function Hub() {
   const sprint = hubData?.sprint;
   const batch = hubData?.batch;
 
-  const firstName = applicant?.firstName || admin?.firstName || 'Founder';
+  const firstName = applicant?.firstName || user?.firstName || 'Founder';
 
   // Sprint display logic
   const renderSprintHeader = () => {

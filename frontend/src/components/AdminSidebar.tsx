@@ -19,7 +19,7 @@ const navItems = [
 export default function AdminSidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { admin, logout } = useAuth();
+  const { user, logout } = useAuth();
   const { settings } = useSettings();
   const logoMode = settings?.logoMode || 'text';
 
@@ -54,13 +54,13 @@ export default function AdminSidebar() {
       <div className="p-4 border-t border-hairline flex flex-col gap-4">
         <div className="flex items-center gap-3">
           <div className={styles.avatar}>
-            {admin?.firstName?.charAt(0) || 'A'}{admin?.lastName?.charAt(0) || 'D'}
+            {user?.firstName?.charAt(0) || 'A'}{user?.lastName?.charAt(0) || 'D'}
           </div>
           <div className={styles.adminDetails}>
             <span className={styles.adminName}>
-              {admin?.firstName || 'Admin'} {admin?.lastName || 'User'}
+              {user?.firstName || 'Admin'} {user?.lastName || 'User'}
             </span>
-            <span className={styles.adminRole}>{admin?.role || 'Administrator'}</span>
+            <span className={styles.adminRole}>{user?.role || 'Administrator'}</span>
           </div>
         </div>
         <button 
