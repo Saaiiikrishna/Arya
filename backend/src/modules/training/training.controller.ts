@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards,
+  Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards, Req,
 } from '@nestjs/common';
 import { TrainingService } from './training.service';
 import { JwtAuthGuard, AdminGuard } from '../auth/guards';
@@ -76,7 +76,8 @@ export class TrainingController {
 
   @UseGuards(JwtAuthGuard)
   @Get('training/my-assignments')
-  async getMyAssignments(@Query('applicantId') applicantId: string) {
+  async getMyAssignments(@Req() req: any) {
+    const applicantId = req.user.id || req.user.sub;
     return this.trainingService.getAssignmentsForApplicant(applicantId);
   }
 
@@ -84,8 +85,10 @@ export class TrainingController {
   @Patch('training/assignments/:id/complete')
   async markComplete(
     @Param('id') id: string,
+    @Req() req: any,
     @Body('score') score?: number,
   ) {
-    return this.trainingService.markCompleted(id, score);
+    const callerId = req.user.id || req.user.sub;
+    return this.trainingService.markCompleted(id, score, callerId);
   }
 }

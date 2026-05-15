@@ -273,8 +273,7 @@ export class ApplicantService {
           },
         });
       } catch (profileError) {
-        console.error('[submitDossier] MatchingProfile upsert error:', profileError);
-        // Don't fail the entire submission for matching profile issues
+        this.logger.error('MatchingProfile upsert failed (non-fatal)', (profileError as any)?.message);
       }
     }
 

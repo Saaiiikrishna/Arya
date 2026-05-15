@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma';
 
 @Injectable()
@@ -66,7 +66,14 @@ export class TrainingService {
     });
   }
 
-  async markCompleted(assignmentId: string, score?: number) {
+  async markCompleted(assignmentId: string, score?: number, callerId?: string) {
+    const assignment = await this.prisma.trainingAssignment.findUnique({
+      where: { id: assignmentId },
+    });
+    if (!assignment) throw new NotFoundException('Assignment not found');
+    if (callerId && assignment.applicantId !== callerId) {
+      throw new ForbiddenException('You can only complete your own assignments');
+    }
     return this.prisma.trainingAssignment.update({
       where: { id: assignmentId },
       data: { completedAt: new Date(), score },

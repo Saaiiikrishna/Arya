@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Patch, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Body, Param, Query, UseGuards, Req } from '@nestjs/common';
 import { ThrottlerGuard, Throttle } from '@nestjs/throttler';
 import { ReferralService } from './referral.service';
 import { JwtAuthGuard, AdminGuard } from '../auth/guards';
@@ -28,13 +28,15 @@ export class ReferralController {
 
   @UseGuards(JwtAuthGuard)
   @Post('referrals/enable-affiliate')
-  async enableAffiliate(@Body('applicantId') applicantId: string) {
+  async enableAffiliate(@Req() req: any) {
+    const applicantId = req.user.id || req.user.sub;
     return this.referralService.enableAffiliate(applicantId);
   }
 
   @UseGuards(JwtAuthGuard)
-  @Get('referrals/my-profile/:applicantId')
-  async getMyReferralProfile(@Param('applicantId') applicantId: string) {
+  @Get('referrals/my-profile')
+  async getMyReferralProfile(@Req() req: any) {
+    const applicantId = req.user.id || req.user.sub;
     return this.referralService.getMyReferralProfile(applicantId);
   }
 
