@@ -5,10 +5,10 @@ import { api } from '@/lib/api';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
 import { useRouter } from 'next/navigation';
-import { 
-  FileQuestion, Package, Users, ShieldCheck, 
-  BookOpen, BarChart2, Megaphone, Settings, 
-  AlertCircle, CheckCircle2, UserPlus, Scale
+import {
+  FileQuestion, Package, Users, ShieldCheck,
+  BookOpen, BarChart2, Megaphone, Settings,
+  AlertCircle, CheckCircle2, UserPlus, Scale, Calendar
 } from 'lucide-react';
 
 interface Stats {
@@ -198,6 +198,13 @@ export default function DashboardPage() {
                   <span className="font-serif text-lg font-bold group-hover:text-forest transition-colors">Equity Vault</span>
                 </div>
                 <span className="text-[10px] uppercase tracking-widest text-ink/60 leading-relaxed mt-auto">1000-day company lifecycles</span>
+              </Link>
+              <Link href="/admin/interviews" className="border border-hairline p-5 bg-white hover:border-forest hover:shadow-md shadow-sm transition-all group flex flex-col">
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="group-hover:scale-110 transition-transform text-ink/40 group-hover:text-forest"><Calendar size={22} strokeWidth={1.5} /></span>
+                  <span className="font-serif text-lg font-bold group-hover:text-forest transition-colors">Interviews</span>
+                </div>
+                <span className="text-[10px] uppercase tracking-widest text-ink/60 leading-relaxed mt-auto">Slots, bookings & video scoring</span>
               </Link>
               <Link href="/admin/announcements" className="border border-hairline p-5 bg-white hover:border-forest hover:shadow-md shadow-sm transition-all group flex flex-col">
                 <div className="flex items-center gap-3 mb-3">

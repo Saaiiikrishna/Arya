@@ -31,6 +31,7 @@ import { ReferralModule } from './modules/referral/referral.module';
 import { EquityModule } from './modules/equity/equity.module';
 import { WhatsappModule } from './modules/whatsapp/whatsapp.module';
 import { RewardsModule } from './modules/rewards/rewards.module';
+import { InterviewModule } from './modules/interview/interview.module';
 
 @Module({
   imports: [
@@ -110,6 +111,7 @@ import { RewardsModule } from './modules/rewards/rewards.module';
     EquityModule,
     WhatsappModule,
     RewardsModule,
+    InterviewModule,
   ],
 })
 export class AppModule {}

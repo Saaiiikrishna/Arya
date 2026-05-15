@@ -628,6 +628,97 @@ class ApiClient {
     return this.request<any>(`/admin/danger-zone/tables/${tableName}/columns/${encodeURIComponent(columnName)}`, { method: 'DELETE' });
   }
 
+  // ─── Team Department Management ───────────────────────────
+
+  async getTeamDepartments(teamId: string) {
+    return this.request<{
+      slots: Array<{ department: string; member: any | null }>;
+      filledCount: number;
+      totalRequired: number;
+      isComplete: boolean;
+    }>(`/teams/${teamId}/departments`);
+  }
+
+  async claimDepartment(teamId: string, applicantId: string, department: string) {
+    return this.request<any>(`/teams/${teamId}/members/${applicantId}/department`, {
+      method: 'PATCH',
+      body: { department },
+    });
+  }
+
+  async lockTeam(teamId: string) {
+    return this.request<any>(`/admin/teams/${teamId}/lock`, { method: 'POST' });
+  }
+
+  async adminResolveTeamRequest(reqId: string, status: 'APPROVED' | 'REJECTED') {
+    return this.request<any>(`/admin/teams/requests/${reqId}/resolve`, {
+      method: 'PATCH',
+      body: { status },
+    });
+  }
+
+  // ─── Interview Scheduling ──────────────────────────────────
+
+  async createInterviewSlot(data: {
+    batchId: string;
+    startTime: string;
+    endTime: string;
+    capacity: number;
+    notes?: string;
+  }) {
+    return this.request<any>('/admin/interview/slots', { method: 'POST', body: data });
+  }
+
+  async getAdminInterviewSlots(batchId: string) {
+    return this.request<any[]>(`/admin/interview/slots/${batchId}`);
+  }
+
+  async deleteInterviewSlot(slotId: string) {
+    return this.request<any>(`/admin/interview/slots/${slotId}`, { method: 'DELETE' });
+  }
+
+  async recordInterviewDecision(bookingId: string, data: { decision: string; score?: number; notes?: string }) {
+    return this.request<any>(`/admin/interview/bookings/${bookingId}/decision`, {
+      method: 'PATCH',
+      body: data,
+    });
+  }
+
+  async getVideoSubmissions(batchId: string) {
+    return this.request<any[]>(`/admin/interview/video/${batchId}`);
+  }
+
+  async reviewVideoSubmission(submissionId: string, data: { score: number; reviewNotes?: string }) {
+    return this.request<any>(`/admin/interview/video/${submissionId}/score`, {
+      method: 'PATCH',
+      body: data,
+    });
+  }
+
+  async getAvailableInterviewSlots(batchId: string) {
+    return this.request<any[]>(`/interview/slots/${batchId}`);
+  }
+
+  async getMyInterviewBooking() {
+    return this.request<any>('/interview/my-booking');
+  }
+
+  async bookInterviewSlot(slotId: string) {
+    return this.request<any>(`/interview/book/${slotId}`, { method: 'POST' });
+  }
+
+  async cancelInterviewBooking() {
+    return this.request<any>('/interview/booking', { method: 'DELETE' });
+  }
+
+  async getMyVideoSubmission() {
+    return this.request<any>('/interview/video');
+  }
+
+  async submitVideoSubmission(data: { batchId: string; videoUrl1?: string; videoUrl2?: string; videoUrl3?: string }) {
+    return this.request<any>('/interview/video', { method: 'POST', body: data });
+  }
+
   // ─── Referral System ──────────────────────────────────
 
   async verifyReferrer(query: string) {
