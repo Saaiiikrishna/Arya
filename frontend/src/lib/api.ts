@@ -11,19 +11,28 @@ class ApiClient {
 
   setToken(token: string | null) {
     this.token = token;
-    if (token) {
-      if (typeof window !== 'undefined') localStorage.setItem('arya_token', token);
-    } else {
-      if (typeof window !== 'undefined') localStorage.removeItem('arya_token');
-    }
+    // Access token kept in memory only — localStorage is readable by any XSS script
   }
 
   getToken(): string | null {
-    if (this.token) return this.token;
-    if (typeof window !== 'undefined') {
-      this.token = localStorage.getItem('arya_token');
-    }
     return this.token;
+  }
+
+  async refreshAccessToken(): Promise<boolean> {
+    if (typeof window === 'undefined') return false;
+    const refreshToken = sessionStorage.getItem('arya_refresh');
+    if (!refreshToken) return false;
+    try {
+      const data = await this.request<{ accessToken: string; refreshToken: string }>(
+        '/admin/auth/refresh',
+        { method: 'POST', body: { refreshToken } },
+      );
+      this.token = data.accessToken;
+      sessionStorage.setItem('arya_refresh', data.refreshToken);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private async request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
@@ -75,7 +84,7 @@ class ApiClient {
     }>('/admin/auth/login', { method: 'POST', body: { email, password } });
     this.setToken(data.accessToken);
     if (typeof window !== 'undefined') {
-      localStorage.setItem('arya_refresh', data.refreshToken);
+      sessionStorage.setItem('arya_refresh', data.refreshToken);
     }
     return data;
   }
@@ -88,17 +97,22 @@ class ApiClient {
     }>('/admin/auth/google/callback', { method: 'POST', body: { token } });
     this.setToken(data.accessToken);
     if (typeof window !== 'undefined') {
-      localStorage.setItem('arya_refresh', data.refreshToken);
+      sessionStorage.setItem('arya_refresh', data.refreshToken);
     }
     return data;
   }
 
   logout() {
-    this.setToken(null);
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('arya_refresh');
-      localStorage.removeItem('arya_admin');
+      const rt = sessionStorage.getItem('arya_refresh');
+      if (rt) {
+        // Fire-and-forget revocation — don't block the local logout on network
+        this.request('/admin/auth/logout', { method: 'POST', body: { refreshToken: rt } }).catch(() => {});
+      }
+      sessionStorage.removeItem('arya_refresh');
+      localStorage.removeItem('arya_admin'); // legacy key cleanup
     }
+    this.token = null;
   }
 
   // OTP Auth
@@ -117,7 +131,7 @@ class ApiClient {
     }>('/auth/otp/verify', { method: 'POST', body: { email, otp } });
     this.setToken(data.accessToken);
     if (typeof window !== 'undefined') {
-      localStorage.setItem('arya_refresh', data.refreshToken);
+      sessionStorage.setItem('arya_refresh', data.refreshToken);
     }
     return data;
   }
@@ -456,10 +470,10 @@ class ApiClient {
     });
   }
 
-  async selfNominate(electionId: string, nomineeId: string, pitch?: string, answers?: { questionId: string; value: any }[]) {
+  async selfNominate(electionId: string, pitch?: string, answers?: { questionId: string; value: any }[]) {
     return this.request<any>(`/elections/${electionId}/self-nominate`, {
       method: 'POST',
-      body: { nomineeId, pitch, answers }
+      body: { pitch, answers }
     });
   }
 
@@ -467,17 +481,17 @@ class ApiClient {
     return this.request<any[]>(`/elections/${electionId}/nominees`);
   }
 
-  async submitElectionPitch(electionId: string, nomineeId: string, pitch: string) {
+  async submitElectionPitch(electionId: string, pitch: string) {
     return this.request<any>(`/elections/${electionId}/pitch`, {
       method: 'PUT',
-      body: { nomineeId, pitch }
+      body: { pitch }
     });
   }
 
-  async castVote(electionId: string, nomineeId: string, voterId?: string) {
+  async castVote(electionId: string, nomineeId: string) {
     return this.request<any>(`/elections/${electionId}/vote`, {
       method: 'POST',
-      body: { nomineeId, voterId }
+      body: { nomineeId }
     });
   }
 
@@ -630,15 +644,14 @@ class ApiClient {
     });
   }
 
-  async enableAffiliate(applicantId: string) {
+  async enableAffiliate() {
     return this.request<{ referralCode: string; referralLink: string; alreadyEnabled: boolean }>('/referrals/enable-affiliate', {
       method: 'POST',
-      body: { applicantId },
     });
   }
 
-  async getMyReferralProfile(applicantId: string) {
-    return this.request<any>(`/referrals/my-profile/${applicantId}`);
+  async getMyReferralProfile() {
+    return this.request<any>('/referrals/my-profile');
   }
 
   async getAdminReferralStats() {

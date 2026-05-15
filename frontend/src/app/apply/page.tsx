@@ -10,7 +10,7 @@ import { api } from '@/lib/api';
 
 export default function ApplyPage() {
   const router = useRouter();
-  const { isAuthenticated, admin, loading } = useAuth();
+  const { isAuthenticated, user, loading } = useAuth();
   
   const [authTriggered, setAuthTriggered] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -127,7 +127,7 @@ export default function ApplyPage() {
              </div>
              <h2 className="font-serif text-3xl font-bold mb-4 text-forest">Dossier Sealed</h2>
              <p className="text-ink/60 mb-8 leading-relaxed">
-               {admin?.firstName || 'Founder'}, your application is submitted successfully. Please wait for further instructions. Our team will reach out to the registered email with next steps.
+               {user?.firstName || 'Founder'}, your application is submitted successfully. Please wait for further instructions. Our team will reach out to the registered email with next steps.
              </p>
              <button
                onClick={() => router.push('/hub')}
@@ -142,7 +142,7 @@ export default function ApplyPage() {
              <ApplicationForm 
                onSubmit={() => {}} 
                defaultData={dossierData} 
-               userInfo={admin || undefined} 
+               userInfo={user || undefined}
                readOnly={true} 
              />
            </div>
@@ -214,7 +214,7 @@ export default function ApplyPage() {
           <ApplicationForm 
             onSubmit={handleSubmit} 
             defaultData={dossierData}
-            userInfo={admin && !dossierData ? { firstName: admin.firstName, lastName: admin.lastName, email: admin.email } : undefined}
+            userInfo={user && !dossierData ? { firstName: user.firstName, lastName: user.lastName, email: user.email } : undefined}
           />
         </>
       )}

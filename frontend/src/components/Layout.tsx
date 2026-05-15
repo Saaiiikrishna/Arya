@@ -17,7 +17,7 @@ interface LayoutProps {
 
 export default function Layout({ children, activeTab = 'manifesto', onTabChange, showNav = true }: LayoutProps) {
   const router = useRouter();
-  const { admin: user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated } = useAuth();
 
   const handleNavigation = (id: string) => {
     // If the Layout component allows callback overrides, call it. Otherwise route natively.

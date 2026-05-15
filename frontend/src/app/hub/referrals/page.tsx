@@ -8,7 +8,7 @@ import { Share2, Copy, Check, Award, ExternalLink, Users, Gift, ChevronRight } f
 
 export default function ReferralHubPage() {
   const router = useRouter();
-  const { admin, isAuthenticated, loading: authLoading } = useAuth();
+  const { user, isAuthenticated, loading: authLoading } = useAuth();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [copySuccess, setCopySuccess] = useState(false);
@@ -22,12 +22,11 @@ export default function ReferralHubPage() {
     }
 
     fetchReferralData();
-  }, [isAuthenticated, authLoading, router, admin?.id]);
+  }, [isAuthenticated, authLoading, router]);
 
   const fetchReferralData = async () => {
-    if (!admin?.id) return;
     try {
-      const res = await api.getMyReferralProfile(admin.id);
+      const res = await api.getMyReferralProfile();
       setData(res);
     } catch (err) {
       console.error('Failed to fetch referral data:', err);
@@ -37,10 +36,9 @@ export default function ReferralHubPage() {
   };
 
   const handleEnableAffiliate = async () => {
-    if (!admin?.id) return;
     setEnabling(true);
     try {
-      await api.enableAffiliate(admin.id);
+      await api.enableAffiliate();
       await fetchReferralData();
     } catch (err) {
       console.error('Failed to enable affiliate:', err);

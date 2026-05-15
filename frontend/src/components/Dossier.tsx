@@ -62,7 +62,7 @@ function phoneForDisplay(stored: string): string {
 }
 
 export default function ApplicationForm({ onSubmit, defaultData, userInfo, readOnly }: ApplicationFormProps) {
-  const { admin, isAuthenticated } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const [step, setStep] = useState(1);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -140,10 +140,10 @@ export default function ApplicationForm({ onSubmit, defaultData, userInfo, readO
   }, [userInfo]);
 
   useEffect(() => {
-    if (admin?.email && !email) setEmail(admin.email);
-    if (admin?.firstName && !firstName) setFirstName(admin.firstName);
-    if (admin?.lastName && !lastName) setLastName(admin.lastName);
-  }, [admin]);
+    if (user?.email && !email) setEmail(user.email);
+    if (user?.firstName && !firstName) setFirstName(user.firstName);
+    if (user?.lastName && !lastName) setLastName(user.lastName);
+  }, [user]);
 
   // Auto-populate referral from URL ?ref=CODE
   useEffect(() => {
@@ -488,11 +488,11 @@ export default function ApplicationForm({ onSubmit, defaultData, userInfo, readO
                   className={inputClass(!!errors.email)}
                   value={email}
                   onChange={e => setEmail(e.target.value)}
-                  readOnly={isAuthenticated && !!admin?.email}
-                  style={isAuthenticated && admin?.email ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
+                  readOnly={isAuthenticated && !!user?.email}
+                  style={isAuthenticated && user?.email ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
                 />
                 {errors.email && <p className="text-terracotta text-[10px] mt-1.5 uppercase tracking-widest">{errors.email}</p>}
-                {isAuthenticated && admin?.email && (
+                {isAuthenticated && user?.email && (
                   <p className="text-forest text-[10px] mt-1.5 uppercase tracking-widest">✓ Verified via login</p>
                 )}
               </div>

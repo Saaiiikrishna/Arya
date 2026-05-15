@@ -35,7 +35,7 @@ interface Stats {
 export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
-  const { admin, logout } = useAuth();
+  const { user, logout } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -69,7 +69,7 @@ export default function DashboardPage() {
         <div>
           <div className="flex items-center gap-4 mb-3">
             <p className="text-sm uppercase tracking-widest text-forest font-medium">Administrator Privileges</p>
-            {admin?.role === 'SUPER_ADMIN' && (
+            {user?.role === 'SUPER_ADMIN' && (
               <button
                 onClick={() => {
                   logout();
@@ -288,7 +288,7 @@ export default function DashboardPage() {
 
 
       {/* Standalone Route for Danger Zone */}
-      {admin?.role === 'SUPER_ADMIN' && (
+      {user?.role === 'SUPER_ADMIN' && (
         <section className="mt-16 bg-white border border-terracotta/10 hover:border-terracotta/50 shadow-sm transition-all group p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
           <div className="max-w-xl">
             <h2 className="font-serif text-3xl font-bold text-terracotta mb-2 group-hover:text-terracotta transition-colors flex items-center gap-3">
