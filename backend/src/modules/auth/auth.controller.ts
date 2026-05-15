@@ -2,7 +2,7 @@ import { Controller, Post, Body, UseGuards, Get, Request } from '@nestjs/common'
 import { ThrottlerGuard, Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { LoginDto, CreateAdminDto } from './dto';
-import { JwtAuthGuard } from './guards';
+import { JwtAuthGuard, AdminGuard } from './guards';
 
 @Controller('api/admin/auth')
 @UseGuards(ThrottlerGuard)
@@ -26,7 +26,7 @@ export class AuthController {
     return this.authService.refreshToken(refreshToken);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Post('create')
   async createAdmin(@Body() dto: CreateAdminDto) {
     return this.authService.createAdmin(dto);

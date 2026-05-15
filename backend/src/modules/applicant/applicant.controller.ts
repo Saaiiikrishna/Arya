@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApplicantService } from './applicant.service';
 import { ApplyDto, SubmitAdditionalAnswersDto } from './dto';
-import { JwtAuthGuard } from '../auth/guards';
+import { JwtAuthGuard, AdminGuard } from '../auth/guards';
 import { ApplicantStatus } from '@prisma/client';
 
 @Controller('api')
@@ -114,7 +114,7 @@ export class ApplicantController {
   }
 
   // ─── Admin ─────────────────────────────────────────
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Get('admin/applicants')
   async findAll(
     @Query('page') page?: string,
@@ -132,25 +132,25 @@ export class ApplicantController {
     });
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Get('admin/applicants/:id')
   async findOne(@Param('id') id: string) {
     return this.applicantService.findOneAdmin(id);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Delete('admin/applicants/:id')
   async remove(@Param('id') id: string) {
     return this.applicantService.removeApplicant(id);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Delete('admin/applicants/:id/hard')
   async hardDelete(@Param('id') id: string) {
     return this.applicantService.hardDeleteApplicant(id);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Patch('admin/applicants/:id/status')
   async updateStatus(
     @Param('id') id: string,
@@ -159,7 +159,7 @@ export class ApplicantController {
     return this.applicantService.updateApplicantStatus(id, status);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Get('admin/dashboard/stats')
   async getDashboardStats() {
     return this.applicantService.getDashboardStats();

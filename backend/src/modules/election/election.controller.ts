@@ -9,7 +9,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ElectionService } from './election.service';
-import { JwtAuthGuard } from '../auth/guards';
+import { JwtAuthGuard, AdminGuard } from '../auth/guards';
 
 @Controller('api')
 export class ElectionController {
@@ -17,7 +17,7 @@ export class ElectionController {
 
   // ─── Admin endpoints ──────────────────────────────────
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Post('admin/elections/team/:teamId/start')
   async startElection(
     @Param('teamId') teamId: string,
@@ -36,7 +36,7 @@ export class ElectionController {
     );
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Post('admin/elections/batch/:batchId/start')
   async startBatchElections(
     @Param('batchId') batchId: string,
@@ -55,7 +55,7 @@ export class ElectionController {
     );
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Put('admin/elections/:id/advance')
   async advanceElection(@Param('id') id: string) {
     return this.electionService.advanceElection(id);
@@ -63,13 +63,13 @@ export class ElectionController {
 
   // ─── Election Question Templates (Admin) ──────────────
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Get('admin/election-questions/templates')
   async getQuestionTemplates() {
     return this.electionService.getQuestionTemplates();
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Post('admin/election-questions/templates')
   async createQuestionTemplate(
     @Body()
@@ -84,13 +84,13 @@ export class ElectionController {
     return this.electionService.createQuestionTemplate(body);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Delete('admin/election-questions/templates/:id')
   async deleteQuestionTemplate(@Param('id') id: string) {
     return this.electionService.deleteQuestionTemplate(id);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Post('admin/elections/:id/questions')
   async addCustomQuestion(
     @Param('id') id: string,

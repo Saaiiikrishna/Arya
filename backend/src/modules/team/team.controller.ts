@@ -1,29 +1,32 @@
 import { Controller, Get, Post, Patch, Param, Body, UseGuards, Req, Query } from '@nestjs/common';
 import { TeamService } from './team.service';
-import { JwtAuthGuard } from '../auth/guards';
+import { JwtAuthGuard, AdminGuard } from '../auth/guards';
 
 @Controller('api')
-@UseGuards(JwtAuthGuard)
 export class TeamController {
   constructor(private readonly teamService: TeamService) {}
 
   // ─── Admin team endpoints ────────────────────────────
+  @UseGuards(AdminGuard)
   @Get('admin/teams/batch/:batchId')
   async findByBatch(@Param('batchId') batchId: string) {
     return this.teamService.findByBatch(batchId);
   }
 
+  @UseGuards(AdminGuard)
   @Get('admin/teams/:id')
   async findOne(@Param('id') id: string) {
     return this.teamService.findOne(id);
   }
 
+  @UseGuards(AdminGuard)
   @Post('admin/teams/form/:batchId')
   async formTeams(@Param('batchId') batchId: string) {
     return this.teamService.formTeams(batchId);
   }
 
   // ─── Team Requests (Member endpoints) ─────────────────
+  @UseGuards(JwtAuthGuard)
   @Post('teams/:id/requests')
   async createRequest(
     @Param('id') teamId: string,
@@ -34,6 +37,7 @@ export class TeamController {
     return this.teamService.createTeamRequest(teamId, requesterId, body);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Get('teams/:id/requests')
   async getRequests(
     @Param('id') teamId: string,
@@ -42,7 +46,7 @@ export class TeamController {
     return this.teamService.getTeamRequests(teamId, status);
   }
 
-  // Leader approves/rejects a request
+  @UseGuards(JwtAuthGuard)
   @Patch('teams/:id/requests/:reqId')
   async resolveRequest(
     @Param('id') teamId: string,
@@ -55,6 +59,7 @@ export class TeamController {
   }
 
   // ─── Leader: Edit Project ────────────────────────────
+  @UseGuards(JwtAuthGuard)
   @Patch('teams/:id/project')
   async updateProject(
     @Param('id') teamId: string,
