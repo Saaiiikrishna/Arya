@@ -3,7 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 import * as bcrypt from 'bcrypt';
-import { randomInt } from 'crypto';
+import { randomInt, createHash } from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
 import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../../prisma';
@@ -180,7 +180,7 @@ export class AuthService {
     }
 
     // Verify the token exists in the DB and hasn't been revoked
-    const stored = await this.prisma.refreshToken.findUnique({ where: { token } });
+    const stored = await this.prisma.refreshToken.findUnique({ where: { token: this.hashToken(token) } });
     if (!stored || stored.revokedAt || stored.expiresAt < new Date()) {
       throw new UnauthorizedException('Refresh token revoked or expired');
     }
@@ -203,7 +203,7 @@ export class AuthService {
     const expiresAt = new Date(Date.now() + this.parseExpirationMs(expStr));
     await this.prisma.$transaction([
       this.prisma.refreshToken.delete({ where: { id: stored.id } }),
-      this.prisma.refreshToken.create({ data: { userId: newPayload.sub, token: newRefresh, expiresAt } }),
+      this.prisma.refreshToken.create({ data: { userId: newPayload.sub, token: this.hashToken(newRefresh), expiresAt } }),
     ]);
 
     return {
@@ -214,10 +214,14 @@ export class AuthService {
 
   async logout(token: string) {
     await this.prisma.refreshToken.updateMany({
-      where: { token },
+      where: { token: this.hashToken(token) },
       data: { revokedAt: new Date() },
     });
     return { success: true };
+  }
+
+  private hashToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
   }
 
   private signRefreshToken(payload: JwtPayload): string {
@@ -239,7 +243,7 @@ export class AuthService {
   private async storeRefreshToken(userId: string, token: string): Promise<void> {
     const expStr = this.configService.get<string>('JWT_REFRESH_EXPIRATION', '7d');
     const expiresAt = new Date(Date.now() + this.parseExpirationMs(expStr));
-    await this.prisma.refreshToken.create({ data: { userId, token, expiresAt } });
+    await this.prisma.refreshToken.create({ data: { userId, token: this.hashToken(token), expiresAt } });
   }
 
   async createAdmin(dto: CreateAdminDto) {
