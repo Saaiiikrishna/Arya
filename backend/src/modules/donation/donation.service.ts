@@ -75,7 +75,7 @@ export class DonationService {
       throw new BadRequestException('Invalid webhook signature');
     }
 
-    const { event, payload } = requestBody;
+    const { event, payload } = JSON.parse(bodyBuf.toString('utf8'));
 
     if (event === 'payment.captured') {
       const paymentEntity = payload.payment.entity;

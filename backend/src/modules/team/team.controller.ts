@@ -87,15 +87,14 @@ export class TeamController {
   }
 
   @UseGuards(JwtAuthGuard)
-  @Patch('teams/:id/members/:applicantId/department')
+  @Patch('teams/:id/my-department')
   async claimDepartment(
     @Param('id') teamId: string,
-    @Param('applicantId') applicantId: string,
     @Req() req: any,
     @Body('department') department: string,
   ) {
     const callerId = req.user.id || req.user.sub;
-    return this.teamService.setMemberDepartment(teamId, applicantId, callerId, department as any);
+    return this.teamService.setMemberDepartment(teamId, callerId, callerId, department as any);
   }
 
   // ─── Leader: Edit Project ──────────────────────────────────

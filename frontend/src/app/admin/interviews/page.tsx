@@ -110,13 +110,19 @@ export default function AdminInterviewsPage() {
   const handleCreateSlot = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedBatch) return;
+    const start = new Date(slotForm.startTime);
+    const end = new Date(slotForm.endTime);
+    if (end <= start) {
+      setError('End time must be after start time');
+      return;
+    }
     setCreating(true);
     setError('');
     try {
       await api.createInterviewSlot({
         batchId: selectedBatch,
-        startTime: new Date(slotForm.startTime).toISOString(),
-        endTime: new Date(slotForm.endTime).toISOString(),
+        startTime: start.toISOString(),
+        endTime: end.toISOString(),
         capacity: parseInt(slotForm.capacity, 10),
         notes: slotForm.notes || undefined,
       });

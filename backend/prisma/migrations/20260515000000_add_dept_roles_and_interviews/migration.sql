@@ -1,6 +1,9 @@
 -- Migration: add_dept_roles_and_interviews
 -- Adds department tracking, interview scheduling, and extends team change requests
 
+-- Ensure pgcrypto is available for gen_random_uuid() on PostgreSQL < 13
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
 -- New enums
 CREATE TYPE "DepartmentRole" AS ENUM ('PRODUCT', 'OPERATIONS', 'RESOURCES', 'SALES_MARKETING', 'FOUNDING_OTHER');
 CREATE TYPE "BookingStatus" AS ENUM ('PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED', 'NO_SHOW');
@@ -20,6 +23,10 @@ ALTER TABLE "teams" ADD COLUMN "is_locked" BOOLEAN NOT NULL DEFAULT false;
 
 -- Add target_team_id to team_requests (for JOIN_EXISTING/SEPARATION flows)
 ALTER TABLE "team_requests" ADD COLUMN "target_team_id" UUID;
+
+ALTER TABLE "team_requests" ADD CONSTRAINT "team_requests_target_team_id_fkey"
+    FOREIGN KEY ("target_team_id") REFERENCES "teams"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+CREATE INDEX "team_requests_target_team_id_idx" ON "team_requests"("target_team_id");
 
 -- Interview slots table
 CREATE TABLE "interview_slots" (
@@ -58,7 +65,8 @@ CREATE TABLE "interview_bookings" (
     CONSTRAINT "interview_bookings_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "interview_bookings_applicant_id_key" ON "interview_bookings"("applicant_id");
+-- Composite unique: one booking per applicant per slot (allows re-applying across batches)
+CREATE UNIQUE INDEX "interview_bookings_applicant_id_slot_id_key" ON "interview_bookings"("applicant_id", "slot_id");
 CREATE INDEX "interview_bookings_slot_id_idx" ON "interview_bookings"("slot_id");
 CREATE INDEX "interview_bookings_status_idx" ON "interview_bookings"("status");
 
@@ -85,7 +93,8 @@ CREATE TABLE "video_submissions" (
     CONSTRAINT "video_submissions_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "video_submissions_applicant_id_key" ON "video_submissions"("applicant_id");
+-- Composite unique: one submission per applicant per batch (allows re-applying across batches)
+CREATE UNIQUE INDEX "video_submissions_applicant_id_batch_id_key" ON "video_submissions"("applicant_id", "batch_id");
 CREATE INDEX "video_submissions_batch_id_idx" ON "video_submissions"("batch_id");
 
 ALTER TABLE "video_submissions" ADD CONSTRAINT "video_submissions_applicant_id_fkey"

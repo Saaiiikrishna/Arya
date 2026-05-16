@@ -46,16 +46,16 @@ export class TeamService {
       return { teamsCreated: 0, message: 'Not enough applicants for team formation' };
     }
 
-    // Clear existing teams
-    await this.prisma.applicant.updateMany({
-      where: { batchId },
-      data: { teamId: null, department: null },
-    });
-    await this.prisma.team.deleteMany({ where: { batchId } });
-
     const assignments = this.balancedPartition(applicants, minSize, maxSize);
 
     const teams = await this.prisma.$transaction(async (tx) => {
+      // Clear existing teams inside the transaction for atomicity
+      await tx.applicant.updateMany({
+        where: { batchId },
+        data: { teamId: null, department: null },
+      });
+      await tx.team.deleteMany({ where: { batchId } });
+
       const createdTeams = [];
 
       for (const assignment of assignments) {
@@ -162,7 +162,6 @@ export class TeamService {
       return null;
     }
 
-    const newCount = targetTeam._count.members + 1;
     await this.prisma.$transaction([
       this.prisma.applicant.update({
         where: { id: applicantId },
@@ -170,7 +169,7 @@ export class TeamService {
       }),
       this.prisma.team.update({
         where: { id: targetTeam.id },
-        data: { memberCount: newCount },
+        data: { memberCount: { increment: 1 } },
       }),
     ]);
 
@@ -300,6 +299,11 @@ export class TeamService {
     requesterId: string,
     body: { type: string; title: string; details: string; targetTeamId?: string },
   ) {
+    const ALLOWED_TYPES = ['SWAP', 'RESOURCE', 'COMPLAINT', 'SEPARATION', 'JOIN_EXISTING', 'CREATE_NEW'];
+    if (!ALLOWED_TYPES.includes(body.type)) {
+      throw new BadRequestException(`Invalid request type. Allowed: ${ALLOWED_TYPES.join(', ')}`);
+    }
+
     const team = await this.prisma.team.findUnique({ where: { id: teamId } });
     if (!team) throw new NotFoundException('Team not found');
 
@@ -406,17 +410,16 @@ export class TeamService {
         } else if (request.type === 'JOIN_EXISTING') {
           if (!request.targetTeamId) throw new BadRequestException('No target team specified');
 
-          const [targetTeam, batch] = await Promise.all([
+          const [targetTeam, sourceTeam] = await Promise.all([
             tx.team.findUnique({
               where: { id: request.targetTeamId },
               include: { _count: { select: { members: true } } },
             }),
-            tx.batch.findUnique({ where: { id: request.teamId } }), // batch lookup via teamId indirectly
+            tx.team.findUnique({ where: { id: request.teamId } }),
           ]);
 
-          // Get the team's batch for maxSize
-          const sourceTeam = await tx.team.findUnique({ where: { id: request.teamId } });
-          const batchData = await tx.batch.findUnique({ where: { id: sourceTeam!.batchId } });
+          if (!sourceTeam) throw new NotFoundException('Source team not found');
+          const batchData = await tx.batch.findUnique({ where: { id: sourceTeam.batchId } });
           const maxSize = batchData?.teamMaxSize ?? 25;
 
           if (!targetTeam) throw new NotFoundException('Target team not found');

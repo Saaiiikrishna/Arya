@@ -78,7 +78,7 @@ export default function DepartmentBoard({ teamId }: { teamId: string }) {
     setClaiming(dept);
     setError('');
     try {
-      await api.claimDepartment(teamId, user.id, dept);
+      await api.claimDepartment(teamId, dept);
       await fetchDepts();
     } catch (err: any) {
       setError(err.message || 'Failed to claim department');
@@ -123,7 +123,7 @@ export default function DepartmentBoard({ teamId }: { teamId: string }) {
 
       <div className="divide-y divide-hairline">
         {data.slots.map(({ department, member }) => {
-          const meta = DEPT_META[department];
+          const meta = DEPT_META[department] ?? { label: department, description: '', icon: '●' };
           const isMe = member?.id === user?.id;
           const isMine = department === myDept;
           const isClaiming = claiming === department;

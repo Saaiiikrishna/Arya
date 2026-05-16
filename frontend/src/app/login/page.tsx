@@ -68,7 +68,7 @@ function LoginContent() {
     try {
       const data = await api.googleLogin(credentialResponse.credential);
       if (data.accessToken) {
-        localStorage.setItem('arya_token', data.accessToken);
+        api.setToken(data.accessToken);
       }
       window.location.href = '/apply';
     } catch (e) {
@@ -145,7 +145,7 @@ function LoginContent() {
     try {
       const data = await api.verifyOtp(otpEmail, code);
       if (data.accessToken) {
-        localStorage.setItem('arya_token', data.accessToken);
+        api.setToken(data.accessToken);
       }
       window.location.href = '/apply';
     } catch (e: any) {

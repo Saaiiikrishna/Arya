@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Body, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Param, Body, Query, UseGuards, Req } from '@nestjs/common';
 import { ChatService } from './chat.service';
 import { JwtAuthGuard, AdminGuard } from '../auth/guards';
 
@@ -36,10 +36,14 @@ export class ChatController {
   @UseGuards(AdminGuard)
   @Post('admin/chat/announcement')
   async sendAnnouncement(
-    @Body('senderId') senderId: string,
-    @Body('senderName') senderName: string,
+    @Req() req: any,
     @Body('content') content: string,
   ) {
+    const admin = req.user;
+    const senderId = admin.id || admin.sub;
+    const senderName = admin.firstName
+      ? `${admin.firstName} ${admin.lastName ?? ''}`.trim()
+      : (admin.email?.split('@')[0] ?? 'Admin');
     return this.chatService.sendAnnouncement(senderId, senderName, content);
   }
 }

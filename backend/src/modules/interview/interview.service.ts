@@ -73,30 +73,24 @@ export class InterviewService {
     const booking = await this.prisma.interviewBooking.findUnique({ where: { id: bookingId } });
     if (!booking) throw new NotFoundException('Booking not found');
 
-    const updated = await this.prisma.interviewBooking.update({
-      where: { id: bookingId },
-      data: {
-        status: 'COMPLETED',
-        decision,
-        score,
-        notes,
-        decidedAt: new Date(),
-        decidedById: adminId,
-      },
-    });
-
-    // Propagate selection decision to applicant status
-    if (decision === 'SELECTED') {
-      await this.prisma.applicant.update({
-        where: { id: booking.applicantId },
-        data: { status: 'ELIGIBLE' },
-      });
-    } else if (decision === 'REJECTED') {
-      await this.prisma.applicant.update({
-        where: { id: booking.applicantId },
-        data: { status: 'REMOVED' },
-      });
-    }
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.interviewBooking.update({
+        where: { id: bookingId },
+        data: {
+          status: 'COMPLETED',
+          decision,
+          score,
+          notes,
+          decidedAt: new Date(),
+          decidedById: adminId,
+        },
+      }),
+      ...(decision === 'SELECTED'
+        ? [this.prisma.applicant.update({ where: { id: booking.applicantId }, data: { status: 'ELIGIBLE' } })]
+        : decision === 'REJECTED'
+        ? [this.prisma.applicant.update({ where: { id: booking.applicantId }, data: { status: 'REMOVED' } })]
+        : []),
+    ]);
 
     this.logger.log(`Interview decision ${decision} recorded for booking ${bookingId}`);
     return updated;
@@ -127,25 +121,34 @@ export class InterviewService {
   }
 
   async bookSlot(applicantId: string, slotId: string) {
-    const existing = await this.prisma.interviewBooking.findUnique({
-      where: { applicantId },
-    });
-    if (existing) {
-      throw new BadRequestException('You already have an interview booking. Cancel it first to choose another slot.');
-    }
+    return this.prisma.$transaction(
+      async (tx) => {
+        const existing = await tx.interviewBooking.findUnique({ where: { applicantId } });
+        if (existing) {
+          throw new BadRequestException('You already have an interview booking. Cancel it first to choose another slot.');
+        }
 
-    const slot = await this.prisma.interviewSlot.findUnique({
-      where: { id: slotId },
-      include: { _count: { select: { bookings: true } } },
-    });
-    if (!slot) throw new NotFoundException('Slot not found');
-    if (new Date() >= slot.startTime) throw new BadRequestException('This slot has already passed');
-    if (slot._count.bookings >= slot.capacity) throw new BadRequestException('This slot is fully booked');
+        const [slot, applicant] = await Promise.all([
+          tx.interviewSlot.findUnique({
+            where: { id: slotId },
+            include: { _count: { select: { bookings: true } } },
+          }),
+          tx.applicant.findUnique({ where: { id: applicantId }, select: { batchId: true } }),
+        ]);
 
-    return this.prisma.interviewBooking.create({
-      data: { slotId, applicantId, status: 'CONFIRMED' },
-      include: { slot: true },
-    });
+        if (!slot) throw new NotFoundException('Slot not found');
+        if (!applicant) throw new NotFoundException('Applicant not found');
+        if (applicant.batchId !== slot.batchId) throw new BadRequestException('Slot belongs to a different batch');
+        if (new Date() >= slot.startTime) throw new BadRequestException('This slot has already passed');
+        if (slot._count.bookings >= slot.capacity) throw new BadRequestException('This slot is fully booked');
+
+        return tx.interviewBooking.create({
+          data: { slotId, applicantId, status: 'CONFIRMED' },
+          include: { slot: true },
+        });
+      },
+      { isolationLevel: 'Serializable' },
+    );
   }
 
   async cancelBooking(applicantId: string) {
@@ -167,7 +170,6 @@ export class InterviewService {
 
   async submitVideo(
     applicantId: string,
-    batchId: string,
     videoUrl1?: string,
     videoUrl2?: string,
     videoUrl3?: string,
@@ -176,9 +178,22 @@ export class InterviewService {
       throw new BadRequestException('At least one video URL is required');
     }
 
+    const urls = [videoUrl1, videoUrl2, videoUrl3].filter(Boolean) as string[];
+    for (const url of urls) {
+      if (!url.startsWith('https://')) {
+        throw new BadRequestException('Video URLs must use HTTPS');
+      }
+    }
+
+    const applicant = await this.prisma.applicant.findUnique({
+      where: { id: applicantId },
+      select: { batchId: true },
+    });
+    if (!applicant) throw new NotFoundException('Applicant not found');
+
     return this.prisma.videoSubmission.upsert({
       where: { applicantId },
-      create: { applicantId, batchId, videoUrl1, videoUrl2, videoUrl3 },
+      create: { applicantId, batchId: applicant.batchId, videoUrl1, videoUrl2, videoUrl3 },
       update: { videoUrl1, videoUrl2, videoUrl3 },
     });
   }

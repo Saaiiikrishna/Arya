@@ -63,8 +63,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Fallback to admin endpoint
       const data = await api.getMe();
       setUser(data);
-    } catch {
-      api.logout();
+    } catch (err: any) {
+      const status = err?.status ?? err?.response?.status;
+      if (status === 401 || status === 403) {
+        api.logout();
+      }
       setUser(null);
     } finally {
       setLoading(false);

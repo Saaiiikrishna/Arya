@@ -639,8 +639,8 @@ class ApiClient {
     }>(`/teams/${teamId}/departments`);
   }
 
-  async claimDepartment(teamId: string, applicantId: string, department: string) {
-    return this.request<any>(`/teams/${teamId}/members/${applicantId}/department`, {
+  async claimDepartment(teamId: string, department: string) {
+    return this.request<any>(`/teams/${teamId}/my-department`, {
       method: 'PATCH',
       body: { department },
     });
@@ -715,7 +715,7 @@ class ApiClient {
     return this.request<any>('/interview/video');
   }
 
-  async submitVideoSubmission(data: { batchId: string; videoUrl1?: string; videoUrl2?: string; videoUrl3?: string }) {
+  async submitVideoSubmission(data: { videoUrl1?: string; videoUrl2?: string; videoUrl3?: string }) {
     return this.request<any>('/interview/video', { method: 'POST', body: data });
   }
 

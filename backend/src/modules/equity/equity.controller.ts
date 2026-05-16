@@ -1,8 +1,8 @@
 import {
-  Controller, Get, Post, Patch, Body, Param, Query, UseGuards,
+  Controller, Get, Post, Patch, Body, Param, Query, UseGuards, Req,
 } from '@nestjs/common';
 import { EquityService } from './equity.service';
-import { AdminGuard } from '../auth/guards';
+import { AdminGuard, JwtAuthGuard } from '../auth/guards';
 
 @Controller()
 export class EquityController {
@@ -65,18 +65,20 @@ export class EquityController {
   @Post('admin/equity/companies/:id/start-timer')
   startTimer(
     @Param('id') id: string,
-    @Body() body: { adminId?: string },
+    @Req() req: any,
   ) {
-    return this.equityService.startTimer(id, body.adminId);
+    const adminId = req.user.id || req.user.sub;
+    return this.equityService.startTimer(id, adminId);
   }
 
   @UseGuards(AdminGuard)
   @Post('admin/equity/companies/:id/handover')
   executeHandover(
     @Param('id') id: string,
-    @Body() body: { adminId?: string },
+    @Req() req: any,
   ) {
-    return this.equityService.executeHandover(id, body.adminId);
+    const adminId = req.user.id || req.user.sub;
+    return this.equityService.executeHandover(id, adminId);
   }
 
   @UseGuards(AdminGuard)
@@ -110,13 +112,15 @@ export class EquityController {
     return this.equityService.signAgreementPlatform(id, body.adminName);
   }
 
-  /** Sign agreement as founder — public endpoint, verified by applicantId */
+  /** Sign agreement as founder — requires JWT; identity derived from token */
+  @UseGuards(JwtAuthGuard)
   @Post('equity/agreements/:id/sign-founder')
   signFounder(
     @Param('id') id: string,
-    @Body() body: { applicantId: string },
+    @Req() req: any,
   ) {
-    return this.equityService.signAgreementFounder(id, body.applicantId);
+    const applicantId = req.user.id || req.user.sub;
+    return this.equityService.signAgreementFounder(id, applicantId);
   }
 
   // ─── EQUITY EVENT ENDPOINT ────────────────────────────────
