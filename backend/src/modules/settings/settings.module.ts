@@ -10,6 +10,7 @@ import { TrackingController } from './tracking.controller';
 import { VisitorScheduler } from './visitor.scheduler';
 import { DangerZoneController } from './danger-zone.controller';
 import { DangerZoneService } from './danger-zone.service';
+import { DataDeletionController } from './data-deletion.controller';
 
 @Module({
   imports: [
@@ -17,7 +18,7 @@ import { DangerZoneService } from './danger-zone.service';
     BullModule.registerQueue({ name: 'visitor-queue' }),
     ScheduleModule.forRoot(),
   ],
-  controllers: [SettingsController, TrackingController, DangerZoneController],
+  controllers: [SettingsController, TrackingController, DangerZoneController, DataDeletionController],
   providers: [
     SettingsService,
     VisitorService,
