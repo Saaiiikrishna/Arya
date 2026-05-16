@@ -43,6 +43,9 @@ jobs:
         run: |
           cd backend
           npm ci
+          # Resolve any stuck failed-migration state left in _prisma_migrations.
+          # No-op when the migration is not in a failed state (idempotent).
+          npx prisma migrate resolve --rolled-back 20260515000000_add_dept_roles_and_interviews 2>/dev/null || true
           npx prisma migrate deploy
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
