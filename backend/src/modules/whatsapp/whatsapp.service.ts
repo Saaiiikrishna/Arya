@@ -184,11 +184,35 @@ export class WhatsappService {
 
   /** AUTHENTICATION category — no opt-in required. */
   async sendOtp(phone: string, otp: string): Promise<boolean> {
-    return this.sendTemplate({
-      to: phone,
-      templateName: 'otp_verification',
-      components: [{ type: 'body', parameters: [{ type: 'text', text: otp }] }],
-    });
+    if (this.isDev || !this.apiToken || this.apiToken === 'your_meta_token_here') {
+      this.logger.log(`[WA MOCK] OTP → ${phone.slice(0, 4)}****: ${otp}`);
+      return true;
+    }
+    // Authentication templates require body param + copy_code button param
+    try {
+      const res = await axios.post(
+        this.baseUrl,
+        {
+          messaging_product: 'whatsapp',
+          to: phone.replace(/\D/g, ''),
+          type: 'template',
+          template: {
+            name: 'arya_otp',
+            language: { code: 'en_US' },
+            components: [
+              { type: 'body', parameters: [{ type: 'text', text: otp }] },
+              { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: otp }] },
+            ],
+          },
+        },
+        { headers: { Authorization: `Bearer ${this.apiToken}`, 'Content-Type': 'application/json' } },
+      );
+      this.logger.log(`WA OTP sent to ${phone.slice(0, 4)}****: msgId=${res.data?.messages?.[0]?.id}`);
+      return true;
+    } catch (err) {
+      this.logger.error(`WA OTP failed → ${phone.slice(0, 4)}****: ${err.response?.data?.error?.message || err.message}`);
+      return false;
+    }
   }
 
   async sendApplicationReceived(phone: string, firstName: string, applicantId: string): Promise<boolean> {
@@ -528,7 +552,7 @@ export class WhatsappService {
    */
   getTemplateRegistry(): Array<{ name: string; category: string; description: string; parameters: string[] }> {
     return [
-      { name: 'otp_verification', category: 'AUTHENTICATION', description: 'OTP delivery for login', parameters: ['{{1}} = OTP code'] },
+      { name: 'arya_otp', category: 'AUTHENTICATION', description: 'OTP delivery for login', parameters: ['body {{1}} = OTP code', 'button index 0 = OTP code (copy_code)'] },
       { name: 'application_received', category: 'UTILITY', description: 'Confirm application submission', parameters: ['{{1}} = first name'] },
       { name: 'interview_scheduled', category: 'UTILITY', description: 'Interview booking confirmation', parameters: ['{{1}} = name', '{{2}} = date', '{{3}} = time', '{{4}} = meet link'] },
       { name: 'interview_decision_selected', category: 'UTILITY', description: 'Selection notification', parameters: ['{{1}} = name', '{{2}} = cohort number'] },
