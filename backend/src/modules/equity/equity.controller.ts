@@ -107,9 +107,11 @@ export class EquityController {
   @Post('admin/equity/agreements/:id/sign-platform')
   signPlatform(
     @Param('id') id: string,
-    @Body() body: { adminName: string },
+    @Req() req: any,
   ) {
-    return this.equityService.signAgreementPlatform(id, body.adminName);
+    const admin = req.user;
+    const adminName = [admin.firstName, admin.lastName].filter(Boolean).join(' ').trim() || admin.email;
+    return this.equityService.signAgreementPlatform(id, adminName);
   }
 
   /** Sign agreement as founder — requires JWT; identity derived from token */
