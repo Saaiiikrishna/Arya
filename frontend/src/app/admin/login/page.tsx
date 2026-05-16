@@ -9,7 +9,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login, logout, isAuthenticated, admin } = useAuth();
+  const { login, logout, isAuthenticated, user } = useAuth();
   const router = useRouter();
 
   const handleSubmit = async (e: FormEvent) => {
@@ -26,9 +26,9 @@ export default function LoginPage() {
     }
   };
 
-  if (isAuthenticated && admin) {
+  if (isAuthenticated && user) {
     // If user is applicant, redirect them away from admin
-    if (admin.role === 'APPLICANT') {
+    if (user.role === 'APPLICANT') {
       router.push('/hub');
       return (
         <div className="min-h-screen bg-parchment flex items-center justify-center p-8">
@@ -52,7 +52,7 @@ export default function LoginPage() {
           </div>
           <h2 className="font-serif text-2xl font-bold mb-4 text-forest relative z-10">Active Session</h2>
           <p className="text-ink/60 mb-8 leading-relaxed text-sm relative z-10">
-            You are securely logged in as <strong>{admin.email}</strong>.
+            You are securely logged in as <strong>{user.email}</strong>.
           </p>
           <div className="flex flex-col gap-4 relative z-10">
             <button

@@ -56,20 +56,26 @@ export class DonationService {
     };
   }
 
-  async handleWebhook(signature: string, requestBody: any) {
+  async handleWebhook(signature: string, requestBody: Buffer | any) {
     const webHookSecret = this.configService.get<string>('RAZORPAY_WEBHOOK_SECRET', '');
-    const bodyStr = typeof requestBody === 'string' ? requestBody : JSON.stringify(requestBody);
 
-    const expectedSignature = crypto
-      .createHmac('sha256', webHookSecret)
-      .update(bodyStr)
-      .digest('hex');
+    const bodyBuf = Buffer.isBuffer(requestBody)
+      ? requestBody
+      : Buffer.from(typeof requestBody === 'string' ? requestBody : JSON.stringify(requestBody));
 
-    if (expectedSignature !== signature) {
+    const expectedSig = crypto.createHmac('sha256', webHookSecret).update(bodyBuf).digest('hex');
+    const expectedBuf = Buffer.from(expectedSig, 'utf8');
+    const receivedBuf = Buffer.from(signature ?? '', 'utf8');
+
+    const signaturesMatch =
+      expectedBuf.length === receivedBuf.length &&
+      crypto.timingSafeEqual(expectedBuf, receivedBuf);
+
+    if (!signaturesMatch) {
       throw new BadRequestException('Invalid webhook signature');
     }
 
-    const { event, payload } = requestBody;
+    const { event, payload } = JSON.parse(bodyBuf.toString('utf8'));
 
     if (event === 'payment.captured') {
       const paymentEntity = payload.payment.entity;

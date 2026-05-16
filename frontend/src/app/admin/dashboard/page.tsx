@@ -5,10 +5,10 @@ import { api } from '@/lib/api';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
 import { useRouter } from 'next/navigation';
-import { 
-  FileQuestion, Package, Users, ShieldCheck, 
-  BookOpen, BarChart2, Megaphone, Settings, 
-  AlertCircle, CheckCircle2, UserPlus, Scale
+import {
+  FileQuestion, Package, Users, ShieldCheck,
+  BookOpen, BarChart2, Megaphone, Settings,
+  AlertCircle, CheckCircle2, UserPlus, Scale, Calendar
 } from 'lucide-react';
 
 interface Stats {
@@ -35,7 +35,7 @@ interface Stats {
 export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
-  const { admin, logout } = useAuth();
+  const { user, logout } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -69,7 +69,7 @@ export default function DashboardPage() {
         <div>
           <div className="flex items-center gap-4 mb-3">
             <p className="text-sm uppercase tracking-widest text-forest font-medium">Administrator Privileges</p>
-            {admin?.role === 'SUPER_ADMIN' && (
+            {user?.role === 'SUPER_ADMIN' && (
               <button
                 onClick={() => {
                   logout();
@@ -199,6 +199,13 @@ export default function DashboardPage() {
                 </div>
                 <span className="text-[10px] uppercase tracking-widest text-ink/60 leading-relaxed mt-auto">1000-day company lifecycles</span>
               </Link>
+              <Link href="/admin/interviews" className="border border-hairline p-5 bg-white hover:border-forest hover:shadow-md shadow-sm transition-all group flex flex-col">
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="group-hover:scale-110 transition-transform text-ink/40 group-hover:text-forest"><Calendar size={22} strokeWidth={1.5} /></span>
+                  <span className="font-serif text-lg font-bold group-hover:text-forest transition-colors">Interviews</span>
+                </div>
+                <span className="text-[10px] uppercase tracking-widest text-ink/60 leading-relaxed mt-auto">Slots, bookings & video scoring</span>
+              </Link>
               <Link href="/admin/announcements" className="border border-hairline p-5 bg-white hover:border-forest hover:shadow-md shadow-sm transition-all group flex flex-col">
                 <div className="flex items-center gap-3 mb-3">
                   <span className="group-hover:scale-110 transition-transform text-ink/40 group-hover:text-forest"><Megaphone size={22} strokeWidth={1.5} /></span>
@@ -288,7 +295,7 @@ export default function DashboardPage() {
 
 
       {/* Standalone Route for Danger Zone */}
-      {admin?.role === 'SUPER_ADMIN' && (
+      {user?.role === 'SUPER_ADMIN' && (
         <section className="mt-16 bg-white border border-terracotta/10 hover:border-terracotta/50 shadow-sm transition-all group p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
           <div className="max-w-xl">
             <h2 className="font-serif text-3xl font-bold text-terracotta mb-2 group-hover:text-terracotta transition-colors flex items-center gap-3">

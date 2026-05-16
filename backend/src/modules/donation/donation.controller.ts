@@ -1,6 +1,6 @@
-import { Controller, Post, Get, Body, Query, Headers, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Body, Query, Headers, Req, UseGuards } from '@nestjs/common';
 import { DonationService } from './donation.service';
-import { JwtAuthGuard } from '../auth/guards';
+import { AdminGuard } from '../auth/guards';
 
 @Controller('api')
 export class DonationController {
@@ -16,9 +16,11 @@ export class DonationController {
   @Post('support/webhook')
   async webhook(
     @Headers('x-razorpay-signature') signature: string,
+    @Req() req: any,
     @Body() body: any,
   ) {
-    return this.donationService.handleWebhook(signature, body);
+    const rawBody: Buffer | undefined = req.rawBody;
+    return this.donationService.handleWebhook(signature, rawBody ?? body);
   }
 
   @Get('support/stats')
@@ -28,7 +30,7 @@ export class DonationController {
 
   // ─── Admin ─────────────────────────────────────────
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Get('admin/support')
   async getDonations(
     @Query('page') page?: string,

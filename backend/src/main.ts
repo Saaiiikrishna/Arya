@@ -12,20 +12,25 @@ async function autoSeed(app: any) {
   try {
     const prisma = app.get(PrismaService);
 
-    // Ensure default admin exists
-    const adminPassword = await bcrypt.hash('admin123456', 12);
-    await prisma.admin.upsert({
-      where: { email: 'admin@arya.com' },
-      update: {},
-      create: {
-        email: 'admin@arya.com',
-        passwordHash: adminPassword,
-        firstName: 'Super',
-        lastName: 'Admin',
-        role: 'SUPER_ADMIN',
-      },
-    });
-    logger.log('Admin account verified: admin@arya.com');
+    const adminEmail = process.env.SEED_ADMIN_EMAIL;
+    const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+    if (!adminEmail || !adminPassword) {
+      logger.warn('SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD not set — skipping admin seed');
+    } else {
+      const hash = await bcrypt.hash(adminPassword, 12);
+      await prisma.admin.upsert({
+        where: { email: adminEmail },
+        update: {},
+        create: {
+          email: adminEmail,
+          passwordHash: hash,
+          firstName: 'Super',
+          lastName: 'Admin',
+          role: 'SUPER_ADMIN',
+        },
+      });
+      logger.log(`Admin account verified: ${adminEmail}`);
+    }
 
     // Ensure Batch 1 exists
     const batch = await prisma.batch.upsert({
@@ -34,40 +39,54 @@ async function autoSeed(app: any) {
       create: { batchNumber: 1 },
     });
 
-    // Ensure test applicant exists
-    await prisma.applicant.upsert({
-      where: { email: 'test@arya.com' },
-      update: {},
-      create: {
-        email: 'test@arya.com',
-        firstName: 'Test',
-        lastName: 'Founder',
-        phone: '+919999999999',
-        accessToken: '00000000-0000-4000-a000-000000000001',
-        batchId: batch.id,
-        status: 'PENDING',
-        city: 'Hyderabad',
-        age: 28,
-        vocation: 'Full-Stack Engineer & Product Builder',
-        obsession: 'Democratizing access to startup infrastructure for first-generation founders in India.',
-        heresy: 'Most accelerators optimize for investor returns, not founder success. The model is broken.',
-        scarTissue: 'Built a SaaS product that reached 500 users but failed to monetize. Shut down after 14 months.',
-      } as any,
-    });
-    logger.log('Test account verified: test@arya.com');
+    // Ensure test applicant exists (only when explicitly enabled via env flag)
+    if (process.env.ENABLE_TEST_SEED === 'true') {
+      const existing = await prisma.applicant.findUnique({ where: { email: 'test@arya.com' } });
+      await prisma.applicant.upsert({
+        where: { email: 'test@arya.com' },
+        update: {},
+        create: {
+          email: 'test@arya.com',
+          firstName: 'Test',
+          lastName: 'Founder',
+          phone: '+919999999999',
+          accessToken: existing?.accessToken ?? uuidv4(),
+          batchId: batch.id,
+          status: 'PENDING',
+          city: 'Hyderabad',
+          age: 28,
+          vocation: 'Full-Stack Engineer & Product Builder',
+          obsession: 'Democratizing access to startup infrastructure for first-generation founders in India.',
+          heresy: 'Most accelerators optimize for investor returns, not founder success. The model is broken.',
+          scarTissue: 'Built a SaaS product that reached 500 users but failed to monetize. Shut down after 14 months.',
+        } as any,
+      });
+      logger.log('Test account verified: test@arya.com');
+    }
   } catch (error) {
     logger.warn('Auto-seed skipped (non-fatal): ' + (error as any)?.message);
   }
 }
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { rawBody: true });
 
   const configService = app.get(ConfigService);
 
   // Security headers
   app.use(helmet({
-    contentSecurityPolicy: false, // Allow inline scripts for admin dashboard
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'https:'],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'", 'https:'],
+        objectSrc: ["'none'"],
+        frameSrc: ["'none'"],
+      },
+    },
     crossOriginEmbedderPolicy: false,
     crossOriginOpenerPolicy: false, // Prevents blocking Google Auth popups
     crossOriginResourcePolicy: false, // Allows cross-origin API fetches
@@ -107,11 +126,11 @@ async function bootstrap() {
   });
 
   const port = configService.get<number>('PORT', 3001);
+
+  // Auto-seed critical data (idempotent) — must complete before accepting traffic
+  await autoSeed(app);
   await app.listen(port);
   console.log(`🚀 Arya Backend running on port ${port}`);
-
-  // Auto-seed critical data (idempotent)
-  await autoSeed(app);
 }
 
 bootstrap();

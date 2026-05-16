@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, Logger, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma';
-import { ApplicantStatus } from '@prisma/client';
+import { ApplicantStatus, DepartmentRole } from '@prisma/client';
 
 interface ApplicantWithAnswers {
   id: string;
@@ -12,6 +12,14 @@ interface TeamAssignment {
   memberIds: string[];
 }
 
+const ALL_DEPARTMENTS: DepartmentRole[] = [
+  'PRODUCT',
+  'OPERATIONS',
+  'RESOURCES',
+  'SALES_MARKETING',
+  'FOUNDING_OTHER',
+];
+
 @Injectable()
 export class TeamService {
   private readonly logger = new Logger(TeamService.name);
@@ -20,23 +28,14 @@ export class TeamService {
 
   /**
    * Form teams for a batch using criteria-based scoring and balanced partitioning.
-   * 
-   * Algorithm:
-   * 1. Get all eligible applicants in the batch with their answers
-   * 2. Compute a composite feature vector for each applicant
-   * 3. Use greedy balanced partitioning to create teams of minSize–maxSize
-   * 4. Save teams and assign members
    */
   async formTeams(batchId: string) {
-    const batch = await this.prisma.batch.findUnique({
-      where: { id: batchId },
-    });
+    const batch = await this.prisma.batch.findUnique({ where: { id: batchId } });
     if (!batch) throw new NotFoundException('Batch not found');
 
     const minSize = batch.teamMinSize;
     const maxSize = batch.teamMaxSize;
 
-    // Get eligible applicants with answers
     const applicants = await this.prisma.applicant.findMany({
       where: { batchId, status: { in: ['PENDING', 'ELIGIBLE', 'ACTIVE'] } },
       include: { answers: true },
@@ -47,18 +46,16 @@ export class TeamService {
       return { teamsCreated: 0, message: 'Not enough applicants for team formation' };
     }
 
-    // Delete existing teams for this batch (for re-matching)
-    await this.prisma.applicant.updateMany({
-      where: { batchId },
-      data: { teamId: null },
-    });
-    await this.prisma.team.deleteMany({ where: { batchId } });
-
-    // Run team formation algorithm
     const assignments = this.balancedPartition(applicants, minSize, maxSize);
 
-    // Save teams in transaction
     const teams = await this.prisma.$transaction(async (tx) => {
+      // Clear existing teams inside the transaction for atomicity
+      await tx.applicant.updateMany({
+        where: { batchId },
+        data: { teamId: null, department: null },
+      });
+      await tx.team.deleteMany({ where: { batchId } });
+
       const createdTeams = [];
 
       for (const assignment of assignments) {
@@ -84,7 +81,6 @@ export class TeamService {
         createdTeams.push(team);
       }
 
-      // Update batch status
       await tx.batch.update({
         where: { id: batchId },
         data: { status: 'PROCESSING' },
@@ -97,29 +93,24 @@ export class TeamService {
     return { teamsCreated: teams.length, teams };
   }
 
-  /**
-   * Balanced partition algorithm: distributes applicants into teams of minSize–maxSize.
-   * Shuffles applicants for randomness, then fills teams sequentially.
-   * Future: can be enhanced with scoring / compatibility matching.
-   */
   private balancedPartition(
     applicants: ApplicantWithAnswers[],
     minSize: number,
     maxSize: number,
   ): TeamAssignment[] {
-    // Shuffle for random distribution
-    const shuffled = [...applicants].sort(() => Math.random() - 0.5);
+    const shuffled = [...applicants];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
     const totalApplicants = shuffled.length;
 
-    // Calculate optimal team size and count
     const targetSize = Math.floor((minSize + maxSize) / 2);
-    let numTeams = Math.floor(totalApplicants / targetSize);
-    if (numTeams === 0) numTeams = 1;
+    let numTeams = Math.max(1, Math.floor(totalApplicants / targetSize));
 
-    // Adjust if remainder would be too small
     const remainder = totalApplicants - numTeams * targetSize;
-    if (remainder > 0 && remainder < minSize) {
-      // Distribute remainder across existing teams
+    if (remainder > 0 && remainder < minSize && numTeams > 1) {
+      numTeams -= 1;
     }
 
     const assignments: TeamAssignment[] = [];
@@ -138,41 +129,34 @@ export class TeamService {
       index += teamSize;
     }
 
-    // Handle any remaining applicants
     while (index < totalApplicants) {
       const smallestTeam = assignments.reduce((prev, curr) =>
         prev.memberIds.length <= curr.memberIds.length ? prev : curr,
       );
-      if (smallestTeam.memberIds.length < maxSize) {
-        smallestTeam.memberIds.push(shuffled[index].id);
-      }
+      smallestTeam.memberIds.push(shuffled[index].id);
       index++;
     }
 
     return assignments;
   }
 
-  /**
-   * Match new users (from backfill) into existing teams.
-   * Finds the team with the fewest members and adds the user there.
-   */
   async matchToExistingTeam(applicantId: string, batchId: string) {
-    const teams = await this.prisma.team.findMany({
-      where: { batchId },
-      include: { _count: { select: { members: true } } },
-      orderBy: { memberCount: 'asc' },
-    });
+    const [teams, batch] = await Promise.all([
+      this.prisma.team.findMany({
+        where: { batchId },
+        include: { _count: { select: { members: true } } },
+      }),
+      this.prisma.batch.findUnique({ where: { id: batchId } }),
+    ]);
 
     if (teams.length === 0) {
-      this.logger.warn(`No teams exist for batch. Cannot match applicant.`);
+      this.logger.warn('No teams exist for batch. Cannot match applicant.');
       return null;
     }
 
-    // Find team with fewest members that hasn't hit max
-    const batch = await this.prisma.batch.findUnique({ where: { id: batchId } });
     const maxSize = batch?.teamMaxSize ?? 25;
-
-    const targetTeam = teams.find((t) => t._count.members < maxSize);
+    const sorted = teams.sort((a, b) => a._count.members - b._count.members);
+    const targetTeam = sorted.find((t) => t._count.members < maxSize);
     if (!targetTeam) {
       this.logger.warn('All teams are at max capacity');
       return null;
@@ -193,7 +177,7 @@ export class TeamService {
     return targetTeam;
   }
 
-  // ─── Admin endpoints ──────────────────────────────
+  // ─── Admin endpoints ──────────────────────────────────────
 
   async findByBatch(batchId: string) {
     return this.prisma.team.findMany({
@@ -207,6 +191,7 @@ export class TeamService {
             lastName: true,
             email: true,
             status: true,
+            department: true,
             consentGiven: true,
           },
         },
@@ -230,22 +215,120 @@ export class TeamService {
     if (!team) throw new NotFoundException('Team not found');
     return team;
   }
-  // ─── Team Requests ─────────────────────────────────
 
-  async createTeamRequest(teamId: string, requesterId: string, body: { type: string; title: string; details: string }) {
+  // ─── Department management ────────────────────────────────
+
+  async getTeamDepartments(teamId: string) {
+    const members = await this.prisma.applicant.findMany({
+      where: { teamId, status: { not: 'REMOVED' } },
+      select: { id: true, firstName: true, lastName: true, avatarUrl: true, department: true },
+    });
+
+    const slots = ALL_DEPARTMENTS.map((dept) => ({
+      department: dept,
+      member: members.find((m) => m.department === dept) ?? null,
+    }));
+
+    const filled = slots.filter((s) => s.member !== null).length;
+
+    return {
+      slots,
+      filledCount: filled,
+      totalRequired: ALL_DEPARTMENTS.length,
+      isComplete: filled === ALL_DEPARTMENTS.length,
+    };
+  }
+
+  async setMemberDepartment(teamId: string, applicantId: string, callerId: string, department: DepartmentRole) {
+    // Only the member themselves can claim a dept slot
+    if (applicantId !== callerId) throw new ForbiddenException('You can only set your own department');
+
+    const applicant = await this.prisma.applicant.findUnique({ where: { id: applicantId } });
+    if (!applicant || applicant.teamId !== teamId) throw new ForbiddenException('You are not in this team');
+
+    const team = await this.prisma.team.findUnique({ where: { id: teamId } });
+    if (!team) throw new NotFoundException('Team not found');
+    if (team.isLocked) throw new BadRequestException('Team is locked — departments cannot be changed');
+
+    // Ensure the dept slot is not already taken by another member
+    const existing = await this.prisma.applicant.findFirst({
+      where: { teamId, department, id: { not: applicantId } },
+    });
+    if (existing) {
+      throw new BadRequestException(
+        `${department} is already claimed by ${existing.firstName} ${existing.lastName}`,
+      );
+    }
+
+    return this.prisma.applicant.update({
+      where: { id: applicantId },
+      data: { department },
+      select: { id: true, firstName: true, lastName: true, department: true },
+    });
+  }
+
+  async lockTeam(teamId: string, adminId: string) {
+    const team = await this.prisma.team.findUnique({
+      where: { id: teamId },
+      include: { members: { where: { status: { not: 'REMOVED' } } } },
+    });
+    if (!team) throw new NotFoundException('Team not found');
+    if (team.isLocked) throw new BadRequestException('Team is already locked');
+
+    // Validate all 5 departments are filled
+    const filledDepts = new Set(
+      team.members.map((m) => m.department).filter(Boolean),
+    );
+    const missing = ALL_DEPARTMENTS.filter((d) => !filledDepts.has(d));
+    if (missing.length > 0) {
+      throw new BadRequestException(
+        `Cannot lock team: missing department roles: ${missing.join(', ')}`,
+      );
+    }
+
+    return this.prisma.team.update({
+      where: { id: teamId },
+      data: { isLocked: true },
+    });
+  }
+
+  // ─── Team Requests ────────────────────────────────────────
+
+  async createTeamRequest(
+    teamId: string,
+    requesterId: string,
+    body: { type: string; title: string; details: string; targetTeamId?: string },
+  ) {
+    const ALLOWED_TYPES = ['SWAP', 'RESOURCE', 'COMPLAINT', 'SEPARATION', 'JOIN_EXISTING', 'CREATE_NEW'];
+    if (!ALLOWED_TYPES.includes(body.type)) {
+      throw new BadRequestException(`Invalid request type. Allowed: ${ALLOWED_TYPES.join(', ')}`);
+    }
+
     const team = await this.prisma.team.findUnique({ where: { id: teamId } });
     if (!team) throw new NotFoundException('Team not found');
 
     const requester = await this.prisma.applicant.findUnique({ where: { id: requesterId } });
     if (!requester || requester.teamId !== teamId) throw new ForbiddenException('You are not in this team');
 
-    return (this.prisma as any).teamRequest.create({
+    if (body.type === 'JOIN_EXISTING' && !body.targetTeamId) {
+      throw new BadRequestException('targetTeamId is required for JOIN_EXISTING requests');
+    }
+
+    if (body.targetTeamId) {
+      const targetTeam = await this.prisma.team.findUnique({ where: { id: body.targetTeamId } });
+      if (!targetTeam || targetTeam.batchId !== team.batchId) {
+        throw new BadRequestException('Target team not found in this batch');
+      }
+    }
+
+    return this.prisma.teamRequest.create({
       data: {
         teamId,
         requesterId,
-        type: body.type,
+        type: body.type as any,
         title: body.title,
         details: body.details,
+        targetTeamId: body.targetTeamId ?? null,
       },
     });
   }
@@ -254,23 +337,19 @@ export class TeamService {
     const where: any = { teamId };
     if (status) where.status = status;
 
-    const requests = await (this.prisma as any).teamRequest.findMany({
+    const requests = await this.prisma.teamRequest.findMany({
       where,
       orderBy: { createdAt: 'desc' },
     });
 
-    // Enrich with requester info
-    const requesterIds = [...new Set(requests.map((r: any) => r.requesterId))] as string[];
+    const requesterIds = [...new Set(requests.map((r) => r.requesterId))] as string[];
     const applicants = await this.prisma.applicant.findMany({
       where: { id: { in: requesterIds } },
       select: { id: true, firstName: true, lastName: true, avatarUrl: true },
     });
-    const applicantMap = new Map(applicants.map(a => [a.id, a]));
+    const applicantMap = new Map(applicants.map((a) => [a.id, a]));
 
-    return requests.map((r: any) => ({
-      ...r,
-      requester: applicantMap.get(r.requesterId) || null,
-    }));
+    return requests.map((r) => ({ ...r, requester: applicantMap.get(r.requesterId) ?? null }));
   }
 
   async resolveTeamRequest(teamId: string, reqId: string, resolverId: string, status: string) {
@@ -278,27 +357,107 @@ export class TeamService {
       throw new BadRequestException('Status must be APPROVED or REJECTED');
     }
 
-    // Verify resolver is team leader
     const team = await this.prisma.team.findUnique({ where: { id: teamId } });
     if (!team) throw new NotFoundException('Team not found');
-    if ((team as any).leaderId !== resolverId) {
+
+    // Standard requests (SWAP/RESOURCE/COMPLAINT) resolved by team leader
+    if (team.leaderId !== resolverId) {
       throw new ForbiddenException('Only the team leader can resolve requests');
     }
 
-    const request = await (this.prisma as any).teamRequest.findUnique({ where: { id: reqId } });
+    const request = await this.prisma.teamRequest.findUnique({ where: { id: reqId } });
     if (!request || request.teamId !== teamId) throw new NotFoundException('Request not found');
 
-    return (this.prisma as any).teamRequest.update({
+    // Change-type requests should go through the admin endpoint
+    if (['SEPARATION', 'JOIN_EXISTING', 'CREATE_NEW'].includes(request.type)) {
+      throw new ForbiddenException('Team change requests must be resolved by an admin');
+    }
+
+    return this.prisma.teamRequest.update({
       where: { id: reqId },
-      data: {
-        status,
-        resolvedById: resolverId,
-        resolvedAt: new Date(),
-      },
+      data: { status: status as any, resolvedById: resolverId, resolvedAt: new Date() },
     });
   }
 
-  // ─── Leader: Edit Project ─────────────────────────
+  /**
+   * Admin resolution for team change requests.
+   * On approval of SEPARATION or JOIN_EXISTING, physically moves the member.
+   */
+  async adminResolveTeamRequest(reqId: string, adminId: string, status: string) {
+    if (!['APPROVED', 'REJECTED'].includes(status)) {
+      throw new BadRequestException('Status must be APPROVED or REJECTED');
+    }
+
+    const request = await this.prisma.teamRequest.findUnique({ where: { id: reqId } });
+    if (!request) throw new NotFoundException('Request not found');
+    if (request.status !== 'PENDING') throw new BadRequestException('Request has already been resolved');
+
+    if (status === 'APPROVED') {
+      await this.prisma.$transaction(async (tx) => {
+        if (request.type === 'SEPARATION') {
+          // Remove from current team
+          const member = await tx.applicant.findUnique({ where: { id: request.requesterId } });
+          if (member?.teamId) {
+            await tx.team.update({
+              where: { id: member.teamId },
+              data: { memberCount: { decrement: 1 } },
+            });
+          }
+          await tx.applicant.update({
+            where: { id: request.requesterId },
+            data: { teamId: null, department: null },
+          });
+        } else if (request.type === 'JOIN_EXISTING') {
+          if (!request.targetTeamId) throw new BadRequestException('No target team specified');
+
+          const [targetTeam, sourceTeam] = await Promise.all([
+            tx.team.findUnique({
+              where: { id: request.targetTeamId },
+              include: { _count: { select: { members: true } } },
+            }),
+            tx.team.findUnique({ where: { id: request.teamId } }),
+          ]);
+
+          if (!sourceTeam) throw new NotFoundException('Source team not found');
+          const batchData = await tx.batch.findUnique({ where: { id: sourceTeam.batchId } });
+          const maxSize = batchData?.teamMaxSize ?? 25;
+
+          if (!targetTeam) throw new NotFoundException('Target team not found');
+          if (targetTeam._count.members >= maxSize) {
+            throw new BadRequestException('Target team is at max capacity');
+          }
+          if (targetTeam.isLocked) {
+            throw new BadRequestException('Target team is locked and cannot accept new members');
+          }
+
+          // Remove from old team, add to new team
+          const member = await tx.applicant.findUnique({ where: { id: request.requesterId } });
+          if (member?.teamId) {
+            await tx.team.update({
+              where: { id: member.teamId },
+              data: { memberCount: { decrement: 1 } },
+            });
+          }
+          await tx.applicant.update({
+            where: { id: request.requesterId },
+            data: { teamId: request.targetTeamId, department: null },
+          });
+          await tx.team.update({
+            where: { id: request.targetTeamId },
+            data: { memberCount: { increment: 1 } },
+          });
+        }
+        // CREATE_NEW is handled manually by admins (requires 5 members + all depts)
+      });
+    }
+
+    return this.prisma.teamRequest.update({
+      where: { id: reqId },
+      data: { status: status as any, resolvedById: adminId, resolvedAt: new Date() },
+    });
+  }
+
+  // ─── Leader: Edit Project ──────────────────────────────────
 
   async updateProjectAsLeader(teamId: string, callerId: string, body: any) {
     const team = await this.prisma.team.findUnique({
@@ -306,12 +465,11 @@ export class TeamService {
       include: { project: true },
     });
     if (!team) throw new NotFoundException('Team not found');
-    if ((team as any).leaderId !== callerId) {
+    if (team.leaderId !== callerId) {
       throw new ForbiddenException('Only the team leader can edit project details');
     }
 
     if (team.project) {
-      // Update existing project
       return this.prisma.project.update({
         where: { id: team.project.id },
         data: {
@@ -322,7 +480,6 @@ export class TeamService {
         },
       });
     } else {
-      // Create new project
       return this.prisma.project.create({
         data: {
           teamId,
@@ -335,4 +492,3 @@ export class TeamService {
     }
   }
 }
-

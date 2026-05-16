@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { QuestionService } from './question.service';
 import { CreateQuestionDto, UpdateQuestionDto, ReorderQuestionsDto } from './dto';
-import { JwtAuthGuard } from '../auth/guards';
+import { AdminGuard } from '../auth/guards';
 import { PhaseTag } from '@prisma/client';
 
 @Controller('api')
@@ -25,13 +25,13 @@ export class QuestionController {
   }
 
   // ─── Admin ─────────────────────────────────────────
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Post('admin/questions')
   async create(@Body() dto: CreateQuestionDto) {
     return this.questionService.create(dto);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Get('admin/questions')
   async findAll(
     @Query('phase') phase?: PhaseTag,
@@ -40,25 +40,25 @@ export class QuestionController {
     return this.questionService.findAll(phase, activeOnly !== 'false');
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Get('admin/questions/:id')
   async findOne(@Param('id') id: string) {
     return this.questionService.findOne(id);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Put('admin/questions/:id')
   async update(@Param('id') id: string, @Body() dto: UpdateQuestionDto) {
     return this.questionService.update(id, dto);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Delete('admin/questions/:id')
   async remove(@Param('id') id: string) {
     return this.questionService.remove(id);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Put('admin/questions/reorder')
   async reorder(@Body() dto: ReorderQuestionsDto) {
     return this.questionService.reorder(dto);

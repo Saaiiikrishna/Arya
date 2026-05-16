@@ -1,39 +1,63 @@
-import { Controller, Get, Post, Patch, Param, Body, UseGuards, Req, Query } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Req, Query } from '@nestjs/common';
 import { TeamService } from './team.service';
-import { JwtAuthGuard } from '../auth/guards';
+import { JwtAuthGuard, AdminGuard } from '../auth/guards';
 
 @Controller('api')
-@UseGuards(JwtAuthGuard)
 export class TeamController {
   constructor(private readonly teamService: TeamService) {}
 
-  // ─── Admin team endpoints ────────────────────────────
+  // ─── Admin team endpoints ─────────────────────────────────
+
+  @UseGuards(AdminGuard)
   @Get('admin/teams/batch/:batchId')
   async findByBatch(@Param('batchId') batchId: string) {
     return this.teamService.findByBatch(batchId);
   }
 
+  @UseGuards(AdminGuard)
   @Get('admin/teams/:id')
   async findOne(@Param('id') id: string) {
     return this.teamService.findOne(id);
   }
 
+  @UseGuards(AdminGuard)
   @Post('admin/teams/form/:batchId')
   async formTeams(@Param('batchId') batchId: string) {
     return this.teamService.formTeams(batchId);
   }
 
-  // ─── Team Requests (Member endpoints) ─────────────────
+  @UseGuards(AdminGuard)
+  @Post('admin/teams/:id/lock')
+  async lockTeam(@Param('id') teamId: string, @Req() req: any) {
+    const adminId = req.user.id || req.user.sub;
+    return this.teamService.lockTeam(teamId, adminId);
+  }
+
+  @UseGuards(AdminGuard)
+  @Patch('admin/teams/requests/:reqId/resolve')
+  async adminResolveRequest(
+    @Param('reqId') reqId: string,
+    @Req() req: any,
+    @Body('status') status: string,
+  ) {
+    const adminId = req.user.id || req.user.sub;
+    return this.teamService.adminResolveTeamRequest(reqId, adminId, status);
+  }
+
+  // ─── Team Requests (Member endpoints) ─────────────────────
+
+  @UseGuards(JwtAuthGuard)
   @Post('teams/:id/requests')
   async createRequest(
     @Param('id') teamId: string,
     @Req() req: any,
-    @Body() body: { type: string; title: string; details: string },
+    @Body() body: { type: string; title: string; details: string; targetTeamId?: string },
   ) {
     const requesterId = req.user.id || req.user.sub;
     return this.teamService.createTeamRequest(teamId, requesterId, body);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Get('teams/:id/requests')
   async getRequests(
     @Param('id') teamId: string,
@@ -42,7 +66,7 @@ export class TeamController {
     return this.teamService.getTeamRequests(teamId, status);
   }
 
-  // Leader approves/rejects a request
+  @UseGuards(JwtAuthGuard)
   @Patch('teams/:id/requests/:reqId')
   async resolveRequest(
     @Param('id') teamId: string,
@@ -54,7 +78,28 @@ export class TeamController {
     return this.teamService.resolveTeamRequest(teamId, reqId, resolverId, status);
   }
 
-  // ─── Leader: Edit Project ────────────────────────────
+  // ─── Department management (Member endpoints) ──────────────
+
+  @UseGuards(JwtAuthGuard)
+  @Get('teams/:id/departments')
+  async getDepartments(@Param('id') teamId: string) {
+    return this.teamService.getTeamDepartments(teamId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('teams/:id/my-department')
+  async claimDepartment(
+    @Param('id') teamId: string,
+    @Req() req: any,
+    @Body('department') department: string,
+  ) {
+    const callerId = req.user.id || req.user.sub;
+    return this.teamService.setMemberDepartment(teamId, callerId, callerId, department as any);
+  }
+
+  // ─── Leader: Edit Project ──────────────────────────────────
+
+  @UseGuards(JwtAuthGuard)
   @Patch('teams/:id/project')
   async updateProject(
     @Param('id') teamId: string,

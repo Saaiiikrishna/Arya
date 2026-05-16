@@ -2,7 +2,7 @@ import {
   Controller, Get, Post, Patch, Param, Body, UseGuards, Query,
 } from '@nestjs/common';
 import { InvestorService } from './investor.service';
-import { JwtAuthGuard } from '../auth/guards';
+import { JwtAuthGuard, AdminGuard } from '../auth/guards';
 
 @Controller('api')
 export class InvestorController {
@@ -45,7 +45,7 @@ export class InvestorController {
 
   // ─── Admin ─────────────────────────────────────────
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Get('admin/investors')
   async findAll(@Query('isApproved') isApproved?: string) {
     return this.investorService.findAll({
@@ -53,25 +53,25 @@ export class InvestorController {
     });
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Patch('admin/investors/:id/approve')
   async approve(@Param('id') id: string) {
     return this.investorService.approve(id);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Post('admin/showcases')
   async createShowcase(@Body() data: any) {
     return this.investorService.createShowcase(data);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Patch('admin/showcases/:id')
   async updateShowcase(@Param('id') id: string, @Body() data: any) {
     return this.investorService.updateShowcase(id, data);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Get('admin/meeting-requests')
   async getMeetingRequests(
     @Query('showcaseId') showcaseId?: string,
@@ -80,7 +80,7 @@ export class InvestorController {
     return this.investorService.getMeetingRequests(showcaseId, investorId);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Patch('admin/meeting-requests/:id/status')
   async updateMeetingStatus(
     @Param('id') id: string,

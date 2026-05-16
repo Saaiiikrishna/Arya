@@ -273,8 +273,7 @@ export class ApplicantService {
           },
         });
       } catch (profileError) {
-        console.error('[submitDossier] MatchingProfile upsert error:', profileError);
-        // Don't fail the entire submission for matching profile issues
+        this.logger.error('MatchingProfile upsert failed (non-fatal)', (profileError as any)?.message);
       }
     }
 
@@ -432,30 +431,36 @@ export class ApplicantService {
     });
     const answeredQuestionIds = new Set(existingAnswers.map((a) => a.questionId));
 
-    // Build pending list
-    const pending = [];
-    for (const inst of instructions) {
-      const unansweredIds = inst.additionalQuestionIds.filter(
-        (qId) => !answeredQuestionIds.has(qId),
-      );
-      if (unansweredIds.length > 0) {
-        // Fetch the actual question objects
-        const questions = await this.prisma.question.findMany({
-          where: { id: { in: unansweredIds } },
+    // Collect all unanswered question IDs across all instructions in one pass
+    const instructionUnanswered = instructions.map((inst) => ({
+      inst,
+      unansweredIds: inst.additionalQuestionIds.filter((qId) => !answeredQuestionIds.has(qId)),
+    }));
+
+    const allUnansweredIds = [...new Set(instructionUnanswered.flatMap((x) => x.unansweredIds))];
+
+    // Single query to fetch all required questions
+    const allQuestions = allUnansweredIds.length > 0
+      ? await this.prisma.question.findMany({
+          where: { id: { in: allUnansweredIds } },
           orderBy: { sortOrder: 'asc' },
-        });
-        pending.push({
-          instructionId: inst.id,
-          title: inst.title,
-          content: inst.content,
-          explanation: inst.explanation,
-          deadline: inst.deadline,
-          questions,
-          answeredCount: inst.additionalQuestionIds.length - unansweredIds.length,
-          totalCount: inst.additionalQuestionIds.length,
-        });
-      }
-    }
+        })
+      : [];
+    const questionMap = new Map(allQuestions.map((q) => [q.id, q]));
+
+    // Build pending list from cached question map
+    const pending = instructionUnanswered
+      .filter(({ unansweredIds }) => unansweredIds.length > 0)
+      .map(({ inst, unansweredIds }) => ({
+        instructionId: inst.id,
+        title: inst.title,
+        content: inst.content,
+        explanation: inst.explanation,
+        deadline: inst.deadline,
+        questions: unansweredIds.map((id) => questionMap.get(id)).filter(Boolean),
+        answeredCount: inst.additionalQuestionIds.length - unansweredIds.length,
+        totalCount: inst.additionalQuestionIds.length,
+      }));
 
     return { instructions: pending };
   }

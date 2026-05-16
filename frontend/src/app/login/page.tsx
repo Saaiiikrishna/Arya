@@ -13,28 +13,32 @@ const TEST_EMAIL = 'test@arya.com';
 function LoginContent() {
   const router = useRouter();
   const { settings } = useSettings();
-  const { isAuthenticated, admin, loading: authLoading, role } = useAuth();
+  const { isAuthenticated, user, loading: authLoading, role } = useAuth();
   const logoMode = settings?.logoMode || 'text';
   
   const [error, setError] = useState<string | null>(null);
   const [authMode, setAuthMode] = useState<'choose' | 'otp-email' | 'otp-verify'>('choose');
   const [otpEmail, setOtpEmail] = useState('');
   const [mounted, setMounted] = useState(false);
-  
+  const [otpDigits, setOtpDigits] = useState(['', '', '', '', '', '']);
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [testOtpCode, setTestOtpCode] = useState<string | null>(null);
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
   useEffect(() => {
     setMounted(true);
   }, []);
 
   // Redirect authenticated users — prevent re-login
   useEffect(() => {
-    if (!authLoading && isAuthenticated && admin) {
+    if (!authLoading && isAuthenticated && user) {
       if (role === 'APPLICANT') {
         router.push('/apply');
       } else {
         router.push('/admin/dashboard');
       }
     }
-  }, [authLoading, isAuthenticated, admin, role, router]);
+  }, [authLoading, isAuthenticated, user, role, router]);
 
   // Show loading while checking auth
   if (authLoading) {
@@ -46,29 +50,25 @@ function LoginContent() {
   }
 
   // Show redirect message if authenticated
-  if (isAuthenticated && admin) {
+  if (isAuthenticated && user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-parchment p-8">
         <div className="bg-white border border-hairline p-12 max-w-md w-full text-center shadow-sm">
           <h2 className="font-serif text-2xl font-bold mb-4 text-forest">Active Session</h2>
           <p className="text-ink/60 mb-6 text-sm">
-            You are logged in as <strong>{admin.email}</strong>.
+            You are logged in as <strong>{user.email}</strong>.
           </p>
           <p className="text-xs uppercase tracking-widest text-forest font-bold animate-pulse">Redirecting...</p>
         </div>
       </div>
     );
   }
-  const [otpDigits, setOtpDigits] = useState(['', '', '', '', '', '']);
-  const [otpLoading, setOtpLoading] = useState(false);
-  const [testOtpCode, setTestOtpCode] = useState<string | null>(null);
-  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   const handleGoogleSuccess = async (credentialResponse: any) => {
     try {
       const data = await api.googleLogin(credentialResponse.credential);
       if (data.accessToken) {
-        localStorage.setItem('arya_token', data.accessToken);
+        api.setToken(data.accessToken);
       }
       window.location.href = '/apply';
     } catch (e) {
@@ -145,7 +145,7 @@ function LoginContent() {
     try {
       const data = await api.verifyOtp(otpEmail, code);
       if (data.accessToken) {
-        localStorage.setItem('arya_token', data.accessToken);
+        api.setToken(data.accessToken);
       }
       window.location.href = '/apply';
     } catch (e: any) {

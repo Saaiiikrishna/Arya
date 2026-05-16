@@ -1,8 +1,8 @@
 import {
-  Controller, Get, Post, Patch, Body, Param, Query, UseGuards,
+  Controller, Get, Post, Patch, Body, Param, Query, UseGuards, Req,
 } from '@nestjs/common';
 import { EquityService } from './equity.service';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { AdminGuard, JwtAuthGuard } from '../auth/guards';
 
 @Controller()
 export class EquityController {
@@ -10,15 +10,13 @@ export class EquityController {
 
   // ─── ADMIN ENDPOINTS ──────────────────────────────────────
 
-  /** Get equity dashboard stats */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Get('admin/equity/stats')
   getStats() {
     return this.equityService.getAdminStats();
   }
 
-  /** List all company entities */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Get('admin/equity/companies')
   listCompanies(
     @Query('status') status?: string,
@@ -32,15 +30,13 @@ export class EquityController {
     });
   }
 
-  /** Get full company detail with equity breakdown */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Get('admin/equity/companies/:id')
   getCompanyDetail(@Param('id') id: string) {
     return this.equityService.getCompanyDetail(id);
   }
 
-  /** Create a new company entity for a team */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Post('admin/equity/companies')
   createCompany(@Body() body: {
     teamId: string;
@@ -56,8 +52,7 @@ export class EquityController {
     return this.equityService.createCompany(body);
   }
 
-  /** Update company details */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Patch('admin/equity/companies/:id')
   updateCompany(
     @Param('id') id: string,
@@ -66,28 +61,27 @@ export class EquityController {
     return this.equityService.updateCompany(id, body);
   }
 
-  /** Start the 1000-day equity timer */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Post('admin/equity/companies/:id/start-timer')
   startTimer(
     @Param('id') id: string,
-    @Body() body: { adminId?: string },
+    @Req() req: any,
   ) {
-    return this.equityService.startTimer(id, body.adminId);
+    const adminId = req.user.id || req.user.sub;
+    return this.equityService.startTimer(id, adminId);
   }
 
-  /** Execute equity handover (transfer platform stake to founders) */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Post('admin/equity/companies/:id/handover')
   executeHandover(
     @Param('id') id: string,
-    @Body() body: { adminId?: string },
+    @Req() req: any,
   ) {
-    return this.equityService.executeHandover(id, body.adminId);
+    const adminId = req.user.id || req.user.sub;
+    return this.equityService.executeHandover(id, adminId);
   }
 
-  /** Update timers for all active companies (cron / manual trigger) */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Post('admin/equity/update-timers')
   updateTimers() {
     return this.equityService.updateTimers();
@@ -95,8 +89,7 @@ export class EquityController {
 
   // ─── AGREEMENT ENDPOINTS ──────────────────────────────────
 
-  /** Create a new equity agreement */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Post('admin/equity/agreements')
   createAgreement(@Body() body: {
     companyId: string;
@@ -110,40 +103,45 @@ export class EquityController {
     return this.equityService.createAgreement(body);
   }
 
-  /** Sign agreement as platform */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Post('admin/equity/agreements/:id/sign-platform')
   signPlatform(
     @Param('id') id: string,
-    @Body() body: { adminName: string },
+    @Req() req: any,
   ) {
-    return this.equityService.signAgreementPlatform(id, body.adminName);
+    const admin = req.user;
+    const adminName = [admin.firstName, admin.lastName].filter(Boolean).join(' ').trim() || admin.email;
+    return this.equityService.signAgreementPlatform(id, adminName);
   }
 
-  /** Sign agreement as founder */
+  /** Sign agreement as founder — requires JWT; identity derived from token */
+  @UseGuards(JwtAuthGuard)
   @Post('equity/agreements/:id/sign-founder')
   signFounder(
     @Param('id') id: string,
-    @Body() body: { applicantId: string },
+    @Req() req: any,
   ) {
-    return this.equityService.signAgreementFounder(id, body.applicantId);
+    const applicantId = req.user.id || req.user.sub;
+    return this.equityService.signAgreementFounder(id, applicantId);
   }
 
   // ─── EQUITY EVENT ENDPOINT ────────────────────────────────
 
-  /** Record a custom equity event */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Post('admin/equity/events')
-  recordEvent(@Body() body: {
-    companyId: string;
-    eventType: any;
-    fromHolder?: string;
-    toHolder?: string;
-    percentageAmount: number;
-    description: string;
-    metadata?: any;
-    triggeredBy?: string;
-  }) {
-    return this.equityService.recordEvent(body);
+  recordEvent(
+    @Req() req: any,
+    @Body() body: {
+      companyId: string;
+      eventType: any;
+      fromHolder?: string;
+      toHolder?: string;
+      percentageAmount: number;
+      description: string;
+      metadata?: any;
+    },
+  ) {
+    const triggeredBy = req.user.id || req.user.sub;
+    return this.equityService.recordEvent({ ...body, triggeredBy });
   }
 }

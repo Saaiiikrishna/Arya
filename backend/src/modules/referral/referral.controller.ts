@@ -1,7 +1,7 @@
-import { Controller, Post, Get, Patch, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Body, Param, Query, UseGuards, Req } from '@nestjs/common';
 import { ThrottlerGuard, Throttle } from '@nestjs/throttler';
 import { ReferralService } from './referral.service';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { JwtAuthGuard, AdminGuard } from '../auth/guards';
 
 @Controller()
 @UseGuards(ThrottlerGuard)
@@ -10,62 +10,47 @@ export class ReferralController {
 
   // ─── Public endpoints ────────────────────────────────
 
-  /**
-   * Verify a referrer by code, email, or phone.
-   * Used by the application form to display referrer name.
-   */
   @Post('referrals/verify')
-  @Throttle({ short: { limit: 5, ttl: 60000 } }) // Max 5 verification attempts per minute
+  @Throttle({ short: { limit: 5, ttl: 60000 } })
   async verifyReferrer(@Body('query') query: string) {
     return this.referralService.verifyReferrer(query);
   }
 
-  /**
-   * Set referrer on an applicant.
-   */
+  @UseGuards(JwtAuthGuard)
   @Post('referrals/set')
   async setReferrer(
-    @Body('applicantId') applicantId: string,
+    @Req() req: any,
     @Body('referrerId') referrerId: string,
   ) {
+    const applicantId = req.user.id || req.user.sub;
     return this.referralService.setReferrer(applicantId, referrerId);
   }
 
   // ─── Authenticated applicant endpoints ────────────────
 
-  /**
-   * Enable affiliate mode for the logged-in applicant.
-   */
   @UseGuards(JwtAuthGuard)
   @Post('referrals/enable-affiliate')
-  async enableAffiliate(@Body('applicantId') applicantId: string) {
+  async enableAffiliate(@Req() req: any) {
+    const applicantId = req.user.id || req.user.sub;
     return this.referralService.enableAffiliate(applicantId);
   }
 
-  /**
-   * Get own referral profile + list of people I referred.
-   */
   @UseGuards(JwtAuthGuard)
-  @Get('referrals/my-profile/:applicantId')
-  async getMyReferralProfile(@Param('applicantId') applicantId: string) {
+  @Get('referrals/my-profile')
+  async getMyReferralProfile(@Req() req: any) {
+    const applicantId = req.user.id || req.user.sub;
     return this.referralService.getMyReferralProfile(applicantId);
   }
 
   // ─── Admin endpoints ────────────────────────────────
 
-  /**
-   * Get referral dashboard stats (admin).
-   */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Get('admin/referrals/stats')
   async getAdminReferralStats() {
     return this.referralService.getAdminReferralStats();
   }
 
-  /**
-   * Get all referred applicants with pagination (admin).
-   */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Get('admin/referrals')
   async getAllReferrals(
     @Query('page') page?: string,
@@ -79,19 +64,13 @@ export class ReferralController {
     });
   }
 
-  /**
-   * Get detail for a specific affiliate (admin).
-   */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Get('admin/referrals/affiliate/:applicantId')
   async getAffiliateDetail(@Param('applicantId') applicantId: string) {
     return this.referralService.getAffiliateDetail(applicantId);
   }
 
-  /**
-   * Toggle affiliate active status (admin).
-   */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Patch('admin/referrals/affiliate/:applicantId/toggle')
   async toggleAffiliateStatus(
     @Param('applicantId') applicantId: string,

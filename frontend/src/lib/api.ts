@@ -11,19 +11,28 @@ class ApiClient {
 
   setToken(token: string | null) {
     this.token = token;
-    if (token) {
-      if (typeof window !== 'undefined') localStorage.setItem('arya_token', token);
-    } else {
-      if (typeof window !== 'undefined') localStorage.removeItem('arya_token');
-    }
+    // Access token kept in memory only — localStorage is readable by any XSS script
   }
 
   getToken(): string | null {
-    if (this.token) return this.token;
-    if (typeof window !== 'undefined') {
-      this.token = localStorage.getItem('arya_token');
-    }
     return this.token;
+  }
+
+  async refreshAccessToken(): Promise<boolean> {
+    if (typeof window === 'undefined') return false;
+    const refreshToken = sessionStorage.getItem('arya_refresh');
+    if (!refreshToken) return false;
+    try {
+      const data = await this.request<{ accessToken: string; refreshToken: string }>(
+        '/admin/auth/refresh',
+        { method: 'POST', body: { refreshToken } },
+      );
+      this.token = data.accessToken;
+      sessionStorage.setItem('arya_refresh', data.refreshToken);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private async request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
@@ -75,7 +84,7 @@ class ApiClient {
     }>('/admin/auth/login', { method: 'POST', body: { email, password } });
     this.setToken(data.accessToken);
     if (typeof window !== 'undefined') {
-      localStorage.setItem('arya_refresh', data.refreshToken);
+      sessionStorage.setItem('arya_refresh', data.refreshToken);
     }
     return data;
   }
@@ -88,17 +97,22 @@ class ApiClient {
     }>('/admin/auth/google/callback', { method: 'POST', body: { token } });
     this.setToken(data.accessToken);
     if (typeof window !== 'undefined') {
-      localStorage.setItem('arya_refresh', data.refreshToken);
+      sessionStorage.setItem('arya_refresh', data.refreshToken);
     }
     return data;
   }
 
   logout() {
-    this.setToken(null);
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('arya_refresh');
-      localStorage.removeItem('arya_admin');
+      const rt = sessionStorage.getItem('arya_refresh');
+      if (rt) {
+        // Fire-and-forget revocation — don't block the local logout on network
+        this.request('/admin/auth/logout', { method: 'POST', body: { refreshToken: rt } }).catch(() => {});
+      }
+      sessionStorage.removeItem('arya_refresh');
+      localStorage.removeItem('arya_admin'); // legacy key cleanup
     }
+    this.token = null;
   }
 
   // OTP Auth
@@ -117,7 +131,7 @@ class ApiClient {
     }>('/auth/otp/verify', { method: 'POST', body: { email, otp } });
     this.setToken(data.accessToken);
     if (typeof window !== 'undefined') {
-      localStorage.setItem('arya_refresh', data.refreshToken);
+      sessionStorage.setItem('arya_refresh', data.refreshToken);
     }
     return data;
   }
@@ -402,10 +416,10 @@ class ApiClient {
     return this.request<any>(`/chat/room/team/${teamId}`);
   }
 
-  async getUploadUrl(applicantId: string, fileName: string, mimeType: string) {
+  async getUploadUrl(fileName: string, mimeType: string) {
     return this.request<any>('/documents/upload-url', {
       method: 'POST',
-      body: { applicantId, fileName, mimeType },
+      body: { fileName, mimeType },
     });
   }
 
@@ -456,10 +470,10 @@ class ApiClient {
     });
   }
 
-  async selfNominate(electionId: string, nomineeId: string, pitch?: string, answers?: { questionId: string; value: any }[]) {
+  async selfNominate(electionId: string, pitch?: string, answers?: { questionId: string; value: any }[]) {
     return this.request<any>(`/elections/${electionId}/self-nominate`, {
       method: 'POST',
-      body: { nomineeId, pitch, answers }
+      body: { pitch, answers }
     });
   }
 
@@ -467,17 +481,17 @@ class ApiClient {
     return this.request<any[]>(`/elections/${electionId}/nominees`);
   }
 
-  async submitElectionPitch(electionId: string, nomineeId: string, pitch: string) {
+  async submitElectionPitch(electionId: string, pitch: string) {
     return this.request<any>(`/elections/${electionId}/pitch`, {
       method: 'PUT',
-      body: { nomineeId, pitch }
+      body: { pitch }
     });
   }
 
-  async castVote(electionId: string, nomineeId: string, voterId?: string) {
+  async castVote(electionId: string, nomineeId: string) {
     return this.request<any>(`/elections/${electionId}/vote`, {
       method: 'POST',
-      body: { nomineeId, voterId }
+      body: { nomineeId }
     });
   }
 
@@ -614,6 +628,97 @@ class ApiClient {
     return this.request<any>(`/admin/danger-zone/tables/${tableName}/columns/${encodeURIComponent(columnName)}`, { method: 'DELETE' });
   }
 
+  // ─── Team Department Management ───────────────────────────
+
+  async getTeamDepartments(teamId: string) {
+    return this.request<{
+      slots: Array<{ department: string; member: any | null }>;
+      filledCount: number;
+      totalRequired: number;
+      isComplete: boolean;
+    }>(`/teams/${teamId}/departments`);
+  }
+
+  async claimDepartment(teamId: string, department: string) {
+    return this.request<any>(`/teams/${teamId}/my-department`, {
+      method: 'PATCH',
+      body: { department },
+    });
+  }
+
+  async lockTeam(teamId: string) {
+    return this.request<any>(`/admin/teams/${teamId}/lock`, { method: 'POST' });
+  }
+
+  async adminResolveTeamRequest(reqId: string, status: 'APPROVED' | 'REJECTED') {
+    return this.request<any>(`/admin/teams/requests/${reqId}/resolve`, {
+      method: 'PATCH',
+      body: { status },
+    });
+  }
+
+  // ─── Interview Scheduling ──────────────────────────────────
+
+  async createInterviewSlot(data: {
+    batchId: string;
+    startTime: string;
+    endTime: string;
+    capacity: number;
+    notes?: string;
+  }) {
+    return this.request<any>('/admin/interview/slots', { method: 'POST', body: data });
+  }
+
+  async getAdminInterviewSlots(batchId: string) {
+    return this.request<any[]>(`/admin/interview/slots/${batchId}`);
+  }
+
+  async deleteInterviewSlot(slotId: string) {
+    return this.request<any>(`/admin/interview/slots/${slotId}`, { method: 'DELETE' });
+  }
+
+  async recordInterviewDecision(bookingId: string, data: { decision: string; score?: number; notes?: string }) {
+    return this.request<any>(`/admin/interview/bookings/${bookingId}/decision`, {
+      method: 'PATCH',
+      body: data,
+    });
+  }
+
+  async getVideoSubmissions(batchId: string) {
+    return this.request<any[]>(`/admin/interview/video/${batchId}`);
+  }
+
+  async reviewVideoSubmission(submissionId: string, data: { score: number; reviewNotes?: string }) {
+    return this.request<any>(`/admin/interview/video/${submissionId}/score`, {
+      method: 'PATCH',
+      body: data,
+    });
+  }
+
+  async getAvailableInterviewSlots(batchId: string) {
+    return this.request<any[]>(`/interview/slots/${batchId}`);
+  }
+
+  async getMyInterviewBooking() {
+    return this.request<any>('/interview/my-booking');
+  }
+
+  async bookInterviewSlot(slotId: string) {
+    return this.request<any>(`/interview/book/${slotId}`, { method: 'POST' });
+  }
+
+  async cancelInterviewBooking() {
+    return this.request<any>('/interview/booking', { method: 'DELETE' });
+  }
+
+  async getMyVideoSubmission() {
+    return this.request<any>('/interview/video');
+  }
+
+  async submitVideoSubmission(data: { videoUrl1?: string; videoUrl2?: string; videoUrl3?: string }) {
+    return this.request<any>('/interview/video', { method: 'POST', body: data });
+  }
+
   // ─── Referral System ──────────────────────────────────
 
   async verifyReferrer(query: string) {
@@ -623,22 +728,21 @@ class ApiClient {
     });
   }
 
-  async setReferrer(applicantId: string, referrerId: string) {
+  async setReferrer(referrerId: string) {
     return this.request<{ success: boolean }>('/referrals/set', {
       method: 'POST',
-      body: { applicantId, referrerId },
+      body: { referrerId },
     });
   }
 
-  async enableAffiliate(applicantId: string) {
+  async enableAffiliate() {
     return this.request<{ referralCode: string; referralLink: string; alreadyEnabled: boolean }>('/referrals/enable-affiliate', {
       method: 'POST',
-      body: { applicantId },
     });
   }
 
-  async getMyReferralProfile(applicantId: string) {
-    return this.request<any>(`/referrals/my-profile/${applicantId}`);
+  async getMyReferralProfile() {
+    return this.request<any>('/referrals/my-profile');
   }
 
   async getAdminReferralStats() {
@@ -700,18 +804,12 @@ class ApiClient {
     });
   }
 
-  async startEquityTimer(companyId: string, adminId?: string) {
-    return this.request<any>(`/admin/equity/companies/${companyId}/start-timer`, {
-      method: 'POST',
-      body: { adminId },
-    });
+  async startEquityTimer(companyId: string) {
+    return this.request<any>(`/admin/equity/companies/${companyId}/start-timer`, { method: 'POST' });
   }
 
-  async executeHandover(companyId: string, adminId?: string) {
-    return this.request<any>(`/admin/equity/companies/${companyId}/handover`, {
-      method: 'POST',
-      body: { adminId },
-    });
+  async executeHandover(companyId: string) {
+    return this.request<any>(`/admin/equity/companies/${companyId}/handover`, { method: 'POST' });
   }
 
   async updateEquityTimers() {
@@ -733,11 +831,8 @@ class ApiClient {
     });
   }
 
-  async signAgreementPlatform(agreementId: string, adminName: string) {
-    return this.request<any>(`/admin/equity/agreements/${agreementId}/sign-platform`, {
-      method: 'POST',
-      body: { adminName },
-    });
+  async signAgreementPlatform(agreementId: string) {
+    return this.request<any>(`/admin/equity/agreements/${agreementId}/sign-platform`, { method: 'POST' });
   }
 }
 

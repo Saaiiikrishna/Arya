@@ -2,7 +2,8 @@ import { Controller, Post, Body, UseGuards, Get, Request } from '@nestjs/common'
 import { ThrottlerGuard, Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { LoginDto, CreateAdminDto } from './dto';
-import { JwtAuthGuard } from './guards';
+import { JwtAuthGuard, AdminGuard, RolesGuard } from './guards';
+import { Roles } from './guards/roles.decorator';
 
 @Controller('api/admin/auth')
 @UseGuards(ThrottlerGuard)
@@ -16,6 +17,7 @@ export class AuthController {
   }
 
   @Post('google/callback')
+  @Throttle({ short: { limit: 5, ttl: 60000 } })
   async googleCallback(@Body('token') token: string) {
     return this.authService.googleLogin(token);
   }
@@ -26,10 +28,16 @@ export class AuthController {
     return this.authService.refreshToken(refreshToken);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
   @Post('create')
   async createAdmin(@Body() dto: CreateAdminDto) {
     return this.authService.createAdmin(dto);
+  }
+
+  @Post('logout')
+  async logout(@Body('refreshToken') refreshToken: string) {
+    return this.authService.logout(refreshToken);
   }
 
   @UseGuards(JwtAuthGuard)

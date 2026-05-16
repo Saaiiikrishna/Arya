@@ -161,12 +161,37 @@ enum TeamRequestType {
   SWAP
   RESOURCE
   COMPLAINT
+  SEPARATION
+  JOIN_EXISTING
+  CREATE_NEW
 }
 
 enum TeamRequestStatus {
   PENDING
   APPROVED
   REJECTED
+}
+
+enum DepartmentRole {
+  PRODUCT
+  OPERATIONS
+  RESOURCES
+  SALES_MARKETING
+  FOUNDING_OTHER
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum InterviewDecision {
+  SELECTED
+  REJECTED
+  WAITLISTED
 }
 
 // ─── MODELS ──────────────────────────────────────────────
@@ -258,6 +283,8 @@ model Applicant {
   whatsappPhone  String?         @map("whatsapp_phone")
   whatsappVerified Boolean       @default(false) @map("whatsapp_verified")
   whatsappPresenceChecked Boolean @default(false) @map("whatsapp_presence_checked")
+  department     DepartmentRole? @map("department")
+  isAvailable    Boolean         @default(true) @map("is_available")
   updatedAt      DateTime        @updatedAt @map("updated_at")
 
   // Referral tracking
@@ -275,8 +302,10 @@ model Applicant {
   matchingProfile MatchingProfile?
   ledTeam         Team?            @relation("TeamLeader")
   equityHoldings  EquityHolder[]
-  badges          ApplicantBadge[]
-  certificates    Certificate[]
+  badges            ApplicantBadge[]
+  certificates      Certificate[]
+  interviewBooking  InterviewBooking?
+  videoSubmission   VideoSubmission?
 
   @@index([status])
   @@index([batchId])
@@ -336,10 +365,12 @@ model Batch {
   productionAt        DateTime?   @map("production_at")
   updatedAt           DateTime    @updatedAt @map("updated_at")
 
-  applicants    Applicant[]
-  teams         Team[]
-  instructions  BatchInstruction[]
-  announcements Announcement[]
+  applicants       Applicant[]
+  teams            Team[]
+  instructions     BatchInstruction[]
+  announcements    Announcement[]
+  interviewSlots   InterviewSlot[]
+  videoSubmissions VideoSubmission[]
 
   @@index([status])
   @@index([batchNumber])
@@ -356,6 +387,7 @@ model Team {
   matchingCriteria Json?     @map("matching_criteria")
   matchScore       Float?    @map("match_score")
   ideaCategory     IdeaCategory? @map("idea_category")
+  isLocked         Boolean       @default(false) @map("is_locked")
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
@@ -810,6 +842,7 @@ model TeamRequest {
   details      String            @db.Text
   resolvedById String?           @map("resolved_by_id") @db.Uuid
   resolvedAt   DateTime?         @map("resolved_at")
+  targetTeamId String?           @map("target_team_id") @db.Uuid
   createdAt    DateTime          @default(now()) @map("created_at")
   updatedAt    DateTime          @updatedAt @map("updated_at")
 
@@ -1107,4 +1140,66 @@ model Certificate {
 
   @@index([applicantId])
   @@map("certificates")
+}
+
+// ─── INTERVIEW SCHEDULING ─────────────────────────────────
+
+model InterviewSlot {
+  id        String   @id @default(uuid()) @db.Uuid
+  batchId   String   @map("batch_id") @db.Uuid
+  startTime DateTime @map("start_time")
+  endTime   DateTime @map("end_time")
+  capacity  Int      @default(1)
+  notes     String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  batch    Batch              @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  bookings InterviewBooking[]
+
+  @@index([batchId])
+  @@index([startTime])
+  @@map("interview_slots")
+}
+
+model InterviewBooking {
+  id          String             @id @default(uuid()) @db.Uuid
+  slotId      String             @map("slot_id") @db.Uuid
+  applicantId String             @unique @map("applicant_id") @db.Uuid
+  status      BookingStatus      @default(CONFIRMED)
+  notes       String?            @db.Text
+  score       Int?
+  decision    InterviewDecision?
+  decidedAt   DateTime?          @map("decided_at")
+  decidedById String?            @map("decided_by_id") @db.Uuid
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+
+  slot      InterviewSlot @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  applicant Applicant     @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+
+  @@index([slotId])
+  @@index([status])
+  @@map("interview_bookings")
+}
+
+model VideoSubmission {
+  id           String    @id @default(uuid()) @db.Uuid
+  applicantId  String    @unique @map("applicant_id") @db.Uuid
+  batchId      String    @map("batch_id") @db.Uuid
+  videoUrl1    String?   @map("video_url_1")
+  videoUrl2    String?   @map("video_url_2")
+  videoUrl3    String?   @map("video_url_3")
+  score        Int?
+  reviewNotes  String?   @map("review_notes") @db.Text
+  reviewedAt   DateTime? @map("reviewed_at")
+  reviewedById String?   @map("reviewed_by_id") @db.Uuid
+  submittedAt  DateTime  @default(now()) @map("submitted_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  applicant Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  batch     Batch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId])
+  @@map("video_submissions")
 }

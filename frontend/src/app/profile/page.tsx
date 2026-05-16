@@ -7,7 +7,7 @@ import { useEffect } from 'react';
 import { LogOut, User, Mail, Shield } from 'lucide-react';
 
 export default function ProfilePage() {
-  const { admin: user, isAuthenticated, loading, logout } = useAuth();
+  const { user, isAuthenticated, loading, logout } = useAuth();
   const router = useRouter();
 
   useEffect(() => {

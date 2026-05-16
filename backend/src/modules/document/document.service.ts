@@ -49,7 +49,11 @@ export class DocumentService {
     return { uploadUrl, documentId: document.id, key };
   }
 
-  async confirmUpload(documentId: string, fileSize?: number) {
+  async confirmUpload(documentId: string, applicantId: string, fileSize?: number) {
+    const doc = await this.prisma.document.findUnique({ where: { id: documentId } });
+    if (!doc) throw new NotFoundException('Document not found');
+    if (doc.applicantId !== applicantId) throw new NotFoundException('Document not found');
+
     return this.prisma.document.update({
       where: { id: documentId },
       data: { status: 'UPLOADED', fileSize },

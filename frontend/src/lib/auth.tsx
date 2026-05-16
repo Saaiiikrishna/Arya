@@ -18,7 +18,7 @@ interface UserProfile {
 }
 
 interface AuthContextType {
-  admin: UserProfile | null;
+  user: UserProfile | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
@@ -27,7 +27,7 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType>({
-  admin: null,
+  user: null,
   loading: true,
   login: async () => {},
   logout: () => {},
@@ -36,21 +36,24 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [admin, setAdmin] = useState<UserProfile | null>(null);
+  const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
   const checkAuth = useCallback(async () => {
     try {
-      const token = api.getToken();
-      if (!token) {
-        setLoading(false);
-        return;
+      // Access token lives in memory only; attempt silent refresh if absent
+      if (!api.getToken()) {
+        const refreshed = await api.refreshAccessToken();
+        if (!refreshed) {
+          setLoading(false);
+          return;
+        }
       }
       // Try applicant profile first (most common user type)
       try {
         const applicantData = await api.getMyProfile();
         if (applicantData && applicantData.role === 'APPLICANT') {
-          setAdmin(applicantData);
+          setUser(applicantData);
           setLoading(false);
           return;
         }
@@ -59,10 +62,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       // Fallback to admin endpoint
       const data = await api.getMe();
-      setAdmin(data);
-    } catch {
-      api.logout();
-      setAdmin(null);
+      setUser(data);
+    } catch (err: any) {
+      const status = err?.status ?? err?.response?.status;
+      if (status === 401 || status === 403) {
+        api.logout();
+      }
+      setUser(null);
     } finally {
       setLoading(false);
     }
@@ -74,31 +80,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      if (admin) {
-        localStorage.setItem('arya_profile', JSON.stringify(admin));
+      if (user) {
+        sessionStorage.setItem('arya_profile', JSON.stringify(user));
       } else {
-        localStorage.removeItem('arya_profile');
+        sessionStorage.removeItem('arya_profile');
       }
     }
-  }, [admin]);
+  }, [user]);
 
   const login = async (email: string, password: string) => {
     if (typeof window !== 'undefined') sessionStorage.removeItem('arya_session_id');
     const data = await api.login(email, password);
-    setAdmin(data.admin);
+    setUser(data.admin);
   };
 
   const logout = () => {
     if (typeof window !== 'undefined') sessionStorage.removeItem('arya_session_id');
     api.logout();
-    setAdmin(null);
+    setUser(null);
   };
 
-  const role = admin?.role || null;
+  const role = user?.role || null;
 
   return (
     <AuthContext.Provider
-      value={{ admin, loading, login, logout, isAuthenticated: !!admin, role }}
+      value={{ user, loading, login, logout, isAuthenticated: !!user, role }}
     >
       {children}
     </AuthContext.Provider>

@@ -7,9 +7,10 @@ import {
   Body,
   Param,
   UseGuards,
+  Req,
 } from '@nestjs/common';
 import { ElectionService } from './election.service';
-import { JwtAuthGuard } from '../auth/guards';
+import { JwtAuthGuard, AdminGuard } from '../auth/guards';
 
 @Controller('api')
 export class ElectionController {
@@ -17,7 +18,7 @@ export class ElectionController {
 
   // ─── Admin endpoints ──────────────────────────────────
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Post('admin/elections/team/:teamId/start')
   async startElection(
     @Param('teamId') teamId: string,
@@ -36,7 +37,7 @@ export class ElectionController {
     );
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Post('admin/elections/batch/:batchId/start')
   async startBatchElections(
     @Param('batchId') batchId: string,
@@ -55,7 +56,7 @@ export class ElectionController {
     );
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Put('admin/elections/:id/advance')
   async advanceElection(@Param('id') id: string) {
     return this.electionService.advanceElection(id);
@@ -63,13 +64,13 @@ export class ElectionController {
 
   // ─── Election Question Templates (Admin) ──────────────
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Get('admin/election-questions/templates')
   async getQuestionTemplates() {
     return this.electionService.getQuestionTemplates();
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Post('admin/election-questions/templates')
   async createQuestionTemplate(
     @Body()
@@ -84,13 +85,13 @@ export class ElectionController {
     return this.electionService.createQuestionTemplate(body);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Delete('admin/election-questions/templates/:id')
   async deleteQuestionTemplate(@Param('id') id: string) {
     return this.electionService.deleteQuestionTemplate(id);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   @Post('admin/elections/:id/questions')
   async addCustomQuestion(
     @Param('id') id: string,
@@ -137,51 +138,43 @@ export class ElectionController {
   @Post('elections/:id/nominate')
   async nominate(
     @Param('id') id: string,
-    @Body()
-    body: { nomineeId: string; nominatedById?: string; reason?: string },
+    @Req() req: any,
+    @Body() body: { nomineeId: string; reason?: string },
   ) {
-    return this.electionService.nominate(
-      id,
-      body.nomineeId,
-      body.nominatedById,
-      body.reason,
-    );
+    const nominatedById = req.user.id || req.user.sub;
+    return this.electionService.nominate(id, body.nomineeId, nominatedById, body.reason);
   }
 
   @UseGuards(JwtAuthGuard)
   @Post('elections/:id/self-nominate')
   async selfNominate(
     @Param('id') id: string,
-    @Body()
-    body: {
-      nomineeId: string;
-      pitch?: string;
-      answers?: { questionId: string; value: any }[];
-    },
+    @Req() req: any,
+    @Body() body: { pitch?: string; answers?: { questionId: string; value: any }[] },
   ) {
-    return this.electionService.selfNominate(
-      id,
-      body.nomineeId,
-      body.pitch,
-      body.answers,
-    );
+    const nomineeId = req.user.id || req.user.sub;
+    return this.electionService.selfNominate(id, nomineeId, body.pitch, body.answers);
   }
 
   @UseGuards(JwtAuthGuard)
   @Put('elections/:id/pitch')
   async submitPitch(
     @Param('id') id: string,
-    @Body() body: { nomineeId: string; pitch: string },
+    @Req() req: any,
+    @Body('pitch') pitch: string,
   ) {
-    return this.electionService.submitPitch(id, body.nomineeId, body.pitch);
+    const nomineeId = req.user.id || req.user.sub;
+    return this.electionService.submitPitch(id, nomineeId, pitch);
   }
 
   @UseGuards(JwtAuthGuard)
   @Post('elections/:id/vote')
   async castVote(
     @Param('id') id: string,
-    @Body() body: { voterId: string; nomineeId: string },
+    @Req() req: any,
+    @Body('nomineeId') nomineeId: string,
   ) {
-    return this.electionService.castVote(id, body.voterId, body.nomineeId);
+    const voterId = req.user.id || req.user.sub;
+    return this.electionService.castVote(id, voterId, nomineeId);
   }
 }

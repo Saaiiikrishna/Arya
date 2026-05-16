@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { SettingsService } from './settings.service';
 import { VisitorService } from './visitor.service';
-import { JwtAuthGuard } from '../auth/guards';
+import { AdminGuard } from '../auth/guards';
 
 @Controller('api')
 export class SettingsController {
@@ -27,13 +27,13 @@ export class SettingsController {
   // ─── Admin: Settings ──────────────────────────────────
 
   @Get('admin/settings')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   async getAllSettings() {
     return this.settingsService.getAll();
   }
 
   @Patch('admin/settings')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   async updateSettings(@Body() body: Record<string, string>) {
     await this.settingsService.bulkSet(body);
     return { success: true };
@@ -42,13 +42,13 @@ export class SettingsController {
   // ─── Admin: Visitor Analytics ─────────────────────────
 
   @Get('admin/settings/visitors/summary')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   async getVisitorSummary(@Query('days') days?: string) {
     return this.visitorService.getSummary(days ? parseInt(days, 10) : 30);
   }
 
   @Get('admin/settings/visitors/pageviews')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AdminGuard)
   async getVisitorPageViews(
     @Query('page') page?: string,
     @Query('limit') limit?: string,

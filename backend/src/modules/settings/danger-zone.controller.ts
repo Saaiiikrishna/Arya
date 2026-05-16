@@ -9,10 +9,10 @@ import {
   Query
 } from '@nestjs/common';
 import { DangerZoneService } from './danger-zone.service';
-import { JwtAuthGuard } from '../auth/guards';
+import { SuperAdminGuard } from '../auth/guards';
 
 @Controller('api/admin/danger-zone')
-@UseGuards(JwtAuthGuard)
+@UseGuards(SuperAdminGuard)
 export class DangerZoneController {
   constructor(private readonly dangerZoneService: DangerZoneService) {}
 
