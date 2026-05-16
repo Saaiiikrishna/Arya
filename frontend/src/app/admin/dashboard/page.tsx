@@ -8,7 +8,8 @@ import { useRouter } from 'next/navigation';
 import {
   FileQuestion, Package, Users, ShieldCheck,
   BookOpen, BarChart2, Megaphone, Settings,
-  AlertCircle, CheckCircle2, UserPlus, Scale, Calendar
+  AlertCircle, CheckCircle2, UserPlus, Scale, Calendar,
+  GraduationCap, Briefcase, Zap, Film, Trophy,
 } from 'lucide-react';
 
 interface Stats {
@@ -212,6 +213,41 @@ export default function DashboardPage() {
                   <span className="font-serif text-lg font-bold group-hover:text-forest transition-colors">Dispatches</span>
                 </div>
                 <span className="text-[10px] uppercase tracking-widest text-ink/60 leading-relaxed mt-auto">Global announcements broadcast</span>
+              </Link>
+              <Link href="/admin/mentors" className="border border-hairline p-5 bg-white hover:border-forest hover:shadow-md shadow-sm transition-all group flex flex-col">
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="group-hover:scale-110 transition-transform text-ink/40 group-hover:text-forest"><GraduationCap size={22} strokeWidth={1.5} /></span>
+                  <span className="font-serif text-lg font-bold group-hover:text-forest transition-colors">Mentors</span>
+                </div>
+                <span className="text-[10px] uppercase tracking-widest text-ink/60 leading-relaxed mt-auto">Assign mentors to teams</span>
+              </Link>
+              <Link href="/admin/cofounders" className="border border-hairline p-5 bg-white hover:border-forest hover:shadow-md shadow-sm transition-all group flex flex-col">
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="group-hover:scale-110 transition-transform text-ink/40 group-hover:text-forest"><Briefcase size={22} strokeWidth={1.5} /></span>
+                  <span className="font-serif text-lg font-bold group-hover:text-forest transition-colors">Co-Founders</span>
+                </div>
+                <span className="text-[10px] uppercase tracking-widest text-ink/60 leading-relaxed mt-auto">Roster, assignments & weekly reports</span>
+              </Link>
+              <Link href="/admin/sprints" className="border border-hairline p-5 bg-white hover:border-forest hover:shadow-md shadow-sm transition-all group flex flex-col">
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="group-hover:scale-110 transition-transform text-ink/40 group-hover:text-forest"><Zap size={22} strokeWidth={1.5} /></span>
+                  <span className="font-serif text-lg font-bold group-hover:text-forest transition-colors">Sprints</span>
+                </div>
+                <span className="text-[10px] uppercase tracking-widest text-ink/60 leading-relaxed mt-auto">MVP sprint tracker per team</span>
+              </Link>
+              <Link href="/admin/documentary" className="border border-hairline p-5 bg-white hover:border-forest hover:shadow-md shadow-sm transition-all group flex flex-col">
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="group-hover:scale-110 transition-transform text-ink/40 group-hover:text-forest"><Film size={22} strokeWidth={1.5} /></span>
+                  <span className="font-serif text-lg font-bold group-hover:text-forest transition-colors">Documentary</span>
+                </div>
+                <span className="text-[10px] uppercase tracking-widest text-ink/60 leading-relaxed mt-auto">Upload & publish cinematic clips</span>
+              </Link>
+              <Link href="/admin/pitch" className="border border-hairline p-5 bg-white hover:border-forest hover:shadow-md shadow-sm transition-all group flex flex-col">
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="group-hover:scale-110 transition-transform text-ink/40 group-hover:text-forest"><Trophy size={22} strokeWidth={1.5} /></span>
+                  <span className="font-serif text-lg font-bold group-hover:text-forest transition-colors">Pitch Calendar</span>
+                </div>
+                <span className="text-[10px] uppercase tracking-widest text-ink/60 leading-relaxed mt-auto">Investor pitches & funding decisions</span>
               </Link>
               <Link href="/admin/settings" className="border border-hairline p-5 bg-white hover:border-forest hover:shadow-md shadow-sm transition-all group flex flex-col xl:col-span-2">
                 <div className="flex items-center gap-3 mb-3">

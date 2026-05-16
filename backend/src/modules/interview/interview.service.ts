@@ -5,13 +5,17 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma';
+import { EmailService } from '../email/email.service';
 import { InterviewDecision } from '@prisma/client';
 
 @Injectable()
 export class InterviewService {
   private readonly logger = new Logger(InterviewService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly emailService: EmailService,
+  ) {}
 
   // ─── Admin: Slot management ───────────────────────────────
 
@@ -93,6 +97,24 @@ export class InterviewService {
     ]);
 
     this.logger.log(`Interview decision ${decision} recorded for booking ${bookingId}`);
+
+    // Send decision email (fire-and-forget)
+    setImmediate(async () => {
+      const applicant = await this.prisma.applicant.findUnique({
+        where: { id: booking.applicantId },
+        select: { id: true, email: true, firstName: true },
+      });
+      if (!applicant) return;
+
+      const slug = decision === 'SELECTED' ? 'interview-selected' : 'interview-rejected';
+      await this.emailService.sendTemplatedEmail(
+        applicant.email,
+        slug,
+        { firstName: applicant.firstName },
+        applicant.id,
+      );
+    });
+
     return updated;
   }
 
@@ -193,7 +215,7 @@ export class InterviewService {
 
     return this.prisma.videoSubmission.upsert({
       where: { applicantId },
-      create: { applicantId, batchId: applicant.batchId, videoUrl1, videoUrl2, videoUrl3 },
+      create: { applicantId, batchId: applicant.batchId ?? '', videoUrl1, videoUrl2, videoUrl3 },
       update: { videoUrl1, videoUrl2, videoUrl3 },
     });
   }

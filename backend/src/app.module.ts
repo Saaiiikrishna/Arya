@@ -32,6 +32,9 @@ import { EquityModule } from './modules/equity/equity.module';
 import { WhatsappModule } from './modules/whatsapp/whatsapp.module';
 import { RewardsModule } from './modules/rewards/rewards.module';
 import { InterviewModule } from './modules/interview/interview.module';
+import { MentorModule } from './modules/mentor';
+import { CoFounderModule } from './modules/cofounder/cofounder.module';
+import { DocumentaryModule } from './modules/documentary/documentary.module';
 
 @Module({
   imports: [
@@ -112,6 +115,9 @@ import { InterviewModule } from './modules/interview/interview.module';
     WhatsappModule,
     RewardsModule,
     InterviewModule,
+    MentorModule,
+    CoFounderModule,
+    DocumentaryModule,
   ],
 })
 export class AppModule {}
