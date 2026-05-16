@@ -1,9 +1,6 @@
 -- Migration: add_dept_roles_and_interviews
 -- Adds department tracking, interview scheduling, and extends team change requests
 
--- Ensure pgcrypto is available for gen_random_uuid() on PostgreSQL < 13
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
-
 -- New enums
 CREATE TYPE "DepartmentRole" AS ENUM ('PRODUCT', 'OPERATIONS', 'RESOURCES', 'SALES_MARKETING', 'FOUNDING_OTHER');
 CREATE TYPE "BookingStatus" AS ENUM ('PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED', 'NO_SHOW');
