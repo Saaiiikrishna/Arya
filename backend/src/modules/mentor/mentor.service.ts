@@ -13,6 +13,7 @@ import { createHash } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../prisma';
 import { EmailService } from '../email/email.service';
+import { WhatsappService } from '../whatsapp/whatsapp.service';
 
 const CHANGE_REQUEST_TYPES = ['SEPARATION', 'JOIN_EXISTING', 'CREATE_NEW'];
 
@@ -25,6 +26,7 @@ export class MentorService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly emailService: EmailService,
+    private readonly whatsappService: WhatsappService,
   ) {}
 
   // ─── Auth ──────────────────────────────────────────────────
@@ -153,24 +155,31 @@ export class MentorService {
     // Notify all team members
     const members = await this.prisma.applicant.findMany({
       where: { teamId, status: { not: 'REMOVED' } },
-      select: { id: true, email: true, firstName: true },
+      select: { id: true, email: true, firstName: true, whatsappPhone: true, whatsappVerified: true },
     });
+    const mentorName = `${mentor.firstName} ${mentor.lastName}`;
 
-    await Promise.allSettled(
-      members.map((m) =>
+    await Promise.allSettled([
+      ...members.map((m) =>
         this.emailService.sendTemplatedEmail(
           m.email,
           'mentor-assigned',
-          {
-            firstName: m.firstName,
-            mentorName: `${mentor.firstName} ${mentor.lastName}`,
-            mentorEmail: mentor.email,
-            teamName: team.name,
-          },
+          { firstName: m.firstName, mentorName, mentorEmail: mentor.email, teamName: team.name },
           m.id,
         ),
       ),
-    );
+      ...members
+        .filter((m) => m.whatsappPhone && m.whatsappVerified)
+        .map((m) =>
+          this.whatsappService.sendMentorAssigned(
+            m.whatsappPhone!,
+            m.firstName,
+            mentorName,
+            mentor.email,
+            m.id,
+          ),
+        ),
+    ]);
 
     this.logger.log(`Mentor ${mentor.email} assigned to team ${team.name} by admin ${adminId}`);
     return assignment;

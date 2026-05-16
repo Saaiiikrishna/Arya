@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, Logger, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma';
 import { EmailService } from '../email/email.service';
+import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { ApplicantStatus, DepartmentRole } from '@prisma/client';
 
 interface ApplicantWithAnswers {
@@ -28,6 +29,7 @@ export class TeamService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
+    private readonly whatsappService: WhatsappService,
   ) {}
 
   /**
@@ -95,14 +97,19 @@ export class TeamService {
 
     this.logger.log(`Batch ${batch.batchNumber}: formed ${teams.length} teams`);
 
-    // Fire-and-forget: email each member their team assignment
+    // Fire-and-forget: email + WhatsApp each member their team assignment
     setImmediate(async () => {
       const members = await this.prisma.applicant.findMany({
         where: { batchId, teamId: { not: null } },
-        select: { id: true, email: true, firstName: true, team: { select: { name: true } } },
+        select: {
+          id: true, email: true, firstName: true,
+          whatsappPhone: true, whatsappVerified: true,
+          team: { select: { name: true } },
+        },
       });
-      await Promise.allSettled(
-        members.map((m) =>
+      const teamName = members[0]?.team?.name ?? '';
+      await Promise.allSettled([
+        ...members.map((m) =>
           this.emailService.sendTemplatedEmail(
             m.email,
             'team-assigned',
@@ -110,7 +117,18 @@ export class TeamService {
             m.id,
           ),
         ),
-      );
+        ...members
+          .filter((m) => m.whatsappPhone && m.whatsappVerified)
+          .map((m) =>
+            this.whatsappService.sendTeamAssignment(
+              m.whatsappPhone!,
+              m.firstName,
+              m.team?.name ?? teamName,
+              '',
+              m.id,
+            ),
+          ),
+      ]);
     });
 
     return { teamsCreated: teams.length, teams };
@@ -317,10 +335,10 @@ export class TeamService {
     // Notify all team members
     const members = await this.prisma.applicant.findMany({
       where: { teamId, status: { not: 'REMOVED' } },
-      select: { id: true, email: true, firstName: true },
+      select: { id: true, email: true, firstName: true, whatsappPhone: true, whatsappVerified: true },
     });
-    await Promise.allSettled(
-      members.map((m) =>
+    await Promise.allSettled([
+      ...members.map((m) =>
         this.emailService.sendTemplatedEmail(
           m.email,
           'team-locked',
@@ -328,7 +346,12 @@ export class TeamService {
           m.id,
         ),
       ),
-    );
+      ...members
+        .filter((m) => m.whatsappPhone && m.whatsappVerified)
+        .map((m) =>
+          this.whatsappService.sendTeamLocked(m.whatsappPhone!, m.firstName, team.name, m.id),
+        ),
+    ]);
 
     return lockedTeam;
   }

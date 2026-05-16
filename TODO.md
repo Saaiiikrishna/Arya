@@ -1,6 +1,6 @@
 # Aryavartham Platform — Implementation Backlog
 
-> Last updated: 2026-05-16 (All P0–P4 complete; DB migrated; both builds clean; remaining: WhatsApp decision + Stage 5 GTM)
+> Last updated: 2026-05-16 (All P0–P4 + WhatsApp complete; both builds clean; remaining: Stage 5 GTM + Mux/CDN for documentary)
 > Tracking agent: Claude (claude-sonnet-4-6)
 > When a task is completed, mark it `[x]` and add the commit hash in parentheses.
 > CLAUDE.md update policy: mark the task done here AND note any schema/infra changes in root CLAUDE.md.
@@ -122,10 +122,18 @@
 - [x] Scheduled job: no-show detection (booking past endTime with no decision → mark NO_SHOW) — `SchedulerService.detectNoShows()` cron `EVERY_HOUR`
 
 ### WhatsApp Integration
-> Module shell exists (`whatsapp.service.ts`) but zero controllers, zero triggers.
+> Decision: WABA (Meta Business Suite). Full implementation complete.
 
-- [ ] Decision: implement Twilio/WABA receiver + outbound triggers (OTP, selection result, team assignment, deadline reminders) OR remove the module cleanly
-- [ ] If implementing: wire into same event triggers as email (selection, team assign, deadlines)
+- [x] Webhook controller (`GET /api/whatsapp/webhook` verify, `POST /api/whatsapp/webhook` receive)
+- [x] Upgraded service to Graph API v21.0 — template sends, interactive buttons, broadcast
+- [x] 16 approved-template stubs registered: AUTHENTICATION (otp_verification), UTILITY (team assignment, lock, mentor, co-founder, MVP, pitch, deadline reminders, check-in reminder), MARKETING (platform_announcement, batch_opening, referral_milestone)
+- [x] Broadcast endpoint: `POST /admin/whatsapp/broadcast` with optional batchId/teamId filter + 100ms rate limiting
+- [x] One-off send: `POST /admin/whatsapp/send` for admin one-off sends
+- [x] Send log: `GET /admin/whatsapp/send-log` paginated from notification table
+- [x] Wired into: team assignment, team lock, mentor assigned, co-founder assigned, MVP milestone complete, pitch invitation
+- [x] Admin UI `/admin/whatsapp` — broadcast composer, send-one form, template registry with setup checklist, send log
+- [x] Opt-in gate: `whatsappPhone` + `whatsappVerified = true` on Applicant (already in schema) required for all UTILITY sends
+- [x] env vars: `WHATSAPP_API_TOKEN`, `WHATSAPP_PHONE_ID`, `WHATSAPP_WABA_ID`, `WHATSAPP_VERIFY_TOKEN` added to `.env.example`
 
 ### Role-Based Access Hardening
 - [x] Mentor JWT claim and `MentorGuard` for mentor-only routes — `mentor.guard.ts`; auth.service.ts handles MENTOR in `validateUser` + `refreshToken`

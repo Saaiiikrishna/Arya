@@ -12,6 +12,7 @@ import { createHash } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../prisma';
 import { EmailService } from '../email/email.service';
+import { WhatsappService } from '../whatsapp/whatsapp.service';
 
 @Injectable()
 export class CoFounderService {
@@ -22,6 +23,7 @@ export class CoFounderService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly emailService: EmailService,
+    private readonly whatsappService: WhatsappService,
   ) {}
 
   // ─── Auth ──────────────────────────────────────────────────
@@ -108,23 +110,25 @@ export class CoFounderService {
     // Notify founding team
     const members = await this.prisma.applicant.findMany({
       where: { teamId, status: { not: 'REMOVED' } },
-      select: { id: true, email: true, firstName: true },
+      select: { id: true, email: true, firstName: true, whatsappPhone: true, whatsappVerified: true },
     });
-    await Promise.allSettled(
-      members.map((m) =>
+    const cfName = `${cf.firstName} ${cf.lastName}`;
+
+    await Promise.allSettled([
+      ...members.map((m) =>
         this.emailService.sendTemplatedEmail(
           m.email,
           'cofounder-assigned',
-          {
-            firstName: m.firstName,
-            coFounderName: `${cf.firstName} ${cf.lastName}`,
-            coFounderEmail: cf.email,
-            teamName: team.name,
-          },
+          { firstName: m.firstName, coFounderName: cfName, coFounderEmail: cf.email, teamName: team.name },
           m.id,
         ),
       ),
-    );
+      ...members
+        .filter((m) => m.whatsappPhone && m.whatsappVerified)
+        .map((m) =>
+          this.whatsappService.sendCoFounderAssigned(m.whatsappPhone!, m.firstName, cfName, m.id),
+        ),
+    ]);
 
     this.logger.log(`Co-founder ${cf.email} assigned to team ${team.name} by admin ${adminId}`);
     return assignment;

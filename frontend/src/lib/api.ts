@@ -1017,6 +1017,27 @@ class ApiClient {
     const qs = isApproved !== undefined ? `?isApproved=${isApproved}` : '';
     return this.request<any[]>(`/admin/investors${qs}`);
   }
+
+  // ─── Admin: WhatsApp ──────────────────────────────────────
+
+  async getWhatsappTemplates() {
+    return this.request<any[]>('/admin/whatsapp/templates');
+  }
+
+  async whatsappBroadcast(data: { title: string; message: string; batchId?: string; teamId?: string }) {
+    return this.request<{ attempted: number; succeeded: number; failed: number }>(
+      '/admin/whatsapp/broadcast',
+      { method: 'POST', body: data },
+    );
+  }
+
+  async getWhatsappSendLog(limit = 50, offset = 0) {
+    return this.request<any[]>(`/admin/whatsapp/send-log?limit=${limit}&offset=${offset}`);
+  }
+
+  async whatsappSendOne(data: { phone: string; templateName: string; parameters: string[] }) {
+    return this.request<{ sent: boolean }>('/admin/whatsapp/send', { method: 'POST', body: data });
+  }
 }
 
 export const api = new ApiClient();

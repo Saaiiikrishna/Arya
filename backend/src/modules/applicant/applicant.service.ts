@@ -232,10 +232,10 @@ export class ApplicantService {
       );
     }
 
-    // Send WhatsApp Welcome if verified for the first time
-    if (data.whatsappVerified && !applicant.whatsappVerified && updated.phone) {
-      this.whatsappService.sendWelcome(updated.phone, updated.firstName, applicantId).catch(err =>
-        this.logger.error(`WhatsApp welcome failed for ${applicantId}`, err)
+    // Send WhatsApp welcome when opt-in is first confirmed
+    if (data.whatsappVerified && !applicant.whatsappVerified && updated.whatsappPhone) {
+      this.whatsappService.sendApplicationReceived(updated.whatsappPhone, updated.firstName, applicantId).catch((e: any) =>
+        this.logger.error(`WhatsApp welcome failed for ${applicantId}`, e)
       );
     }
 

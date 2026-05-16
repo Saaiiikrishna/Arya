@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ConflictException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma';
 import { EmailService } from '../email/email.service';
+import { WhatsappService } from '../whatsapp/whatsapp.service';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -10,6 +11,7 @@ export class InvestorService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
+    private readonly whatsappService: WhatsappService,
   ) {}
 
   // ─── Investor Registration & Auth ────────────────────
@@ -136,7 +138,7 @@ export class InvestorService {
   async createPitchEvent(dto: { teamId: string; scheduledAt: string; venue?: string; notes?: string }) {
     const team = await this.prisma.team.findUnique({
       where: { id: dto.teamId },
-      include: { leader: { select: { id: true, email: true, firstName: true } } },
+      include: { leader: { select: { id: true, email: true, firstName: true, whatsappPhone: true, whatsappVerified: true } } },
     });
     if (!team) throw new NotFoundException('Team not found');
 
@@ -153,23 +155,31 @@ export class InvestorService {
     const pitchDate = new Date(dto.scheduledAt).toLocaleDateString('en-IN', {
       day: 'numeric', month: 'long', year: 'numeric',
     });
+    const venue = dto.venue ?? 'To be confirmed';
 
-    // Email team leader
+    // Notify team leader
     if (team.leader) {
-      await this.emailService.sendTemplatedEmail(
-        team.leader.email,
-        'pitch-invitation',
-        {
-          firstName: team.leader.firstName,
-          teamName: team.name,
-          pitchDate,
-          venue: dto.venue ?? 'To be confirmed',
-        },
-        team.leader.id,
-      ).catch(() => {});
+      await Promise.allSettled([
+        this.emailService.sendTemplatedEmail(
+          team.leader.email,
+          'pitch-invitation',
+          { firstName: team.leader.firstName, teamName: team.name, pitchDate, venue },
+          team.leader.id,
+        ),
+        ...(team.leader.whatsappPhone && team.leader.whatsappVerified
+          ? [this.whatsappService.sendPitchInvitation(
+              team.leader.whatsappPhone,
+              team.leader.firstName,
+              team.name,
+              pitchDate,
+              venue,
+              team.leader.id,
+            )]
+          : []),
+      ]);
     }
 
-    // Email co-founder
+    // Notify co-founder
     const cfAssignment = await (this.prisma as any).coFounderAssignment.findFirst({
       where: { teamId: dto.teamId, isActive: true },
       include: { coFounder: { select: { id: true, email: true, firstName: true } } },
@@ -178,12 +188,7 @@ export class InvestorService {
       await this.emailService.sendTemplatedEmail(
         cfAssignment.coFounder.email,
         'pitch-invitation',
-        {
-          firstName: cfAssignment.coFounder.firstName,
-          teamName: team.name,
-          pitchDate,
-          venue: dto.venue ?? 'To be confirmed',
-        },
+        { firstName: cfAssignment.coFounder.firstName, teamName: team.name, pitchDate, venue },
         cfAssignment.coFounder.id,
       ).catch(() => {});
     }

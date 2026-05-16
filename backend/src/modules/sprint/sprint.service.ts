@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
+import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { CreateSprintDto } from './dto/create-sprint.dto';
 import { CreateMilestoneDto } from './dto/create-milestone.dto';
 
@@ -9,6 +10,7 @@ export class SprintService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
+    private readonly whatsappService: WhatsappService,
   ) {}
 
   async createSprint(createSprintDto: CreateSprintDto) {
@@ -151,20 +153,26 @@ export class SprintService {
     if (remaining === 0) {
       const members = await this.prisma.applicant.findMany({
         where: { teamId, status: { not: 'REMOVED' } },
-        select: { id: true, email: true, firstName: true },
+        select: { id: true, email: true, firstName: true, whatsappPhone: true, whatsappVerified: true },
       });
       const team = await this.prisma.team.findUnique({ where: { id: teamId }, select: { name: true } });
+      const teamName = team?.name ?? 'your team';
 
-      await Promise.allSettled(
-        members.map((m) =>
+      await Promise.allSettled([
+        ...members.map((m) =>
           this.emailService.sendTemplatedEmail(
             m.email,
             'mvp-complete',
-            { firstName: m.firstName, teamName: team?.name ?? 'your team' },
+            { firstName: m.firstName, teamName },
             m.id,
           ),
         ),
-      );
+        ...members
+          .filter((m) => m.whatsappPhone && m.whatsappVerified)
+          .map((m) =>
+            this.whatsappService.sendMvpComplete(m.whatsappPhone!, m.firstName, teamName, m.id),
+          ),
+      ]);
     }
 
     return updated;
