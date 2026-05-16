@@ -64,6 +64,6 @@ export class DocumentaryController {
   @UseGuards(InvestorGuard)
   @Get('documentary/clips/:clipId/stream-url')
   getStreamUrl(@Param('clipId') clipId: string) {
-    return this.documentaryService.getStreamUrl(clipId);
+    return this.documentaryService.getStreamUrl(clipId, true); // publishedOnly: investors see only published clips
   }
 }

@@ -99,36 +99,40 @@ export class TeamService {
 
     // Fire-and-forget: email + WhatsApp each member their team assignment
     setImmediate(async () => {
-      const members = await this.prisma.applicant.findMany({
-        where: { batchId, teamId: { not: null } },
-        select: {
-          id: true, email: true, firstName: true,
-          whatsappPhone: true, whatsappVerified: true,
-          team: { select: { name: true } },
-        },
-      });
-      const teamName = members[0]?.team?.name ?? '';
-      await Promise.allSettled([
-        ...members.map((m) =>
-          this.emailService.sendTemplatedEmail(
-            m.email,
-            'team-assigned',
-            { firstName: m.firstName, teamName: m.team?.name ?? '' },
-            m.id,
-          ),
-        ),
-        ...members
-          .filter((m) => m.whatsappPhone && m.whatsappVerified)
-          .map((m) =>
-            this.whatsappService.sendTeamAssignment(
-              m.whatsappPhone!,
-              m.firstName,
-              m.team?.name ?? teamName,
-              '',
+      try {
+        const members = await this.prisma.applicant.findMany({
+          where: { batchId, teamId: { not: null } },
+          select: {
+            id: true, email: true, firstName: true,
+            whatsappPhone: true, whatsappVerified: true,
+            team: { select: { name: true } },
+          },
+        });
+        const teamName = members[0]?.team?.name ?? '';
+        await Promise.allSettled([
+          ...members.map((m) =>
+            this.emailService.sendTemplatedEmail(
+              m.email,
+              'team-assigned',
+              { firstName: m.firstName, teamName: m.team?.name ?? '' },
               m.id,
             ),
           ),
-      ]);
+          ...members
+            .filter((m) => m.whatsappPhone && m.whatsappVerified)
+            .map((m) =>
+              this.whatsappService.sendTeamAssignment(
+                m.whatsappPhone!,
+                m.firstName,
+                m.team?.name ?? teamName,
+                '',
+                m.id,
+              ),
+            ),
+        ]);
+      } catch (e: any) {
+        this.logger.error(`Post-formation notifications failed for batch ${batchId}: ${e?.message}`);
+      }
     });
 
     return { teamsCreated: teams.length, teams };
@@ -332,26 +336,30 @@ export class TeamService {
       data: { isLocked: true },
     });
 
-    // Notify all team members
-    const members = await this.prisma.applicant.findMany({
-      where: { teamId, status: { not: 'REMOVED' } },
-      select: { id: true, email: true, firstName: true, whatsappPhone: true, whatsappVerified: true },
-    });
-    await Promise.allSettled([
-      ...members.map((m) =>
-        this.emailService.sendTemplatedEmail(
-          m.email,
-          'team-locked',
-          { firstName: m.firstName, teamName: team.name },
-          m.id,
+    // Notify all team members — non-fatal; team is already locked in DB
+    try {
+      const members = await this.prisma.applicant.findMany({
+        where: { teamId, status: { not: 'REMOVED' } },
+        select: { id: true, email: true, firstName: true, whatsappPhone: true, whatsappVerified: true },
+      });
+      await Promise.allSettled([
+        ...members.map((m) =>
+          this.emailService.sendTemplatedEmail(
+            m.email,
+            'team-locked',
+            { firstName: m.firstName, teamName: team.name },
+            m.id,
+          ),
         ),
-      ),
-      ...members
-        .filter((m) => m.whatsappPhone && m.whatsappVerified)
-        .map((m) =>
-          this.whatsappService.sendTeamLocked(m.whatsappPhone!, m.firstName, team.name, m.id),
-        ),
-    ]);
+        ...members
+          .filter((m) => m.whatsappPhone && m.whatsappVerified)
+          .map((m) =>
+            this.whatsappService.sendTeamLocked(m.whatsappPhone!, m.firstName, team.name, m.id),
+          ),
+      ]);
+    } catch (e: any) {
+      this.logger.error(`Post-lock notifications failed for team ${teamId}: ${e?.message}`);
+    }
 
     return lockedTeam;
   }
@@ -387,6 +395,10 @@ export class TeamService {
 
     const CHANGE_TYPES = ['SEPARATION', 'JOIN_EXISTING', 'CREATE_NEW'];
     const requiresMentor = CHANGE_TYPES.includes(body.type);
+
+    if (team.isLocked && requiresMentor) {
+      throw new BadRequestException('Team membership changes are not permitted after the team is locked');
+    }
 
     return this.prisma.teamRequest.create({
       data: {
@@ -571,10 +583,14 @@ export class TeamService {
     const applicant = await this.prisma.applicant.findUnique({ where: { id: callerId } });
     if (!applicant || applicant.teamId !== teamId) throw new ForbiddenException('You are not in this team');
 
-    // Use caller ID as the coFounderId reference (founder-submitted request)
+    const assignment = await (this.prisma as any).coFounderAssignment.findFirst({
+      where: { teamId, isActive: true },
+    });
+    if (!assignment) throw new BadRequestException('No co-founder is assigned to your team yet — resource requests will be available once your co-founder is assigned');
+
     return (this.prisma as any).resourceRequest.create({
       data: {
-        coFounderId: callerId,
+        coFounderId: assignment.coFounderId,
         teamId,
         type: dto.type || 'OTHER',
         description: dto.description,

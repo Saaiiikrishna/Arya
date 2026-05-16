@@ -140,6 +140,8 @@ export class SprintService {
     const applicant = await this.prisma.applicant.findUnique({ where: { id: callerId } });
     if (!applicant || applicant.teamId !== teamId) throw new ForbiddenException('You are not in this team');
 
+    if (milestone.isCompleted) return milestone; // idempotent — already done, no duplicate notifications
+
     const updated = await this.prisma.milestone.update({
       where: { id: milestoneId },
       data: { isCompleted: true, completedAt: new Date() },

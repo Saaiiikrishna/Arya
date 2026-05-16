@@ -100,9 +100,10 @@ export class DocumentaryService {
 
   // ─── Stream URL ───────────────────────────────────────────
 
-  async getStreamUrl(clipId: string) {
+  async getStreamUrl(clipId: string, publishedOnly = false) {
     const clip = await (this.prisma as any).documentaryClip.findUnique({ where: { id: clipId } });
     if (!clip) throw new NotFoundException('Clip not found');
+    if (publishedOnly && !clip.isPublished) throw new NotFoundException('Clip not found');
 
     const command = new GetObjectCommand({ Bucket: this.bucket, Key: clip.videoUrl });
     const url = await getSignedUrl(this.s3, command, { expiresIn: 3600 });

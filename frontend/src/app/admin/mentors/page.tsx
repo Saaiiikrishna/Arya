@@ -178,7 +178,7 @@ export default function AdminMentorsPage() {
       {/* Create Mentor Modal */}
       {showCreate && (
         <div className="fixed inset-0 bg-ink/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white border border-hairline w-full max-w-lg p-8">
+          <div className="bg-parchment border border-ink/20 w-full max-w-lg p-8">
             <h2 className="font-serif text-2xl font-bold mb-6">Add Mentor</h2>
             <form onSubmit={handleCreate} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -228,7 +228,7 @@ export default function AdminMentorsPage() {
       {/* Assign Modal */}
       {assignModal && (
         <div className="fixed inset-0 bg-ink/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white border border-hairline w-full max-w-md p-8">
+          <div className="bg-parchment border border-ink/20 w-full max-w-md p-8">
             <h2 className="font-serif text-2xl font-bold mb-2">Assign Mentor</h2>
             <p className="text-sm text-ink/60 mb-6">
               Assigning <strong>{assignModal.firstName} {assignModal.lastName}</strong> to a team

@@ -293,7 +293,7 @@ export default function AdminDocumentaryPage() {
       {/* Upload Modal */}
       {showUpload && (
         <div className="fixed inset-0 bg-ink/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white border border-hairline w-full max-w-lg p-8">
+          <div className="bg-parchment border border-ink/20 w-full max-w-lg p-8">
             <h2 className="font-serif text-2xl font-bold mb-6">Upload Documentary Clip</h2>
             <form onSubmit={handleUpload} className="space-y-4">
               <div>

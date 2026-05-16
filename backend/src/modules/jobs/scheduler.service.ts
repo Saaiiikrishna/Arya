@@ -166,7 +166,7 @@ export class SchedulerService {
    * and sends a reminder if the check-in for that week hasn't been submitted.
    * Only fires after the first week (day 7+) so teams have time to settle in.
    */
-  @Cron('0 3 30 * * *') // 03:30 UTC = 09:00 IST — distinct from the 03:00 job above
+  @Cron('0 30 3 * * *') // 03:30 UTC = 09:00 IST — distinct from the 03:00 job above
   async remindWeeklyCheckIns() {
     const now = new Date();
 

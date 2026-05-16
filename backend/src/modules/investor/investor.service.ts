@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma';
 import { EmailService } from '../email/email.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
@@ -213,12 +213,16 @@ export class InvestorService {
   }
 
   async updatePitchEventStatus(id: string, status: string) {
+    const ALLOWED = ['SCHEDULED', 'LIVE', 'COMPLETED', 'CANCELLED'];
+    if (!ALLOWED.includes(status)) throw new BadRequestException(`Invalid status. Allowed: ${ALLOWED.join(', ')}`);
     const event = await (this.prisma as any).pitchEvent.findUnique({ where: { id } });
     if (!event) throw new NotFoundException('Pitch event not found');
     return (this.prisma as any).pitchEvent.update({ where: { id }, data: { status } });
   }
 
   async recordInvestorInterest(pitchEventId: string, dto: { investorId: string; status: string; notes?: string }) {
+    const ALLOWED = ['SHORTLISTED', 'PASSED', 'WATCHING'];
+    if (!ALLOWED.includes(dto.status)) throw new BadRequestException(`Invalid interest status. Allowed: ${ALLOWED.join(', ')}`);
     const event = await (this.prisma as any).pitchEvent.findUnique({ where: { id: pitchEventId } });
     if (!event) throw new NotFoundException('Pitch event not found');
 
@@ -230,6 +234,8 @@ export class InvestorService {
   }
 
   async recordFundingDecision(pitchEventId: string, dto: { investorId: string; outcome: string; amount?: number; terms?: any; notes?: string }) {
+    const ALLOWED = ['FUNDED', 'PASSED', 'DEFERRED'];
+    if (!ALLOWED.includes(dto.outcome)) throw new BadRequestException(`Invalid outcome. Allowed: ${ALLOWED.join(', ')}`);
     const event = await (this.prisma as any).pitchEvent.findUnique({ where: { id: pitchEventId } });
     if (!event) throw new NotFoundException('Pitch event not found');
 

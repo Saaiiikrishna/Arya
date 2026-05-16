@@ -119,19 +119,19 @@ export default function DashboardPage() {
               Executive Overview
             </h2>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="border border-hairline bg-white p-5 hover:bg-parchment/50 transition-colors flex flex-col justify-between group shadow-sm hover:shadow-md">
+              <div className="border border-hairline bg-white p-5 hover:bg-parchment/50 transition-colors flex flex-col justify-between group hover:bg-parchment/80">
                 <div className="text-[10px] uppercase tracking-widest text-ink/50 font-bold mb-3 block">Total Applic.</div>
                 <div className="font-serif text-3xl lg:text-4xl pr-2">{stats.totalApplicants.toLocaleString()}</div>
               </div>
-              <div className="border border-hairline bg-white p-5 hover:bg-parchment/50 transition-colors flex flex-col justify-between group shadow-sm hover:shadow-md">
+              <div className="border border-hairline bg-white p-5 hover:bg-parchment/50 transition-colors flex flex-col justify-between group hover:bg-parchment/80">
                 <div className="text-[10px] uppercase tracking-widest text-ink/50 font-bold mb-3 block">Batches Formed</div>
                 <div className="font-serif text-3xl lg:text-4xl pr-2">{stats.totalBatches}</div>
               </div>
-              <div className="border border-hairline bg-white p-5 hover:bg-parchment/50 transition-colors flex flex-col justify-between group shadow-sm hover:shadow-md border-b-4 border-b-forest">
+              <div className="border border-hairline bg-white p-5 hover:bg-parchment/50 transition-colors flex flex-col justify-between group hover:bg-parchment/80 border-b-4 border-b-forest">
                 <div className="text-[10px] uppercase tracking-widest text-ink/50 font-bold mb-3 block">Active Founders</div>
                 <div className="font-serif text-3xl lg:text-4xl pr-2 text-forest">{stats.statusBreakdown.active}</div>
               </div>
-              <div className="border border-hairline bg-white p-5 hover:bg-parchment/50 transition-colors flex flex-col justify-between group shadow-sm hover:shadow-md border-b-4 border-b-terracotta">
+              <div className="border border-hairline bg-white p-5 hover:bg-parchment/50 transition-colors flex flex-col justify-between group hover:bg-parchment/80 border-b-4 border-b-terracotta">
                 <div className="text-[10px] uppercase tracking-widest text-ink/50 font-bold mb-3 block">Pending Review</div>
                 <div className="font-serif text-3xl lg:text-4xl pr-2 text-terracotta">{stats.statusBreakdown.pending}</div>
               </div>
@@ -341,7 +341,7 @@ export default function DashboardPage() {
             <p className="text-sm font-sans text-ink/80 leading-relaxed">View all underlying Postgres tables, manually clear misconfigured schema data, drop entire columns, or orchestrate global data purges. Strictly restricted to Super Admins.</p>
           </div>
           <div className="text-left md:text-right w-full md:w-auto flex-shrink-0">
-            <Link href="/admin/danger-zone" className="bg-terracotta hover:bg-ink text-white px-8 py-4 text-xs uppercase tracking-widest font-bold transition-colors shadow-sm hover:shadow-md inline-block w-full md:w-auto text-center">
+            <Link href="/admin/danger-zone" className="bg-terracotta hover:bg-ink text-white px-8 py-4 text-xs uppercase tracking-widest font-bold transition-colors hover:bg-parchment/80 inline-block w-full md:w-auto text-center">
               Enter Danger Zone →
             </Link>
           </div>

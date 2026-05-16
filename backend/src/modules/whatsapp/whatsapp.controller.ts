@@ -4,13 +4,17 @@ import {
   Post,
   Body,
   Query,
+  Req,
   Res,
+  Headers,
   UseGuards,
   HttpCode,
   HttpStatus,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
-import type { Response } from 'express';
+import type { RawBodyRequest } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import { WhatsappService } from './whatsapp.service';
 import { AdminGuard } from '../auth/guards/admin.guard';
 
@@ -46,7 +50,14 @@ export class WhatsappController {
    */
   @Post('whatsapp/webhook')
   @HttpCode(HttpStatus.OK)
-  async receiveWebhook(@Body() payload: any) {
+  async receiveWebhook(
+    @Body() payload: any,
+    @Req() req: RawBodyRequest<Request>,
+    @Headers('x-hub-signature-256') sig: string,
+  ) {
+    if (!this.whatsappService.validateHmac(req.rawBody ?? Buffer.alloc(0), sig ?? '')) {
+      throw new ForbiddenException('Invalid webhook signature');
+    }
     // Fire-and-forget — do not await; Meta needs the 200 immediately
     this.whatsappService.handleWebhookEvent(payload).catch(() => {});
     return { status: 'ok' };
@@ -97,10 +108,9 @@ export class WhatsappController {
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
   ) {
-    return this.whatsappService.getSendLog(
-      limit ? Number(limit) : 50,
-      offset ? Number(offset) : 0,
-    );
+    const parsedLimit = Math.min(Math.max(parseInt(limit ?? '50', 10) || 50, 1), 200);
+    const parsedOffset = Math.max(parseInt(offset ?? '0', 10) || 0, 0);
+    return this.whatsappService.getSendLog(parsedLimit, parsedOffset);
   }
 
   /**

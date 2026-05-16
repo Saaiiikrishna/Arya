@@ -1,5 +1,3 @@
-@AGENTS.md
-
 # Frontend CLAUDE.md
 
 This file provides frontend-specific guidance for Claude Code. Read the root [`../CLAUDE.md`](../CLAUDE.md) first for platform overview, business rules, and dev commands.
@@ -30,7 +28,7 @@ All routes live under `src/app/` (App Router). The table below maps routes to pr
 | `/hub/sprint` | Stage 3 | Built — milestone checklist, blockers, weekly check-ins |
 | `/hub/project` | Stage 3 | Built — leader edit mode; status badge; funding target display |
 | `/hub/cofounder` | Stage 2+ | Built — co-founder card, resource request form, request history |
-| `/admin/*` | – | Built (core + mentors, cofounders, sprints — see TODO P4 for documentary) |
+| `/admin/*` | – | Built (core + mentors, cofounders, sprints, documentary, whatsapp, pitch) |
 | `/investors/*` | Stage 4 | Built |
 | `/pledge` | – | Built |
 | `/archives` | – | Built |

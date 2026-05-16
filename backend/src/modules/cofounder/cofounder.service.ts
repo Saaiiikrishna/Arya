@@ -114,7 +114,7 @@ export class CoFounderService {
     });
     const cfName = `${cf.firstName} ${cf.lastName}`;
 
-    await Promise.allSettled([
+    const results = await Promise.allSettled([
       ...members.map((m) =>
         this.emailService.sendTemplatedEmail(
           m.email,
@@ -129,6 +129,9 @@ export class CoFounderService {
           this.whatsappService.sendCoFounderAssigned(m.whatsappPhone!, m.firstName, cfName, m.id),
         ),
     ]);
+    results
+      .filter((r) => r.status === 'rejected')
+      .forEach((r: any) => this.logger.error(`Co-founder assignment notification failed: ${r.reason?.message ?? r.reason}`));
 
     this.logger.log(`Co-founder ${cf.email} assigned to team ${team.name} by admin ${adminId}`);
     return assignment;

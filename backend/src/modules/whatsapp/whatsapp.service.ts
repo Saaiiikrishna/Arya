@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import * as crypto from 'crypto';
 import axios from 'axios';
 import { PrismaService } from '../../prisma';
 
@@ -37,6 +38,7 @@ export class WhatsappService {
   private readonly apiToken: string;
   private readonly phoneId: string;
   private readonly verifyToken: string;
+  private readonly appSecret: string;
   private readonly baseUrl: string;
   private readonly isDev: boolean;
 
@@ -44,9 +46,16 @@ export class WhatsappService {
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
   ) {
-    this.apiToken = this.configService.get<string>('WHATSAPP_API_TOKEN', '');
-    this.phoneId = this.configService.get<string>('WHATSAPP_PHONE_ID', '');
-    this.verifyToken = this.configService.get<string>('WHATSAPP_VERIFY_TOKEN', 'arya-verify');
+    this.apiToken = this.configService.get<string>('WHATSAPP_API_TOKEN') ?? '';
+    this.phoneId = this.configService.get<string>('WHATSAPP_PHONE_ID') ?? '';
+    this.verifyToken = this.configService.get<string>('WHATSAPP_VERIFY_TOKEN') ?? '';
+    this.appSecret = this.configService.get<string>('WHATSAPP_APP_SECRET') ?? '';
+    if (!this.verifyToken) {
+      this.logger.warn('WHATSAPP_VERIFY_TOKEN is not set — webhook verification will reject all challenges');
+    }
+    if (!this.appSecret) {
+      this.logger.warn('WHATSAPP_APP_SECRET is not set — webhook HMAC validation is disabled');
+    }
     this.baseUrl = `https://graph.facebook.com/${GRAPH_VERSION}/${this.phoneId}/messages`;
     this.isDev = this.configService.get<string>('NODE_ENV') !== 'production';
   }
@@ -54,10 +63,23 @@ export class WhatsappService {
   // ─── Webhook ─────────────────────────────────────────────
 
   verifyWebhook(mode: string, token: string, challenge: string): string | null {
+    if (!this.verifyToken) return null; // fail closed — env var not set
     if (mode === 'subscribe' && token === this.verifyToken) {
       return challenge;
     }
     return null;
+  }
+
+  /** Validates X-Hub-Signature-256 header. Returns true in dev when appSecret is unset. */
+  validateHmac(rawBody: Buffer, signatureHeader: string): boolean {
+    if (!this.appSecret) return true; // dev/unconfigured — skip
+    if (!signatureHeader?.startsWith('sha256=')) return false;
+    const expected = 'sha256=' + crypto.createHmac('sha256', this.appSecret).update(rawBody).digest('hex');
+    try {
+      return crypto.timingSafeEqual(Buffer.from(signatureHeader), Buffer.from(expected));
+    } catch {
+      return false; // length mismatch
+    }
   }
 
   async handleWebhookEvent(payload: any): Promise<void> {
@@ -74,9 +96,10 @@ export class WhatsappService {
           }
         }
 
-        // Incoming messages (user replies) — log, don't process for now
+        // Incoming messages (user replies) — log metadata only, never log body (PII)
         for (const message of value?.messages ?? []) {
-          this.logger.log(`WA incoming from ${message.from}: type=${message.type} body=${message.text?.body ?? ''}`);
+          const masked = `${String(message.from ?? '').slice(0, 4)}****`;
+          this.logger.log(`WA incoming from ${masked}: type=${message.type}`);
         }
       }
     }

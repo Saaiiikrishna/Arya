@@ -30,7 +30,9 @@ export default function HubSprintPage() {
   const [checkInText, setCheckInText] = useState('');
   const [submittingCheckIn, setSubmittingCheckIn] = useState(false);
 
-  const currentWeek = Math.ceil((Date.now() - new Date('2024-01-01').getTime()) / (7 * 24 * 60 * 60 * 1000));
+  const currentWeek = data?.sprint?.startDate
+    ? Math.max(1, Math.ceil((Date.now() - new Date(data.sprint.startDate).getTime()) / (7 * 24 * 60 * 60 * 1000)))
+    : 1;
 
   useEffect(() => {
     async function load() {

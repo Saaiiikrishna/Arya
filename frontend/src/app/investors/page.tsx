@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { api } from '@/lib/api';
 import Layout from '@/components/Layout';
 import Link from 'next/link';
@@ -17,8 +17,10 @@ export default function InvestorShowcase() {
   const [docClips, setDocClips] = useState<any[]>([]);
   const [docLoading, setDocLoading] = useState(false);
   const [docStreamUrls, setDocStreamUrls] = useState<Record<string, string>>({});
+  const docSeqRef = useRef(0);
 
   async function handleWatchDocumentary(showcase: any) {
+    const seq = ++docSeqRef.current;
     setDocShowcase(showcase);
     setDocClips([]);
     setDocStreamUrls({});
@@ -27,11 +29,13 @@ export default function InvestorShowcase() {
     if (!teamId) { setDocLoading(false); return; }
     try {
       const clips = await api.getPublishedDocumentaryClips(teamId);
+      if (seq !== docSeqRef.current) return; // stale — user switched to another team
       setDocClips(clips);
     } catch {
+      if (seq !== docSeqRef.current) return;
       setDocClips([]);
     } finally {
-      setDocLoading(false);
+      if (seq === docSeqRef.current) setDocLoading(false);
     }
   }
 
@@ -44,8 +48,8 @@ export default function InvestorShowcase() {
       const { url } = await api.getInvestorClipStreamUrl(clipId);
       setDocStreamUrls((prev) => ({ ...prev, [clipId]: url }));
       window.open(url, '_blank', 'noopener');
-    } catch (err: any) {
-      alert(err.message);
+    } catch {
+      alert('Unable to load video. Please try again.');
     }
   }
 

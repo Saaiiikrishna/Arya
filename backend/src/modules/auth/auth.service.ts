@@ -199,6 +199,10 @@ export class AuthService {
       const cf = await (this.prisma as any).coFounder.findUnique({ where: { id: payload.sub } });
       if (!cf || !cf.isActive) throw new UnauthorizedException('Co-founder not found or inactive');
       newPayload = { sub: cf.id, email: cf.email, role: 'COFOUNDER' };
+    } else if (payload.role === 'INVESTOR') {
+      const investor = await this.prisma.investor.findUnique({ where: { id: payload.sub } });
+      if (!investor || !investor.isApproved) throw new UnauthorizedException('Investor not found or not approved');
+      newPayload = { sub: investor.id, email: investor.email, role: 'INVESTOR' };
     } else {
       const admin = await this.prisma.admin.findUnique({ where: { id: payload.sub } });
       if (!admin || !admin.isActive) throw new UnauthorizedException('User not found or inactive');

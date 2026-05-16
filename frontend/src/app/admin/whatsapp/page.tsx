@@ -1,7 +1,10 @@
 "use client";
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import clsx from 'clsx';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import { MessageSquare, Send, List, Clock, CheckCircle, XCircle, ChevronRight } from 'lucide-react';
 
 type Tab = 'broadcast' | 'templates' | 'log' | 'send-one';
@@ -13,6 +16,8 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 export default function AdminWhatsappPage() {
+  const router = useRouter();
+  const { role, loading: authLoading } = useAuth();
   const [tab, setTab] = useState<Tab>('broadcast');
 
   // Broadcast state
@@ -115,6 +120,12 @@ export default function AdminWhatsappPage() {
     { id: 'log', label: 'Send Log', icon: <Clock className="w-3.5 h-3.5" /> },
   ];
 
+  if (authLoading) return null;
+  if (!role || !['ADMIN', 'SUPER_ADMIN', 'MODERATOR'].includes(role)) {
+    router.replace('/login');
+    return null;
+  }
+
   return (
     <div className="text-ink animate-fade-in px-8 py-12 max-w-5xl mx-auto min-h-screen">
       <div className="space-y-8">
@@ -129,11 +140,10 @@ export default function AdminWhatsappPage() {
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`flex items-center gap-2 px-5 py-3 text-[11px] uppercase tracking-widest font-bold border-b-2 transition-colors ${
-                tab === t.id
-                  ? 'border-forest text-forest'
-                  : 'border-transparent text-ink/40 hover:text-ink'
-              }`}
+              className={clsx(
+                'flex items-center gap-2 px-5 py-3 text-[11px] uppercase tracking-widest font-bold border-b-2 transition-colors',
+                tab === t.id ? 'border-forest text-forest' : 'border-transparent text-ink/40 hover:text-ink',
+              )}
             >
               {t.icon} {t.label}
             </button>
@@ -258,7 +268,7 @@ export default function AdminWhatsappPage() {
 
               <div className="flex items-center justify-between pt-2">
                 {sendOneResult !== null && (
-                  <span className={`flex items-center gap-1.5 text-[11px] uppercase tracking-widest font-bold ${sendOneResult ? 'text-forest' : 'text-terracotta'}`}>
+                  <span className={clsx('flex items-center gap-1.5 text-[11px] uppercase tracking-widest font-bold', sendOneResult ? 'text-forest' : 'text-terracotta')}>
                     {sendOneResult
                       ? <><CheckCircle className="w-3.5 h-3.5" /> Sent</>
                       : <><XCircle className="w-3.5 h-3.5" /> Failed</>
@@ -292,7 +302,7 @@ export default function AdminWhatsappPage() {
               <div className="divide-y divide-ink/10 border border-ink/10">
                 {templates.map(t => (
                   <div key={t.name} className="p-4 flex items-start gap-4">
-                    <span className={`text-[10px] uppercase tracking-widest font-bold border px-2 py-0.5 shrink-0 ${CATEGORY_COLORS[t.category] ?? 'border-ink/20 text-ink/50'}`}>
+                    <span className={clsx('text-[10px] uppercase tracking-widest font-bold border px-2 py-0.5 shrink-0', CATEGORY_COLORS[t.category] ?? 'border-ink/20 text-ink/50')}>
                       {t.category}
                     </span>
                     <div className="flex-1 min-w-0">

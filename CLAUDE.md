@@ -107,7 +107,7 @@ These were hardened in PRs and must not be undone:
 - **Refresh tokens rotate on use** — each use issues a new pair and revokes the old one
 - **`pgcrypto` extension was removed** from the migration chain (`888c39a`) — do not re-add it; migrations must resolve cleanly without it
 - **`triggeredBy` / identity fields in request body are stripped** — all identity is pinned to the JWT at login (`17edb1a`, `3d9b73a`, `fdc0655`, `1788c00`)
-- **WhatsApp module shell exists** (`whatsapp.service.ts`) but has zero controllers — do not wire new features through it until a go/no-go decision is made (see TODO P3)
+- **WhatsApp WABA integration is live** — `WhatsappModule` is `@Global()`, controller wired at `GET/POST /api/whatsapp/webhook`, admin endpoints at `/api/admin/whatsapp/*`. Webhook HMAC validated via `WHATSAPP_APP_SECRET`; verify token guarded fail-closed. 16 template stubs registered. See `backend/src/modules/whatsapp/`
 
 ---
 
