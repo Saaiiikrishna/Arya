@@ -24,9 +24,11 @@ export class DocumentController {
   @Post('documents/:id/confirm')
   async confirmUpload(
     @Param('id') id: string,
+    @Req() req: any,
     @Body('fileSize') fileSize?: number,
   ) {
-    return this.documentService.confirmUpload(id, fileSize);
+    const applicantId = req.user.id || req.user.sub;
+    return this.documentService.confirmUpload(id, applicantId, fileSize);
   }
 
   // ─── Admin ────────────────────────────────────────

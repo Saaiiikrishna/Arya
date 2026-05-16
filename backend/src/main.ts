@@ -126,11 +126,11 @@ async function bootstrap() {
   });
 
   const port = configService.get<number>('PORT', 3001);
+
+  // Auto-seed critical data (idempotent) — must complete before accepting traffic
+  await autoSeed(app);
   await app.listen(port);
   console.log(`🚀 Arya Backend running on port ${port}`);
-
-  // Auto-seed critical data (idempotent)
-  await autoSeed(app);
 }
 
 bootstrap();

@@ -20,7 +20,11 @@ function LoginContent() {
   const [authMode, setAuthMode] = useState<'choose' | 'otp-email' | 'otp-verify'>('choose');
   const [otpEmail, setOtpEmail] = useState('');
   const [mounted, setMounted] = useState(false);
-  
+  const [otpDigits, setOtpDigits] = useState(['', '', '', '', '', '']);
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [testOtpCode, setTestOtpCode] = useState<string | null>(null);
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -59,10 +63,6 @@ function LoginContent() {
       </div>
     );
   }
-  const [otpDigits, setOtpDigits] = useState(['', '', '', '', '', '']);
-  const [otpLoading, setOtpLoading] = useState(false);
-  const [testOtpCode, setTestOtpCode] = useState<string | null>(null);
-  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   const handleGoogleSuccess = async (credentialResponse: any) => {
     try {
