@@ -416,10 +416,10 @@ class ApiClient {
     return this.request<any>(`/chat/room/team/${teamId}`);
   }
 
-  async getUploadUrl(applicantId: string, fileName: string, mimeType: string) {
+  async getUploadUrl(fileName: string, mimeType: string) {
     return this.request<any>('/documents/upload-url', {
       method: 'POST',
-      body: { applicantId, fileName, mimeType },
+      body: { fileName, mimeType },
     });
   }
 
@@ -728,10 +728,10 @@ class ApiClient {
     });
   }
 
-  async setReferrer(applicantId: string, referrerId: string) {
+  async setReferrer(referrerId: string) {
     return this.request<{ success: boolean }>('/referrals/set', {
       method: 'POST',
-      body: { applicantId, referrerId },
+      body: { referrerId },
     });
   }
 
@@ -804,18 +804,12 @@ class ApiClient {
     });
   }
 
-  async startEquityTimer(companyId: string, adminId?: string) {
-    return this.request<any>(`/admin/equity/companies/${companyId}/start-timer`, {
-      method: 'POST',
-      body: { adminId },
-    });
+  async startEquityTimer(companyId: string) {
+    return this.request<any>(`/admin/equity/companies/${companyId}/start-timer`, { method: 'POST' });
   }
 
-  async executeHandover(companyId: string, adminId?: string) {
-    return this.request<any>(`/admin/equity/companies/${companyId}/handover`, {
-      method: 'POST',
-      body: { adminId },
-    });
+  async executeHandover(companyId: string) {
+    return this.request<any>(`/admin/equity/companies/${companyId}/handover`, { method: 'POST' });
   }
 
   async updateEquityTimers() {
@@ -837,11 +831,8 @@ class ApiClient {
     });
   }
 
-  async signAgreementPlatform(agreementId: string, adminName: string) {
-    return this.request<any>(`/admin/equity/agreements/${agreementId}/sign-platform`, {
-      method: 'POST',
-      body: { adminName },
-    });
+  async signAgreementPlatform(agreementId: string) {
+    return this.request<any>(`/admin/equity/agreements/${agreementId}/sign-platform`, { method: 'POST' });
   }
 }
 

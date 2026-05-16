@@ -129,16 +129,19 @@ export class EquityController {
 
   @UseGuards(AdminGuard)
   @Post('admin/equity/events')
-  recordEvent(@Body() body: {
-    companyId: string;
-    eventType: any;
-    fromHolder?: string;
-    toHolder?: string;
-    percentageAmount: number;
-    description: string;
-    metadata?: any;
-    triggeredBy?: string;
-  }) {
-    return this.equityService.recordEvent(body);
+  recordEvent(
+    @Req() req: any,
+    @Body() body: {
+      companyId: string;
+      eventType: any;
+      fromHolder?: string;
+      toHolder?: string;
+      percentageAmount: number;
+      description: string;
+      metadata?: any;
+    },
+  ) {
+    const triggeredBy = req.user.id || req.user.sub;
+    return this.equityService.recordEvent({ ...body, triggeredBy });
   }
 }
