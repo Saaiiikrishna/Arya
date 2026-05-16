@@ -66,13 +66,16 @@ export class TrainingService {
     });
   }
 
-  async markCompleted(assignmentId: string, score?: number, callerId?: string) {
+  async markCompleted(assignmentId: string, score?: number, callerId?: string, bypassOwnerCheck = false) {
     const assignment = await this.prisma.trainingAssignment.findUnique({
       where: { id: assignmentId },
     });
     if (!assignment) throw new NotFoundException('Assignment not found');
-    if (callerId && assignment.applicantId !== callerId) {
-      throw new ForbiddenException('You can only complete your own assignments');
+    if (!bypassOwnerCheck) {
+      if (!callerId) throw new ForbiddenException('Authentication required');
+      if (assignment.applicantId !== callerId) {
+        throw new ForbiddenException('You can only complete your own assignments');
+      }
     }
     return this.prisma.trainingAssignment.update({
       where: { id: assignmentId },

@@ -70,7 +70,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         lastName: payload.lastName,
       };
 
-      this.logger.log(`Client connected: ${client.id} (user: ${payload.email})`);
+      this.logger.log(`Client connected: ${client.id} (userId: ${payload.sub})`);
     } catch {
       client.emit('error', { message: 'Invalid or expired token' });
       client.disconnect(true);
@@ -113,7 +113,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const { userId, firstName, lastName, email } = client.data;
     const senderName = firstName
       ? `${firstName} ${lastName ?? ''}`.trim()
-      : email.split('@')[0];
+      : (email?.split('@')[0] ?? 'user');
 
     const message = await this.chatService.sendMessage({
       roomId: data.roomId,
@@ -139,7 +139,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const { userId, firstName, lastName, email } = client.data;
     const senderName = firstName
       ? `${firstName} ${lastName ?? ''}`.trim()
-      : email.split('@')[0];
+      : (email?.split('@')[0] ?? 'user');
 
     const message = await this.chatService.sendAnnouncement(userId, senderName, data.content);
     this.server.emit('announcement', message);

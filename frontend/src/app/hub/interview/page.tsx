@@ -51,10 +51,7 @@ export default function InterviewPage() {
       if (hubRes.status === 'fulfilled') {
         const bid = hubRes.value?.applicant?.batchId;
         setBatchId(bid);
-        if (bid && bookingRes.status !== 'fulfilled') {
-          const slotsRes = await api.getAvailableInterviewSlots(bid);
-          setSlots(slotsRes);
-        } else if (bid) {
+        if (bid) {
           const slotsRes = await api.getAvailableInterviewSlots(bid);
           setSlots(slotsRes);
         }
@@ -103,7 +100,6 @@ export default function InterviewPage() {
   };
 
   const handleVideoSubmit = async () => {
-    if (!batchId) return;
     const [url1, url2, url3] = videoUrls;
     if (!url1 && !url2 && !url3) {
       setError('Please provide at least one video URL');
@@ -113,7 +109,6 @@ export default function InterviewPage() {
     setError('');
     try {
       const res = await api.submitVideoSubmission({
-        batchId,
         videoUrl1: url1 || undefined,
         videoUrl2: url2 || undefined,
         videoUrl3: url3 || undefined,
@@ -182,6 +177,15 @@ export default function InterviewPage() {
             </div>
           )}
 
+          {/* ── Global REJECTED banner ── */}
+          {booking?.decision === 'REJECTED' && (
+            <div className="mb-8 bg-white border border-hairline p-8 text-center">
+              <XCircle className="w-10 h-10 text-terracotta mx-auto mb-4" />
+              <p className="font-serif text-xl font-bold mb-2">Application Unsuccessful</p>
+              <p className="text-ink/50 text-sm">Thank you for applying. We hope to see you in a future batch.</p>
+            </div>
+          )}
+
           {/* ── Async Video Section ── */}
           <section className="mb-12">
             <h2 className="font-serif text-2xl font-bold mb-6 flex items-center gap-3">
@@ -189,13 +193,7 @@ export default function InterviewPage() {
               Round 1 — Async Video
             </h2>
 
-            {booking?.decision === 'REJECTED' ? (
-              <div className="bg-white border border-hairline p-8 text-center">
-                <XCircle className="w-10 h-10 text-terracotta mx-auto mb-4" />
-                <p className="font-serif text-xl font-bold mb-2">Application Unsuccessful</p>
-                <p className="text-ink/50 text-sm">Thank you for applying. We hope to see you in a future batch.</p>
-              </div>
-            ) : video ? (
+            {video ? (
               <div className="bg-white border border-hairline p-8">
                 <div className="flex items-center gap-3 mb-6">
                   <CheckCircle className="w-5 h-5 text-forest" />
@@ -214,7 +212,10 @@ export default function InterviewPage() {
                   ))}
                 </div>
                 <button
-                  onClick={() => { setVideo(null); setVideoUrls(['', '', '']); }}
+                  onClick={() => {
+                    setVideoUrls([video.videoUrl1 ?? '', video.videoUrl2 ?? '', video.videoUrl3 ?? '']);
+                    setVideo(null);
+                  }}
                   className="mt-6 text-xs uppercase tracking-widest text-ink/40 hover:text-ink transition-colors"
                 >
                   Update submission

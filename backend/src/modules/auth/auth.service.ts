@@ -106,7 +106,7 @@ export class AuthService {
         }
 
         const jwtPayload: JwtPayload = { sub: (admin as any).id, email: (admin as any).email, role: (admin as any).role };
-        const refreshToken = this.jwtService.sign(jwtPayload, { secret: this.configService.get<string>('JWT_REFRESH_SECRET'), expiresIn: '7d' as any });
+        const refreshToken = this.signRefreshToken(jwtPayload);
         await this.storeRefreshToken((admin as any).id, refreshToken);
         return {
           accessToken: this.jwtService.sign(jwtPayload),
@@ -148,7 +148,7 @@ export class AuthService {
       }
 
       const jwtPayload: JwtPayload = { sub: (applicant as any).id, email: (applicant as any).email, role: 'APPLICANT' };
-      const refreshToken = this.jwtService.sign(jwtPayload, { secret: this.configService.get<string>('JWT_REFRESH_SECRET'), expiresIn: '7d' as any });
+      const refreshToken = this.signRefreshToken(jwtPayload);
       await this.storeRefreshToken((applicant as any).id, refreshToken);
       return {
         accessToken: this.jwtService.sign(jwtPayload),
@@ -180,7 +180,7 @@ export class AuthService {
     }
 
     // Verify the token exists in the DB and hasn't been revoked
-    const stored = await (this.prisma as any).refreshToken.findUnique({ where: { token } });
+    const stored = await this.prisma.refreshToken.findUnique({ where: { token } });
     if (!stored || stored.revokedAt || stored.expiresAt < new Date()) {
       throw new UnauthorizedException('Refresh token revoked or expired');
     }
@@ -197,13 +197,14 @@ export class AuthService {
       newPayload = { sub: admin.id, email: admin.email, role: admin.role };
     }
 
-    // Rotate: delete old token, issue new one
-    await (this.prisma as any).refreshToken.delete({ where: { id: stored.id } });
-    const newRefresh = this.jwtService.sign(newPayload, {
-      secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
-      expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRATION') as any,
-    });
-    await this.storeRefreshToken(newPayload.sub, newRefresh);
+    // Rotate atomically: delete old token and create new one in a single transaction
+    const newRefresh = this.signRefreshToken(newPayload);
+    const expStr = this.configService.get<string>('JWT_REFRESH_EXPIRATION', '7d');
+    const expiresAt = new Date(Date.now() + this.parseExpirationMs(expStr));
+    await this.prisma.$transaction([
+      this.prisma.refreshToken.delete({ where: { id: stored.id } }),
+      this.prisma.refreshToken.create({ data: { userId: newPayload.sub, token: newRefresh, expiresAt } }),
+    ]);
 
     return {
       accessToken: this.jwtService.sign(newPayload),
@@ -212,11 +213,18 @@ export class AuthService {
   }
 
   async logout(token: string) {
-    await (this.prisma as any).refreshToken.updateMany({
+    await this.prisma.refreshToken.updateMany({
       where: { token },
       data: { revokedAt: new Date() },
     });
     return { success: true };
+  }
+
+  private signRefreshToken(payload: JwtPayload): string {
+    return this.jwtService.sign(payload, {
+      secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+      expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRATION', '7d') as any,
+    });
   }
 
   private parseExpirationMs(expStr: string): number {
@@ -231,7 +239,7 @@ export class AuthService {
   private async storeRefreshToken(userId: string, token: string): Promise<void> {
     const expStr = this.configService.get<string>('JWT_REFRESH_EXPIRATION', '7d');
     const expiresAt = new Date(Date.now() + this.parseExpirationMs(expStr));
-    await (this.prisma as any).refreshToken.create({ data: { userId, token, expiresAt } });
+    await this.prisma.refreshToken.create({ data: { userId, token, expiresAt } });
   }
 
   async createAdmin(dto: CreateAdminDto) {
@@ -338,10 +346,7 @@ export class AuthService {
     if (admin) {
       if (!admin.isActive) throw new UnauthorizedException('Account is disabled');
       const payload: JwtPayload = { sub: admin.id, email: admin.email, role: admin.role };
-      const refreshToken = this.jwtService.sign(payload, {
-        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
-        expiresIn: '7d' as any,
-      });
+      const refreshToken = this.signRefreshToken(payload);
       await this.storeRefreshToken(admin.id, refreshToken);
       return {
         accessToken: this.jwtService.sign(payload),
@@ -377,10 +382,7 @@ export class AuthService {
     }
 
     const jwtPayload: JwtPayload = { sub: (applicant as any).id, email: (applicant as any).email, role: 'APPLICANT' };
-    const refreshToken = this.jwtService.sign(jwtPayload, {
-      secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
-      expiresIn: '7d' as any,
-    });
+    const refreshToken = this.signRefreshToken(jwtPayload);
     await this.storeRefreshToken((applicant as any).id, refreshToken);
     return {
       accessToken: this.jwtService.sign(jwtPayload),

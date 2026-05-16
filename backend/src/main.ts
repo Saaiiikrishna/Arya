@@ -39,8 +39,8 @@ async function autoSeed(app: any) {
       create: { batchNumber: 1 },
     });
 
-    // Ensure test applicant exists (dev/staging only)
-    if (process.env.NODE_ENV !== 'production') {
+    // Ensure test applicant exists (only when explicitly enabled via env flag)
+    if (process.env.ENABLE_TEST_SEED === 'true') {
       const existing = await prisma.applicant.findUnique({ where: { email: 'test@arya.com' } });
       await prisma.applicant.upsert({
         where: { email: 'test@arya.com' },

@@ -106,12 +106,11 @@ export class InterviewController {
   @Post('interview/video')
   async submitVideo(
     @Req() req: any,
-    @Body('batchId') batchId: string,
     @Body('videoUrl1') videoUrl1?: string,
     @Body('videoUrl2') videoUrl2?: string,
     @Body('videoUrl3') videoUrl3?: string,
   ) {
     const applicantId = req.user.id || req.user.sub;
-    return this.interviewService.submitVideo(applicantId, batchId, videoUrl1, videoUrl2, videoUrl3);
+    return this.interviewService.submitVideo(applicantId, videoUrl1, videoUrl2, videoUrl3);
   }
 }

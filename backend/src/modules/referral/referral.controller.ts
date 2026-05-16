@@ -16,11 +16,13 @@ export class ReferralController {
     return this.referralService.verifyReferrer(query);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Post('referrals/set')
   async setReferrer(
-    @Body('applicantId') applicantId: string,
+    @Req() req: any,
     @Body('referrerId') referrerId: string,
   ) {
+    const applicantId = req.user.id || req.user.sub;
     return this.referralService.setReferrer(applicantId, referrerId);
   }
 
