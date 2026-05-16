@@ -232,10 +232,10 @@ export class ApplicantService {
       );
     }
 
-    // Send WhatsApp Welcome if verified for the first time
-    if (data.whatsappVerified && !applicant.whatsappVerified && updated.phone) {
-      this.whatsappService.sendWelcome(updated.phone, updated.firstName, applicantId).catch(err =>
-        this.logger.error(`WhatsApp welcome failed for ${applicantId}`, err)
+    // Send WhatsApp welcome when opt-in is first confirmed
+    if (data.whatsappVerified && !applicant.whatsappVerified && updated.whatsappPhone) {
+      this.whatsappService.sendApplicationReceived(updated.whatsappPhone, updated.firstName, applicantId).catch((e: any) =>
+        this.logger.error(`WhatsApp welcome failed for ${applicantId}`, e)
       );
     }
 
@@ -336,6 +336,28 @@ export class ApplicantService {
     const project = team?.project || null;
     const activeSprint = team?.sprints?.[0] || null;
 
+    // Fetch mentor + co-founder assignment separately (new models not in generated client yet)
+    let mentorData: any = null;
+    let coFounderData: any = null;
+    if (team?.id) {
+      const [mentorAssignment, cfAssignment] = await Promise.all([
+        (this.prisma as any).mentorAssignment.findFirst({
+          where: { teamId: team.id, isActive: true },
+          include: {
+            mentor: { select: { id: true, firstName: true, lastName: true, email: true, expertise: true, bio: true } },
+          },
+        }),
+        (this.prisma as any).coFounderAssignment.findUnique({
+          where: { teamId: team.id },
+          include: {
+            coFounder: { select: { id: true, firstName: true, lastName: true, email: true, bio: true } },
+          },
+        }),
+      ]);
+      mentorData = mentorAssignment?.mentor ?? null;
+      coFounderData = cfAssignment?.isActive ? cfAssignment?.coFounder ?? null : null;
+    }
+
     // Calculate sprint day
     let sprintInfo: any = { status: 'AWAITING_TEAM', label: 'Awaiting Team Formation' };
     if (team && !activeSprint) {
@@ -374,6 +396,7 @@ export class ApplicantService {
         id: team.id,
         name: team.name,
         teamType: team.teamType,
+        myId: applicant.id,
         members: team.members.map((m: any) => ({
           id: m.id,
           name: `${m.firstName} ${m.lastName}`.trim(),
@@ -388,8 +411,11 @@ export class ApplicantService {
           isLeader: team.leaderId === m.id,
         })),
         leaderId: team.leaderId,
+        isLocked: (team as any).isLocked ?? false,
         activeElection: team.elections?.[0] || null,
         pendingRequests: team.requests || [],
+        mentor: mentorData,
+        coFounder: coFounderData,
       } : null,
       project: project ? {
         id: project.id,

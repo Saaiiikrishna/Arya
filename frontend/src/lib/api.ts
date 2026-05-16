@@ -834,6 +834,210 @@ class ApiClient {
   async signAgreementPlatform(agreementId: string) {
     return this.request<any>(`/admin/equity/agreements/${agreementId}/sign-platform`, { method: 'POST' });
   }
+
+  // ─── Admin: Sprint management ────────────────────────────
+
+  async adminCreateSprint(data: { teamId: string; startDate: string; endDate: string; title?: string }) {
+    return this.request<any>('/admin/sprints', { method: 'POST', body: data });
+  }
+
+  async adminGetSprintByTeam(teamId: string) {
+    return this.request<any>(`/admin/sprints/team/${teamId}`);
+  }
+
+  async adminCreateMilestone(sprintId: string, data: { title: string; description?: string; deadline: string; type?: string }) {
+    return this.request<any>(`/admin/sprints/${sprintId}/milestones`, { method: 'POST', body: data });
+  }
+
+  async adminCreateBulkMilestone(data: { title: string; description?: string; deadline: string }) {
+    return this.request<any>('/admin/sprints/milestones/bulk-common', { method: 'POST', body: data });
+  }
+
+  async adminGetCheckInStatus(batchId: string, week?: number) {
+    const qs = week !== undefined ? `?batchId=${batchId}&week=${week}` : `?batchId=${batchId}`;
+    return this.request<any>(`/admin/sprints/checkins/status${qs}`);
+  }
+
+  // Sprint dashboard
+  async getMySprintDashboard() {
+    return this.request<any>('/sprints/my/dashboard');
+  }
+
+  async completeMilestone(milestoneId: string) {
+    return this.request<any>(`/sprints/milestones/${milestoneId}/complete`, { method: 'PATCH' });
+  }
+
+  async logBlocker(teamId: string, body: { week: number; description: string; severity?: string }) {
+    return this.request<any>(`/sprints/teams/${teamId}/blockers`, { method: 'POST', body });
+  }
+
+  async resolveBlocker(blockerId: string) {
+    return this.request<any>(`/sprints/blockers/${blockerId}/resolve`, { method: 'PATCH' });
+  }
+
+  async submitCheckIn(teamId: string, body: { week: number; progressSummary: string }) {
+    return this.request<any>(`/sprints/teams/${teamId}/checkins`, { method: 'POST', body });
+  }
+
+  // Project (founder-facing)
+  async getMyProject() {
+    return this.request<any>('/applicants/me/project');
+  }
+
+  async updateMyProject(teamId: string, data: {
+    projectName?: string;
+    targetMarket?: string;
+    description?: string;
+    estimatedFunds?: number;
+  }) {
+    return this.request<any>(`/teams/${teamId}/project`, { method: 'PATCH', body: data });
+  }
+
+  // ─── Resource Requests (founder-facing) ───────────────────
+
+  async submitResourceRequest(teamId: string, body: { type: string; description: string }) {
+    return this.request<any>(`/teams/${teamId}/resource-requests`, { method: 'POST', body });
+  }
+
+  async getTeamResourceRequests(teamId: string, status?: string) {
+    const qs = status ? `?status=${status}` : '';
+    return this.request<any[]>(`/teams/${teamId}/resource-requests${qs}`);
+  }
+
+  async getTeamBlockers(teamId: string, resolved?: boolean) {
+    const qs = resolved !== undefined ? `?resolved=${resolved}` : '';
+    return this.request<any[]>(`/sprints/teams/${teamId}/blockers${qs}`);
+  }
+
+  async getTeamCheckIns(teamId: string) {
+    return this.request<any[]>(`/sprints/teams/${teamId}/checkins`);
+  }
+
+  // ─── Admin: Mentor management ─────────────────────────────
+
+  async listMentors() {
+    return this.request<any[]>('/admin/mentors');
+  }
+
+  async createMentor(data: { email: string; password: string; firstName: string; lastName: string; expertise?: string[]; bio?: string }) {
+    return this.request<any>('/admin/mentors', { method: 'POST', body: data });
+  }
+
+  async assignMentorToTeam(mentorId: string, teamId: string) {
+    return this.request<any>(`/admin/mentors/${mentorId}/assign`, { method: 'POST', body: { teamId } });
+  }
+
+  // ─── Admin: Co-Founder management ────────────────────────
+
+  async listCoFounders() {
+    return this.request<any[]>('/admin/cofounders');
+  }
+
+  async createCoFounder(data: { email: string; password: string; firstName: string; lastName: string; bio?: string }) {
+    return this.request<any>('/admin/cofounders', { method: 'POST', body: data });
+  }
+
+  async assignCoFounderToTeam(coFounderId: string, teamId: string) {
+    return this.request<any>(`/admin/cofounders/${coFounderId}/assign`, { method: 'POST', body: { teamId } });
+  }
+
+  async getAdminWeeklyReports(batchId?: string) {
+    const qs = batchId ? `?batchId=${batchId}` : '';
+    return this.request<any[]>(`/admin/cofounders/reports${qs}`);
+  }
+
+  async fulfillResourceRequest(reqId: string, notes?: string) {
+    return this.request<any>(`/admin/resource-requests/${reqId}/fulfill`, { method: 'PATCH', body: { notes } });
+  }
+
+  // ─── Admin: Documentary management ───────────────────────
+
+  async getDocumentaryUploadUrl(teamId: string, data: { fileName: string; mimeType: string; week: number; title: string; description?: string }) {
+    return this.request<{ uploadUrl: string; clipId: string; key: string }>(
+      `/admin/documentary/teams/${teamId}/upload-url`,
+      { method: 'POST', body: data },
+    );
+  }
+
+  async confirmDocumentaryUpload(clipId: string, thumbnailUrl?: string) {
+    return this.request<any>(`/admin/documentary/clips/${clipId}/confirm`, { method: 'PATCH', body: { thumbnailUrl } });
+  }
+
+  async publishDocumentaryClip(clipId: string, publish: boolean) {
+    return this.request<any>(`/admin/documentary/clips/${clipId}/publish`, { method: 'PATCH', body: { publish } });
+  }
+
+  async listDocumentaryClips(teamId: string) {
+    return this.request<any[]>(`/admin/documentary/teams/${teamId}/clips`);
+  }
+
+  async deleteDocumentaryClip(clipId: string) {
+    return this.request<any>(`/admin/documentary/clips/${clipId}`, { method: 'DELETE' });
+  }
+
+  async getDocumentaryStreamUrl(clipId: string) {
+    return this.request<{ url: string; clip: any }>(`/admin/documentary/clips/${clipId}/stream-url`);
+  }
+
+  async getPublishedDocumentaryClips(teamId: string) {
+    return this.request<any[]>(`/investors/documentary/${teamId}`);
+  }
+
+  async getInvestorClipStreamUrl(clipId: string) {
+    return this.request<{ url: string; clip: any }>(`/documentary/clips/${clipId}/stream-url`);
+  }
+
+  // ─── Admin: Pitch events ──────────────────────────────────
+
+  async createPitchEvent(data: { teamId: string; scheduledAt: string; venue?: string; notes?: string }) {
+    return this.request<any>('/admin/pitch/events', { method: 'POST', body: data });
+  }
+
+  async listPitchEvents(teamId?: string, batchId?: string) {
+    const params = new URLSearchParams();
+    if (teamId) params.set('teamId', teamId);
+    if (batchId) params.set('batchId', batchId);
+    const qs = params.toString();
+    return this.request<any[]>(`/admin/pitch/events${qs ? `?${qs}` : ''}`);
+  }
+
+  async updatePitchEventStatus(id: string, status: string) {
+    return this.request<any>(`/admin/pitch/events/${id}/status`, { method: 'PATCH', body: { status } });
+  }
+
+  async recordInvestorInterest(pitchEventId: string, data: { investorId: string; status: string; notes?: string }) {
+    return this.request<any>(`/admin/pitch/events/${pitchEventId}/interest`, { method: 'POST', body: data });
+  }
+
+  async recordFundingDecision(pitchEventId: string, data: { investorId: string; outcome: string; amount?: number; notes?: string }) {
+    return this.request<any>(`/admin/pitch/events/${pitchEventId}/funding`, { method: 'POST', body: data });
+  }
+
+  async getAdminInvestors(isApproved?: boolean) {
+    const qs = isApproved !== undefined ? `?isApproved=${isApproved}` : '';
+    return this.request<any[]>(`/admin/investors${qs}`);
+  }
+
+  // ─── Admin: WhatsApp ──────────────────────────────────────
+
+  async getWhatsappTemplates() {
+    return this.request<any[]>('/admin/whatsapp/templates');
+  }
+
+  async whatsappBroadcast(data: { title: string; message: string; batchId?: string; teamId?: string }) {
+    return this.request<{ attempted: number; succeeded: number; failed: number }>(
+      '/admin/whatsapp/broadcast',
+      { method: 'POST', body: data },
+    );
+  }
+
+  async getWhatsappSendLog(limit = 50, offset = 0) {
+    return this.request<any[]>(`/admin/whatsapp/send-log?limit=${limit}&offset=${offset}`);
+  }
+
+  async whatsappSendOne(data: { phone: string; templateName: string; parameters: string[] }) {
+    return this.request<{ sent: boolean }>('/admin/whatsapp/send', { method: 'POST', body: data });
+  }
 }
 
 export const api = new ApiClient();

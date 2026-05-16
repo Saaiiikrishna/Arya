@@ -2,7 +2,7 @@ import {
   Controller, Get, Post, Patch, Param, Body, UseGuards, Query,
 } from '@nestjs/common';
 import { InvestorService } from './investor.service';
-import { JwtAuthGuard, AdminGuard } from '../auth/guards';
+import { JwtAuthGuard, AdminGuard, InvestorGuard } from '../auth/guards';
 
 @Controller('api')
 export class InvestorController {
@@ -27,13 +27,13 @@ export class InvestorController {
 
   // ─── Investor Authenticated ────────────────────────
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(InvestorGuard)
   @Get('investors/:id')
   async getInvestor(@Param('id') id: string) {
     return this.investorService.findById(id);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(InvestorGuard)
   @Post('investors/:investorId/meeting-request')
   async requestMeeting(
     @Param('investorId') investorId: string,
@@ -90,5 +90,43 @@ export class InvestorController {
     return this.investorService.updateMeetingStatus(
       id, status, scheduledAt ? new Date(scheduledAt) : undefined,
     );
+  }
+
+  // ─── Admin: Pitch Events ───────────────────────────────────
+
+  @UseGuards(AdminGuard)
+  @Post('admin/pitch/events')
+  async createPitchEvent(@Body() body: { teamId: string; scheduledAt: string; venue?: string; notes?: string }) {
+    return this.investorService.createPitchEvent(body);
+  }
+
+  @UseGuards(AdminGuard)
+  @Get('admin/pitch/events')
+  async listPitchEvents(@Query('teamId') teamId?: string, @Query('batchId') batchId?: string) {
+    return this.investorService.listPitchEvents(teamId, batchId);
+  }
+
+  @UseGuards(AdminGuard)
+  @Patch('admin/pitch/events/:id/status')
+  async updatePitchEventStatus(@Param('id') id: string, @Body('status') status: string) {
+    return this.investorService.updatePitchEventStatus(id, status);
+  }
+
+  @UseGuards(AdminGuard)
+  @Post('admin/pitch/events/:id/interest')
+  async recordInterest(
+    @Param('id') pitchEventId: string,
+    @Body() body: { investorId: string; status: string; notes?: string },
+  ) {
+    return this.investorService.recordInvestorInterest(pitchEventId, body);
+  }
+
+  @UseGuards(AdminGuard)
+  @Post('admin/pitch/events/:id/funding')
+  async recordFunding(
+    @Param('id') pitchEventId: string,
+    @Body() body: { investorId: string; outcome: string; amount?: number; terms?: any; notes?: string },
+  ) {
+    return this.investorService.recordFundingDecision(pitchEventId, body);
   }
 }

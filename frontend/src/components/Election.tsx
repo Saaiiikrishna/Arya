@@ -82,7 +82,7 @@ export default function Election({ id }: { id: string }) {
         value: selfNomAnswers[q.id] || '',
       })).filter((a: any) => a.value !== '');
 
-      await api.selfNominate(id, applicant.id, selfNomPitch || undefined, answers.length > 0 ? answers : undefined);
+      await api.selfNominate(id, selfNomPitch || undefined, answers.length > 0 ? answers : undefined);
       setSelfNomStep('done');
       const nomineesData = await api.getNominees(id);
       setNominees(nomineesData);
@@ -98,7 +98,7 @@ export default function Election({ id }: { id: string }) {
     if (!myNomination) return;
     setIsSubmitting(true);
     try {
-      await api.submitElectionPitch(id, myNomination.nomineeId, pitch);
+      await api.submitElectionPitch(id, pitch);
       alert('Pitch updated successfully.');
     } catch (err: any) {
       alert(err.message || 'Failed to submit pitch');
@@ -110,7 +110,7 @@ export default function Election({ id }: { id: string }) {
   const handleVote = async (nomineeId: string) => {
     if (!confirm('Are you sure? Votes are anonymous but final.')) return;
     try {
-      await api.castVote(id, nomineeId, applicant?.id);
+      await api.castVote(id, nomineeId);
       setVotedId(nomineeId);
     } catch (err: any) {
       alert(err.message || 'Failed to cast vote. You may have already voted.');
