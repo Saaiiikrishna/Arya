@@ -119,9 +119,12 @@ export default function PrivacyPage() {
           </section>
         </div>
 
-        <footer className="mt-20 pt-8 border-t border-hairline text-center">
+        <footer className="mt-20 pt-8 border-t border-hairline text-center space-y-1">
           <p className="text-xs text-ink/40 uppercase tracking-widest">
             © {new Date().getFullYear()} Aryavartham. All rights reserved.
+          </p>
+          <p className="text-[9px] text-ink/25 uppercase tracking-widest">
+            Aryavartham is a brand by SKSC MYSILLYDREAMS PRIVATE LIMITED
           </p>
         </footer>
       </div>
