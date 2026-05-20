@@ -168,6 +168,10 @@ function DataDeletionContent() {
       <footer className="border-t mt-12 py-6 text-center" style={{ borderColor: '#C2C8C2' }}>
         <p className="text-xs" style={{ color: '#9CA3AF' }}>
           © {new Date().getFullYear()} Aryavartham · <a href="/privacy" style={{ color: '#133022' }}>Privacy Policy</a>
+          <br />
+          <span style={{ fontSize: '9px', letterSpacing: '0.05rem', opacity: 0.5 }}>
+            Aryavartham is a brand by SKSC MYSILLYDREAMS PRIVATE LIMITED
+          </span>
         </p>
       </footer>
     </div>

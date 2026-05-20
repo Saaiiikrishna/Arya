@@ -214,8 +214,13 @@ export default function Layout({ children, activeTab = 'manifesto', onTabChange,
                <a href="/privacy" className="text-ink/40 font-sans text-[10px] uppercase tracking-widest hover:text-forest transition-colors">Privacy Policy</a>
                <a href="/terms" className="text-ink/40 font-sans text-[10px] uppercase tracking-widest hover:text-forest transition-colors">Terms of Service</a>
             </div>
-            <div className="text-ink/40 font-sans text-[10px] uppercase tracking-widest text-center md:text-right">
-              © {new Date().getFullYear()} Aryavartham. All rights reserved.
+            <div className="flex flex-col items-center md:items-end gap-1 text-center md:text-right">
+              <span className="text-ink/40 font-sans text-[10px] uppercase tracking-widest">
+                © {new Date().getFullYear()} Aryavartham. All rights reserved.
+              </span>
+              <span className="text-ink/25 font-sans text-[9px] uppercase tracking-widest">
+                Aryavartham is a brand by SKSC MYSILLYDREAMS PRIVATE LIMITED
+              </span>
             </div>
           </div>
         </div>
