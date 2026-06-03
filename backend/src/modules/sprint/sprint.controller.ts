@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, UseGuards, Req } from '@nestjs/common';
 import { SprintService } from './sprint.service';
 import { CreateSprintDto } from './dto/create-sprint.dto';
 import { CreateMilestoneDto } from './dto/create-milestone.dto';
@@ -16,8 +16,9 @@ export class SprintController {
 
   @UseGuards(JwtAuthGuard)
   @Get('team/:teamId')
-  getSprintByTeamId(@Param('teamId') teamId: string) {
-    return this.sprintService.getSprintByTeamId(teamId);
+  getSprintByTeamId(@Param('teamId') teamId: string, @Req() req: any) {
+    const requesterId = req.user?.id || req.user?.sub;
+    return this.sprintService.getSprintByTeamId(teamId, requesterId, req.user?.role);
   }
 
   @UseGuards(AdminGuard)

@@ -1,9 +1,27 @@
 import {
   Controller, Get, Post, Patch, Delete, Param, Body, Req, UseGuards,
 } from '@nestjs/common';
+import {
+  IsEnum, IsInt, IsOptional, IsString, Max, Min,
+} from 'class-validator';
 import { InterviewService } from './interview.service';
 import { JwtAuthGuard, AdminGuard } from '../auth/guards';
 import { InterviewDecision } from '@prisma/client';
+
+class RecordDecisionDto {
+  @IsEnum(InterviewDecision)
+  decision!: InterviewDecision;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  score?: number;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
 
 @Controller('api')
 export class InterviewController {
@@ -40,12 +58,12 @@ export class InterviewController {
   async recordDecision(
     @Param('bookingId') bookingId: string,
     @Req() req: any,
-    @Body('decision') decision: InterviewDecision,
-    @Body('score') score?: number,
-    @Body('notes') notes?: string,
+    @Body() body: RecordDecisionDto,
   ) {
     const adminId = req.user.id || req.user.sub;
-    return this.interviewService.recordDecision(bookingId, decision, score, notes, adminId);
+    return this.interviewService.recordDecision(
+      bookingId, body.decision, body.score, body.notes, adminId,
+    );
   }
 
   @UseGuards(AdminGuard)

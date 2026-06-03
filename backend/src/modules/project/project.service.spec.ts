@@ -36,15 +36,18 @@ describe('ProjectService', () => {
   });
 
   describe('findByTeamId', () => {
+    // Call as an admin so the ownership check takes the admin-bypass branch and
+    // no applicant lookup mock is required (findByTeamId now enforces team
+    // membership for non-admin callers).
     it('should return project if found', async () => {
       mockPrismaService.project.findUnique.mockResolvedValue({ id: 'p1', teamId: 't1' });
-      const result = await service.findByTeamId('t1');
+      const result = await service.findByTeamId('t1', 'admin-1', 'ADMIN');
       expect(result.id).toEqual('p1');
     });
 
     it('should throw if not found', async () => {
       mockPrismaService.project.findUnique.mockResolvedValue(null);
-      await expect(service.findByTeamId('t1')).rejects.toThrow(NotFoundException);
+      await expect(service.findByTeamId('t1', 'admin-1', 'ADMIN')).rejects.toThrow(NotFoundException);
     });
   });
 });

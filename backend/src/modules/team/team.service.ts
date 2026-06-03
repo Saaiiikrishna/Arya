@@ -1,6 +1,10 @@
 import { Injectable, NotFoundException, Logger, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma';
-import { ApplicantStatus, DepartmentRole } from '@prisma/client';
+import { NotificationService } from '../notifications/notification.service';
+import { ApplicantStatus, DepartmentRole, TeamRequestStatus } from '@prisma/client';
+
+const ADMIN_ROLES = ['ADMIN', 'SUPER_ADMIN', 'MODERATOR'];
+const RESOLVABLE_STATUSES: TeamRequestStatus[] = ['APPROVED', 'REJECTED'];
 
 interface ApplicantWithAnswers {
   id: string;
@@ -24,7 +28,37 @@ const ALL_DEPARTMENTS: DepartmentRole[] = [
 export class TeamService {
   private readonly logger = new Logger(TeamService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationService,
+  ) {}
+
+  /**
+   * Throws unless the caller is an admin or an active member of the team.
+   * Used to gate cross-readable team-scoped reads against IDOR/PII enumeration.
+   */
+  private async assertTeamMembership(teamId: string, callerId: string, callerRole?: string) {
+    if (ADMIN_ROLES.includes(callerRole || '')) return;
+    const caller = await this.prisma.applicant.findUnique({
+      where: { id: callerId },
+      select: { teamId: true },
+    });
+    if (!caller?.teamId || caller.teamId !== teamId) {
+      throw new ForbiddenException('You are not a member of this team');
+    }
+  }
+
+  private isTeamRequestStatus(value: string): value is TeamRequestStatus {
+    return (Object.values(TeamRequestStatus) as string[]).includes(value);
+  }
+
+  /** Validate a resolution status param (APPROVED/REJECTED) without unchecked casts. */
+  private parseResolutionStatus(status: string): TeamRequestStatus {
+    if (!RESOLVABLE_STATUSES.includes(status as TeamRequestStatus)) {
+      throw new BadRequestException(`Status must be ${RESOLVABLE_STATUSES.join(' or ')}`);
+    }
+    return status as TeamRequestStatus;
+  }
 
   /**
    * Form teams for a batch using criteria-based scoring and balanced partitioning.
@@ -90,7 +124,35 @@ export class TeamService {
     });
 
     this.logger.log(`Batch ${batch.batchNumber}: formed ${teams.length} teams`);
+
+    // Notify every assigned member that their team was formed. Best-effort and
+    // fire-after-commit: the NotificationService methods already swallow errors,
+    // and we never block the response on delivery.
+    void this.notifyTeamsFormed(teams);
+
     return { teamsCreated: teams.length, teams };
+  }
+
+  /**
+   * Best-effort post-commit fan-out: for each created team, load its members and
+   * send the "team formed" notification. Never throws — failures are logged.
+   */
+  private async notifyTeamsFormed(teams: Array<{ id: string; name: string }>): Promise<void> {
+    try {
+      await Promise.allSettled(
+        teams.map(async (team) => {
+          const members = await this.prisma.applicant.findMany({
+            where: { teamId: team.id },
+            select: { id: true, email: true, firstName: true, phone: true },
+          });
+          await Promise.allSettled(
+            members.map((member) => this.notifications.teamFormed(member, team.name)),
+          );
+        }),
+      );
+    } catch (e) {
+      this.logger.error(`team-formed notifications failed: ${(e as any)?.message}`);
+    }
   }
 
   private balancedPartition(
@@ -142,23 +204,33 @@ export class TeamService {
 
   async matchToExistingTeam(applicantId: string, batchId: string) {
     const [teams, batch] = await Promise.all([
+      // Only unlocked teams are eligible to receive new members.
       this.prisma.team.findMany({
-        where: { batchId },
-        include: { _count: { select: { members: true } } },
+        where: { batchId, isLocked: false },
       }),
       this.prisma.batch.findUnique({ where: { id: batchId } }),
     ]);
 
     if (teams.length === 0) {
-      this.logger.warn('No teams exist for batch. Cannot match applicant.');
+      this.logger.warn('No open (unlocked) teams exist for batch. Cannot match applicant.');
       return null;
     }
 
     const maxSize = batch?.teamMaxSize ?? 25;
-    const sorted = teams.sort((a, b) => a._count.members - b._count.members);
-    const targetTeam = sorted.find((t) => t._count.members < maxSize);
+
+    // Compute a LIVE member count per candidate team (the cached memberCount can
+    // be stale), then prefer the smallest team that still has capacity.
+    const candidates = await Promise.all(
+      teams.map(async (t) => ({
+        team: t,
+        liveCount: await this.prisma.applicant.count({ where: { teamId: t.id } }),
+      })),
+    );
+    const targetTeam = candidates
+      .filter((c) => c.liveCount < maxSize)
+      .sort((a, b) => a.liveCount - b.liveCount)[0]?.team;
     if (!targetTeam) {
-      this.logger.warn('All teams are at max capacity');
+      this.logger.warn('All open teams are at max capacity');
       return null;
     }
 
@@ -227,7 +299,9 @@ export class TeamService {
 
   // ─── Department management ────────────────────────────────
 
-  async getTeamDepartments(teamId: string) {
+  async getTeamDepartments(teamId: string, callerId: string, callerRole?: string) {
+    await this.assertTeamMembership(teamId, callerId, callerRole);
+
     const members = await this.prisma.applicant.findMany({
       where: { teamId, status: { not: 'REMOVED' } },
       select: { id: true, firstName: true, lastName: true, avatarUrl: true, department: true },
@@ -342,9 +416,18 @@ export class TeamService {
     });
   }
 
-  async getTeamRequests(teamId: string, status?: string) {
+  async getTeamRequests(teamId: string, callerId: string, callerRole?: string, status?: string) {
+    await this.assertTeamMembership(teamId, callerId, callerRole);
+
     const where: any = { teamId };
-    if (status) where.status = status;
+    if (status) {
+      if (!this.isTeamRequestStatus(status)) {
+        throw new BadRequestException(
+          `Invalid status filter. Allowed: ${Object.values(TeamRequestStatus).join(', ')}`,
+        );
+      }
+      where.status = status;
+    }
 
     const requests = await this.prisma.teamRequest.findMany({
       where,
@@ -362,9 +445,7 @@ export class TeamService {
   }
 
   async resolveTeamRequest(teamId: string, reqId: string, resolverId: string, status: string) {
-    if (!['APPROVED', 'REJECTED'].includes(status)) {
-      throw new BadRequestException('Status must be APPROVED or REJECTED');
-    }
+    const resolution = this.parseResolutionStatus(status);
 
     const team = await this.prisma.team.findUnique({ where: { id: teamId } });
     if (!team) throw new NotFoundException('Team not found');
@@ -384,7 +465,7 @@ export class TeamService {
 
     return this.prisma.teamRequest.update({
       where: { id: reqId },
-      data: { status: status as any, resolvedById: resolverId, resolvedAt: new Date() },
+      data: { status: resolution, resolvedById: resolverId, resolvedAt: new Date() },
     });
   }
 
@@ -393,15 +474,13 @@ export class TeamService {
    * On approval of SEPARATION or JOIN_EXISTING, physically moves the member.
    */
   async adminResolveTeamRequest(reqId: string, adminId: string, status: string) {
-    if (!['APPROVED', 'REJECTED'].includes(status)) {
-      throw new BadRequestException('Status must be APPROVED or REJECTED');
-    }
+    const resolution = this.parseResolutionStatus(status);
 
     const request = await this.prisma.teamRequest.findUnique({ where: { id: reqId } });
     if (!request) throw new NotFoundException('Request not found');
     if (request.status !== 'PENDING') throw new BadRequestException('Request has already been resolved');
 
-    if (status === 'APPROVED') {
+    if (resolution === 'APPROVED') {
       await this.prisma.$transaction(async (tx) => {
         if (request.type === 'SEPARATION') {
           // Remove from current team
@@ -462,7 +541,7 @@ export class TeamService {
 
     return this.prisma.teamRequest.update({
       where: { id: reqId },
-      data: { status: status as any, resolvedById: adminId, resolvedAt: new Date() },
+      data: { status: resolution, resolvedById: adminId, resolvedAt: new Date() },
     });
   }
 

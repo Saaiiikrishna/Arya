@@ -31,6 +31,12 @@ export const WHATSAPP_TEMPLATES = [
   },
   // ── UTILITY ─────────────────────────────────────────────────────────────
   {
+    name: 'welcome_founders_club',
+    category: 'UTILITY',
+    description: 'New applicant welcome message',
+    params: [{ index: 1, label: 'first name' }],
+  },
+  {
     name: 'application_received',
     category: 'UTILITY',
     description: 'Application confirmation',
@@ -342,7 +348,9 @@ export class WhatsappController {
 
   /**
    * Mark the applicant matching the given WhatsApp number as opted out by
-   * setting whatsappVerified=false, so the platform stops messaging them.
+   * setting whatsappOptOut=true, so the platform stops messaging them. This is
+   * deliberately separate from whatsappVerified (a verification gate) — reusing
+   * that flag would also suppress sends to not-yet-verified users.
    *
    * Meta delivers `from` as bare digits (e.g. "919876543210") while stored
    * phone numbers may carry "+", spaces, or leading zeros. We therefore match
@@ -356,13 +364,13 @@ export class WhatsappController {
 
       // Narrow candidates with a cheap substring filter on either stored
       // number, then confirm an exact match on digits-only normalization.
+      // Opt-out applies regardless of verification status.
       const candidates = await this.prisma.applicant.findMany({
         where: {
           OR: [
             { phone: { contains: normalized } },
             { whatsappPhone: { contains: normalized } },
           ],
-          whatsappVerified: true,
         },
         select: { id: true, phone: true, whatsappPhone: true },
       });
@@ -375,18 +383,18 @@ export class WhatsappController {
 
       if (matches.length === 0) {
         this.logger.warn(
-          `STOP opt-out: no verified applicant found for ${from}`,
+          `STOP opt-out: no applicant found for ${from}`,
         );
         return;
       }
 
       await this.prisma.applicant.updateMany({
         where: { id: { in: matches.map((a) => a.id) } },
-        data: { whatsappVerified: false },
+        data: { whatsappOptOut: true },
       });
 
       this.logger.log(
-        `STOP opt-out: marked ${matches.length} applicant(s) whatsappVerified=false for ${from}`,
+        `STOP opt-out: marked ${matches.length} applicant(s) whatsappOptOut=true for ${from}`,
       );
     } catch (err) {
       this.logger.error(`Failed to process STOP opt-out for ${from}`, err);

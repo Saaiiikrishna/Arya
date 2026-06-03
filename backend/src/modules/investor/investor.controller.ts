@@ -3,6 +3,7 @@ import {
 } from '@nestjs/common';
 import { InvestorService } from './investor.service';
 import { JwtAuthGuard, AdminGuard } from '../auth/guards';
+import { CreateInvestorDto } from './dto/create-investor.dto';
 
 @Controller('api')
 export class InvestorController {
@@ -11,7 +12,7 @@ export class InvestorController {
   // ─── Public ────────────────────────────────────────
 
   @Post('investors/register')
-  async register(@Body() data: any) {
+  async register(@Body() data: CreateInvestorDto) {
     return this.investorService.register(data);
   }
 
@@ -27,7 +28,8 @@ export class InvestorController {
 
   // ─── Investor Authenticated ────────────────────────
 
-  @UseGuards(JwtAuthGuard)
+  // Admin-only: exposes full investor record (PII). Do not relax to JwtAuthGuard.
+  @UseGuards(AdminGuard)
   @Get('investors/:id')
   async getInvestor(@Param('id') id: string) {
     return this.investorService.findById(id);

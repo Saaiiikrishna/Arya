@@ -282,6 +282,10 @@ model Applicant {
   scarTissue     String?         @db.Text @map("scar_tissue")
   whatsappPhone  String?         @map("whatsapp_phone")
   whatsappVerified Boolean       @default(false) @map("whatsapp_verified")
+  // Distinct from whatsappVerified: set when the user replies STOP. Verification
+  // status must NOT be reused as an opt-out flag (it would suppress sends to
+  // not-yet-verified users such as new signups).
+  whatsappOptOut Boolean         @default(false) @map("whatsapp_opt_out")
   whatsappPresenceChecked Boolean @default(false) @map("whatsapp_presence_checked")
   department     DepartmentRole? @map("department")
   isAvailable    Boolean         @default(true) @map("is_available")
@@ -313,6 +317,8 @@ model Applicant {
   @@index([appliedAt])
   @@index([accessToken])
   @@index([referredById])
+  @@index([phone])
+  @@index([whatsappPhone])
   @@map("applicants")
 }
 

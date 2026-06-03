@@ -37,6 +37,20 @@ export default function Election({ id }: { id: string }) {
 
         setElection(electionData);
         setNominees(nomineesData);
+
+        // Reflect a vote already cast in a prior session. The server payload
+        // surfaces the caller's existing vote either on the election object
+        // (myVote / votedNomineeId) or as a per-nominee flag in the nominees
+        // list (votedByMe / isMyVote). Initialize the voting UI from it so a
+        // returning voter sees their cast ballot.
+        const existingVote =
+          electionData?.myVote?.nomineeId ??
+          electionData?.myVote ??
+          electionData?.votedNomineeId ??
+          (Array.isArray(nomineesData)
+            ? nomineesData.find((n: any) => n?.votedByMe || n?.isMyVote)?.nomineeId
+            : undefined);
+        if (existingVote) setVotedId(existingVote);
       } catch (err) {
         console.error(err);
       } finally {

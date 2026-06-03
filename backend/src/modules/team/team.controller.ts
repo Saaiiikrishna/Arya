@@ -61,9 +61,11 @@ export class TeamController {
   @Get('teams/:id/requests')
   async getRequests(
     @Param('id') teamId: string,
+    @Req() req: any,
     @Query('status') status?: string,
   ) {
-    return this.teamService.getTeamRequests(teamId, status);
+    const callerId = req.user.id || req.user.sub;
+    return this.teamService.getTeamRequests(teamId, callerId, req.user.role, status);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -82,8 +84,9 @@ export class TeamController {
 
   @UseGuards(JwtAuthGuard)
   @Get('teams/:id/departments')
-  async getDepartments(@Param('id') teamId: string) {
-    return this.teamService.getTeamDepartments(teamId);
+  async getDepartments(@Param('id') teamId: string, @Req() req: any) {
+    const callerId = req.user.id || req.user.sub;
+    return this.teamService.getTeamDepartments(teamId, callerId, req.user.role);
   }
 
   @UseGuards(JwtAuthGuard)

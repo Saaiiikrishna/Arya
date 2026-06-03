@@ -4,10 +4,25 @@ interface RequestOptions {
   method?: string;
   body?: any;
   headers?: Record<string, string>;
+  // Internal: skip the automatic 401 refresh+retry (used for the refresh call itself
+  // and the already-retried request) to avoid infinite recursion.
+  skipAuthRetry?: boolean;
+}
+
+// Error that carries the HTTP status so callers (e.g. auth.tsx) can branch on it.
+export class ApiError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
 }
 
 class ApiClient {
   private token: string | null = null;
+  // De-dupes concurrent refreshes so a burst of 401s triggers a single refresh.
+  private refreshPromise: Promise<boolean> | null = null;
 
   setToken(token: string | null) {
     this.token = token;
@@ -20,23 +35,36 @@ class ApiClient {
 
   async refreshAccessToken(): Promise<boolean> {
     if (typeof window === 'undefined') return false;
+    // Collapse concurrent callers onto a single in-flight refresh.
+    if (this.refreshPromise) return this.refreshPromise;
+
     const refreshToken = sessionStorage.getItem('arya_refresh');
     if (!refreshToken) return false;
-    try {
-      const data = await this.request<{ accessToken: string; refreshToken: string }>(
-        '/admin/auth/refresh',
-        { method: 'POST', body: { refreshToken } },
-      );
-      this.token = data.accessToken;
-      sessionStorage.setItem('arya_refresh', data.refreshToken);
-      return true;
-    } catch {
-      return false;
-    }
+
+    this.refreshPromise = (async () => {
+      try {
+        const data = await this.request<{ accessToken: string; refreshToken: string }>(
+          '/admin/auth/refresh',
+          // skipAuthRetry: a 401 here means the refresh token is dead — don't recurse.
+          { method: 'POST', body: { refreshToken }, skipAuthRetry: true },
+        );
+        this.token = data.accessToken;
+        sessionStorage.setItem('arya_refresh', data.refreshToken);
+        return true;
+      } catch {
+        return false;
+      } finally {
+        this.refreshPromise = null;
+      }
+    })();
+
+    return this.refreshPromise;
   }
 
   private async request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-    const { method = 'GET', body, headers = {} } = options;
+    const { method = 'GET', body, skipAuthRetry = false } = options;
+    // Clone caller-supplied headers so a retry doesn't reuse a stale Authorization header.
+    const headers: Record<string, string> = { ...(options.headers || {}) };
 
     const token = this.getToken();
     if (token) {
@@ -50,28 +78,56 @@ class ApiClient {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout for cold starts / network delays
 
+    let response: Response;
     try {
-      const response = await fetch(`${API_BASE}${endpoint}`, {
+      response = await fetch(`${API_BASE}${endpoint}`, {
         method,
         headers,
         body: body ? JSON.stringify(body) : undefined,
         signal: controller.signal,
       });
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({ message: 'Request failed' }));
-        throw new Error(error.message || `HTTP ${response.status}`);
-      }
-
-      if (response.status === 204) return {} as T;
-      return response.json();
     } catch (error: any) {
       clearTimeout(timeoutId);
-      if (error.name === 'AbortError') {
+      if (error?.name === 'AbortError') {
         throw new Error('Connection timed out. The server took too long to respond.');
       }
       throw error;
+    }
+    clearTimeout(timeoutId);
+
+    // Central auth recovery: on a 401 for an authenticated request, refresh the access
+    // token once and retry. If refresh fails, clear auth and bounce to login.
+    if (response.status === 401 && !skipAuthRetry && token) {
+      const refreshed = await this.refreshAccessToken();
+      if (refreshed) {
+        return this.request<T>(endpoint, { ...options, skipAuthRetry: true });
+      }
+      this.handleAuthFailure();
+      throw new ApiError(401, 'Session expired. Please sign in again.');
+    }
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Request failed' }));
+      throw new ApiError(response.status, error.message || `HTTP ${response.status}`);
+    }
+
+    if (response.status === 204) return {} as T;
+    return response.json();
+  }
+
+  // Clears stored auth and redirects to login after an unrecoverable 401.
+  private handleAuthFailure() {
+    this.token = null;
+    this.refreshPromise = null;
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('arya_refresh');
+      sessionStorage.removeItem('arya_profile');
+      localStorage.removeItem('arya_admin');
+      // Avoid redirect loops if we're already on a login page.
+      const path = window.location.pathname;
+      if (!path.startsWith('/login') && !path.startsWith('/admin/login')) {
+        window.location.href = '/login';
+      }
     }
   }
 
@@ -319,6 +375,11 @@ class ApiClient {
 
   async getPublicBatchStatus(batchNumber: number) {
     return this.request<any>(`/batches/${batchNumber}/status`);
+  }
+
+  // Public, safe-field list of all batches (for the Archives page).
+  async getPublicBatches() {
+    return this.request<any[]>('/batches/public');
   }
 
   // Teams

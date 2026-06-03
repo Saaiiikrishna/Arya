@@ -86,6 +86,16 @@ export class InterviewService {
     const booking = await this.prisma.interviewBooking.findUnique({ where: { id: bookingId } });
     if (!booking) throw new NotFoundException('Booking not found');
 
+    // Idempotency guard: once a booking has a terminal decision recorded
+    // (COMPLETED with a non-null decision), do not re-apply applicant status
+    // changes or re-enqueue backfill. Re-firing those would clobber any
+    // post-interview status progression and pull duplicate replacements.
+    if (booking.status === BookingStatus.COMPLETED && booking.decision != null) {
+      throw new BadRequestException(
+        'A decision has already been recorded for this booking.',
+      );
+    }
+
     const [updated] = await this.prisma.$transaction([
       this.prisma.interviewBooking.update({
         where: { id: bookingId },
@@ -226,8 +236,15 @@ export class InterviewService {
       const start = booking.slot.startTime;
       const dateStr = start.toLocaleDateString();
       const timeStr = start.toLocaleTimeString();
-      // InterviewSlot has no meeting-link field, so none is available to send.
-      void this.notifications.interviewScheduled(applicant, dateStr, timeStr, '');
+      // InterviewSlot has no meeting-link field, so none is available yet. Pass a
+      // human-readable fallback instead of an empty string to avoid a broken
+      // join link / empty anchor in the notification template.
+      void this.notifications.interviewScheduled(
+        applicant,
+        dateStr,
+        timeStr,
+        'To be shared closer to the date',
+      );
     }
 
     return booking;

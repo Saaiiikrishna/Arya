@@ -129,6 +129,11 @@ export class ApplicantService {
 
     this.logger.log(`New applicant registered: ${dto.email} in batch ${batch.batchNumber}`);
 
+    // Drive the orphaned capacity pipeline: now that currentCount was bumped, ask
+    // the worker to check whether this batch is full and should auto-transition
+    // FILLING->SCREENING. Best-effort; never blocks the response.
+    void this.backfill.enqueueCapacityCheck(batch.id);
+
     // Fire-and-forget milestone notification (email + WhatsApp); never blocks the response.
     this.notifications.applicationReceived({
       id: applicant.id,
@@ -413,7 +418,9 @@ export class ApplicantService {
         phone: applicant.phone,
         status: applicant.status,
         avatarUrl: applicant.avatarUrl,
+        batchId: applicant.batchId,
       },
+      batchId: applicant.batchId,
       batch: applicant.batch ? {
         id: applicant.batch.id,
         batchNumber: applicant.batch.batchNumber,
@@ -568,7 +575,11 @@ export class ApplicantService {
     status?: ApplicantStatus;
     batchId?: string;
   }) {
-    const { page = 1, limit = 20, search, status, batchId } = params;
+    const { page = 1, search, status, batchId } = params;
+    // Cap the client-supplied page size so a hostile/large `limit` can't force an
+    // unbounded Prisma `take` and exhaust the DB/server.
+    const MAX_LIMIT = 100;
+    const limit = Math.min(Math.max(params.limit ?? 20, 1), MAX_LIMIT);
     const skip = (page - 1) * limit;
 
     const where: any = {};
@@ -640,6 +651,12 @@ export class ApplicantService {
     });
     if (!applicant) throw new NotFoundException('Applicant not found');
 
+    // Only adjust counters when this is a genuine transition INTO REMOVED from a
+    // non-removed state; re-removing an already-removed applicant must not
+    // double-decrement currentCount/memberCount.
+    const isNewlyRemoved = applicant.status !== ApplicantStatus.REMOVED;
+    const previousTeamId = applicant.teamId;
+
     await this.prisma.$transaction(async (tx) => {
       // Mark as removed
       await tx.applicant.update({
@@ -651,14 +668,31 @@ export class ApplicantService {
         },
       });
 
-      // Decrement batch count
-      if (applicant.batchId) {
-        await tx.batch.update({
-          where: { id: applicant.batchId },
-          data: { currentCount: { decrement: 1 } },
-        });
+      if (isNewlyRemoved) {
+        // Decrement batch count
+        if (applicant.batchId) {
+          await tx.batch.update({
+            where: { id: applicant.batchId },
+            data: { currentCount: { decrement: 1 } },
+          });
+        }
+
+        // Decrement the team's member count if they were on a team.
+        if (previousTeamId) {
+          await tx.team.update({
+            where: { id: previousTeamId },
+            data: { memberCount: { decrement: 1 } },
+          });
+        }
       }
     });
+
+    // If the applicant left a batch that has already closed filling, top the gap
+    // back up from the next batch. During FILLING a freed slot is just taken by
+    // normal sign-ups, so no cascade is needed. Best-effort; never blocks.
+    if (isNewlyRemoved && applicant.batchId && applicant.batch && applicant.batch.status !== 'FILLING') {
+      void this.backfill.enqueueBackfill(applicant.batchId, 1);
+    }
 
     return {
       removedApplicantId: id,
@@ -678,6 +712,15 @@ export class ApplicantService {
         await tx.batch.update({
           where: { id: applicant.batchId },
           data: { currentCount: { decrement: 1 } },
+        });
+      }
+
+      // If the applicant is still on a team, decrement that team's member count.
+      // (A REMOVED applicant has already had teamId cleared, so they won't be here.)
+      if (applicant.teamId) {
+        await tx.team.update({
+          where: { id: applicant.teamId },
+          data: { memberCount: { decrement: 1 } },
         });
       }
 

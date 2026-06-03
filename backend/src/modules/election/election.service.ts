@@ -504,35 +504,90 @@ export class ElectionService {
     });
   }
 
+  /**
+   * Best-effort result-email dispatch. This runs AFTER the election has been
+   * irreversibly finalized (status COMPLETED + leader assigned), so it must
+   * never throw: a mail-provider failure here would 500 the advance request
+   * even though the state change already succeeded. All errors are swallowed
+   * and logged; sends fan out in parallel via Promise.allSettled.
+   */
   private async sendElectionResultEmails(teamId: string, winnerId: string) {
-    const team = await this.prisma.team.findUnique({
-      where: { id: teamId },
-      include: { members: { select: { id: true, email: true, firstName: true } } },
-    });
-    const winner = await this.prisma.applicant.findUnique({
-      where: { id: winnerId },
-      select: { firstName: true, lastName: true },
-    });
+    try {
+      const team = await this.prisma.team.findUnique({
+        where: { id: teamId },
+        include: { members: { select: { id: true, email: true, firstName: true } } },
+      });
+      const winner = await this.prisma.applicant.findUnique({
+        where: { id: winnerId },
+        select: { firstName: true, lastName: true },
+      });
 
-    if (team && winner) {
-      for (const member of team.members) {
-        await this.emailService.sendTemplatedEmail(
-          member.email,
-          'election-result',
-          {
-            firstName: member.firstName,
-            teamName: team.name,
-            winnerName: `${winner.firstName} ${winner.lastName}`,
-            hubUrl: `${process.env.FRONTEND_URL || 'https://aryavartham.com'}/hub`,
-          },
-          member.id,
+      if (team && winner) {
+        const results = await Promise.allSettled(
+          team.members.map((member) =>
+            this.emailService.sendTemplatedEmail(
+              member.email,
+              'election-result',
+              {
+                firstName: member.firstName,
+                teamName: team.name,
+                winnerName: `${winner.firstName} ${winner.lastName}`,
+                hubUrl: `${process.env.FRONTEND_URL || 'https://aryavartham.com'}/hub`,
+              },
+              member.id,
+            ),
+          ),
         );
+
+        const failed = results.filter((r) => r.status === 'rejected').length;
+        if (failed > 0) {
+          this.logger.warn(
+            `Election result emails: ${failed}/${team.members.length} failed to send for team ${teamId}`,
+          );
+        }
       }
+    } catch (err) {
+      // Never let post-finalization mail dispatch throw and 500 the request.
+      this.logger.error(
+        `Failed to dispatch election result emails for team ${teamId}: ${(err as Error).message}`,
+      );
     }
   }
 
-  async getElection(electionId: string) {
-    return this.prisma.leaderElection.findUnique({
+  /**
+   * Authorize a team-scoped read: admins may read any team's data; everyone
+   * else may only read elections belonging to their own (non-null) team.
+   * Prevents IDOR enumeration of other teams' nominees/pitches/results.
+   */
+  private async assertTeamReadAccess(
+    teamId: string,
+    requesterId?: string,
+    requesterRole?: string,
+  ) {
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'MODERATOR'].includes(
+      requesterRole || '',
+    );
+    if (isAdmin) return;
+
+    const requester = requesterId
+      ? await this.prisma.applicant.findUnique({
+          where: { id: requesterId },
+          select: { teamId: true },
+        })
+      : null;
+    if (!requester?.teamId || requester.teamId !== teamId) {
+      throw new ForbiddenException(
+        "You can only view your own team's election",
+      );
+    }
+  }
+
+  async getElection(
+    electionId: string,
+    requesterId?: string,
+    requesterRole?: string,
+  ) {
+    const election = await this.prisma.leaderElection.findUnique({
       where: { id: electionId },
       include: {
         _count: { select: { nominations: true, votes: true } },
@@ -540,9 +595,33 @@ export class ElectionService {
         team: { select: { name: true, id: true } },
       },
     });
+    if (!election) return null;
+
+    await this.assertTeamReadAccess(
+      election.teamId,
+      requesterId,
+      requesterRole,
+    );
+
+    // Surface the caller's own ballot so a returning voter's UI reflects it.
+    // Votes are keyed by (electionId, voterId === applicantId).
+    const myVote = requesterId
+      ? await this.prisma.leaderVote.findUnique({
+          where: { electionId_voterId: { electionId, voterId: requesterId } },
+          select: { nomineeId: true },
+        })
+      : null;
+
+    return { ...election, myVote };
   }
 
-  async getActiveElection(teamId: string) {
+  async getActiveElection(
+    teamId: string,
+    requesterId?: string,
+    requesterRole?: string,
+  ) {
+    await this.assertTeamReadAccess(teamId, requesterId, requesterRole);
+
     return this.prisma.leaderElection.findFirst({
       where: { teamId, status: { not: 'COMPLETED' } },
       include: {
@@ -552,7 +631,18 @@ export class ElectionService {
     });
   }
 
-  async getNominees(electionId: string) {
+  async getNominees(
+    electionId: string,
+    requesterId?: string,
+    requesterRole?: string,
+  ) {
+    const election = await this.getElectionOrThrow(electionId);
+    await this.assertTeamReadAccess(
+      election.teamId,
+      requesterId,
+      requesterRole,
+    );
+
     return this.prisma.nomination.findMany({
       where: { electionId },
       include: {
@@ -564,7 +654,11 @@ export class ElectionService {
     });
   }
 
-  async getResults(electionId: string) {
+  async getResults(
+    electionId: string,
+    requesterId?: string,
+    requesterRole?: string,
+  ) {
     const election = await this.prisma.leaderElection.findUnique({
       where: { id: electionId },
       include: {
@@ -572,6 +666,12 @@ export class ElectionService {
       },
     });
     if (!election) throw new NotFoundException('Election not found');
+
+    await this.assertTeamReadAccess(
+      election.teamId,
+      requesterId,
+      requesterRole,
+    );
 
     const votes = await this.prisma.leaderVote.groupBy({
       by: ['nomineeId'],

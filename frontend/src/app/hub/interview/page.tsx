@@ -40,16 +40,20 @@ export default function InterviewPage() {
 
   const fetchAll = useCallback(async () => {
     try {
-      const [bookingRes, videoRes, hubRes] = await Promise.allSettled([
+      // The interview page belongs to Stage 0 (Selection), where applicants are
+      // typically pre-payment. The Hub endpoint is payment-gated and returns 403
+      // for those applicants, so we read batchId from the profile endpoint, which
+      // is available at every stage and also exposes batchId.
+      const [bookingRes, videoRes, profileRes] = await Promise.allSettled([
         api.getMyInterviewBooking(),
         api.getMyVideoSubmission(),
-        api.getMyHub(),
+        api.getMyProfile(),
       ]);
 
       if (bookingRes.status === 'fulfilled') setBooking(bookingRes.value);
       if (videoRes.status === 'fulfilled') setVideo(videoRes.value);
-      if (hubRes.status === 'fulfilled') {
-        const bid = hubRes.value?.applicant?.batchId;
+      if (profileRes.status === 'fulfilled') {
+        const bid = profileRes.value?.batchId ?? null;
         setBatchId(bid);
         if (bid) {
           const slotsRes = await api.getAvailableInterviewSlots(bid);
@@ -329,6 +333,14 @@ export default function InterviewPage() {
                     </button>
                   </div>
                 ))}
+              </div>
+            ) : !batchId ? (
+              <div className="bg-white border border-hairline p-12 text-center">
+                <Calendar className="w-10 h-10 text-ink/20 mx-auto mb-4" />
+                <p className="font-serif text-xl font-bold mb-2">Not assigned to a batch yet</p>
+                <p className="text-ink/50 text-sm">
+                  Interview slots open up once you have been placed into a batch. Check back soon.
+                </p>
               </div>
             ) : (
               <div className="bg-white border border-hairline p-12 text-center">

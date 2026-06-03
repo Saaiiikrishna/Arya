@@ -41,15 +41,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const checkAuth = useCallback(async () => {
     try {
-      // Access token lives in memory only; attempt silent refresh if absent
+      // Access token lives in memory only; attempt silent refresh if absent.
+      // A failed refresh means any stored refresh token is stale/revoked — clear it.
       if (!api.getToken()) {
         const refreshed = await api.refreshAccessToken();
         if (!refreshed) {
+          api.logout();
+          setUser(null);
           setLoading(false);
           return;
         }
       }
-      // Try applicant profile first (most common user type)
+      // Try applicant profile first (most common user type).
+      // A 403 here just means "not an applicant" → fall through to the admin endpoint.
+      // Any other error (e.g. 401) propagates to the catch below so auth state is cleared.
       try {
         const applicantData = await api.getMyProfile();
         if (applicantData && applicantData.role === 'APPLICANT') {
@@ -57,17 +62,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setLoading(false);
           return;
         }
-      } catch {
-        // Not an applicant — try admin
+      } catch (err: any) {
+        const status = err?.status ?? err?.response?.status;
+        // Only swallow the "not an applicant" case; rethrow real auth failures.
+        if (status !== 403 && status !== 404) {
+          throw err;
+        }
       }
       // Fallback to admin endpoint
       const data = await api.getMe();
       setUser(data);
     } catch (err: any) {
-      const status = err?.status ?? err?.response?.status;
-      if (status === 401 || status === 403) {
-        api.logout();
-      }
+      // Any unhandled failure here (failed refresh, revoked token, 401) must clear
+      // stored tokens + state so a stale credential isn't left behind.
+      api.logout();
       setUser(null);
     } finally {
       setLoading(false);

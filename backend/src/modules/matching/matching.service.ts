@@ -255,30 +255,48 @@ export class MatchingService {
     });
     if (!targetTeam) throw new NotFoundException('Target team not found');
 
-    if (targetTeam.memberCount >= targetTeam.batch.teamMaxSize) {
-      throw new BadRequestException('Target team is at maximum capacity');
+    // No-op: already on the target team.
+    if (applicant.teamId === targetTeamId) {
+      return { success: true, applicantId, targetTeamId };
     }
 
-    await this.prisma.$transaction([
-      // Remove from old team
-      ...(applicant.teamId
-        ? [
-            this.prisma.team.update({
-              where: { id: applicant.teamId },
-              data: { memberCount: { decrement: 1 } },
-            }),
-          ]
-        : []),
-      // Add to new team
-      this.prisma.applicant.update({
-        where: { id: applicantId },
-        data: { teamId: targetTeamId },
-      }),
-      this.prisma.team.update({
-        where: { id: targetTeamId },
-        data: { memberCount: { increment: 1 } },
-      }),
-    ]);
+    const maxSize = targetTeam.batch.teamMaxSize;
+
+    // Gate capacity on a LIVE count computed inside the transaction so that
+    // concurrent moves cannot both pass a stale `memberCount` check and over-fill
+    // the target team. The cached `memberCount` read above is only advisory.
+    // Serializable isolation is required: under READ COMMITTED two concurrent
+    // moves could each count N < max and both insert (a phantom-read race), so
+    // the count gate alone wouldn't hold. Serializable makes one of them abort.
+    await this.prisma.$transaction(
+      async (tx) => {
+        const liveCount = await tx.applicant.count({
+          where: { teamId: targetTeamId },
+        });
+        if (liveCount >= maxSize) {
+          throw new BadRequestException('Target team is at maximum capacity');
+        }
+
+        // Remove from old team
+        if (applicant.teamId) {
+          await tx.team.update({
+            where: { id: applicant.teamId },
+            data: { memberCount: { decrement: 1 } },
+          });
+        }
+
+        // Add to new team
+        await tx.applicant.update({
+          where: { id: applicantId },
+          data: { teamId: targetTeamId },
+        });
+        await tx.team.update({
+          where: { id: targetTeamId },
+          data: { memberCount: { increment: 1 } },
+        });
+      },
+      { isolationLevel: 'Serializable' },
+    );
 
     return { success: true, applicantId, targetTeamId };
   }

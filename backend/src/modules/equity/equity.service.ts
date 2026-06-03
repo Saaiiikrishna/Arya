@@ -33,6 +33,12 @@ export class EquityService {
 
     if (!team) throw new NotFoundException('Team not found');
     if (team.companyEntity) throw new BadRequestException('Team already has a registered company entity');
+    // Guard against forming a company with no members: the founders' 49% could not
+    // be allocated, leaving the cap table summing to only 51% while still claiming
+    // 49% to founders. Never create a company in this inconsistent state.
+    if (team.members.length === 0) {
+      throw new BadRequestException('Cannot form a company for a team with no members');
+    }
 
     const PLATFORM_EQUITY = 51.0;
     const FOUNDERS_EQUITY = 49.0;
@@ -337,8 +343,10 @@ export class EquityService {
 
   /** List all companies with summary stats */
   async listCompanies(params: { status?: string; page?: number; limit?: number } = {}) {
+    const MAX_LIMIT = 100;
     const page = params.page || 1;
-    const limit = params.limit || 20;
+    // Cap the client-supplied limit so a caller cannot request an unbounded page.
+    const limit = Math.min(params.limit || 20, MAX_LIMIT);
     const skip = (page - 1) * limit;
 
     const where: any = {};

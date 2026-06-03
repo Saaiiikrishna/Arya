@@ -1,6 +1,15 @@
+import { IsDateString, IsString } from 'class-validator';
+
 export class CreateSprintDto {
+  @IsString()
   teamId: string;
-  startDate: Date;
-  endDate: Date;
+
+  @IsString()
   title: string;
+
+  @IsDateString()
+  startDate: string;
+
+  @IsDateString()
+  endDate: string;
 }

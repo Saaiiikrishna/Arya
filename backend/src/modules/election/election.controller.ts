@@ -112,26 +112,30 @@ export class ElectionController {
 
   @UseGuards(JwtAuthGuard)
   @Get('elections/:id')
-  async getElection(@Param('id') id: string) {
-    return this.electionService.getElection(id);
+  async getElection(@Param('id') id: string, @Req() req: any) {
+    const requesterId = req.user.id || req.user.sub;
+    return this.electionService.getElection(id, requesterId, req.user.role);
   }
 
   @UseGuards(JwtAuthGuard)
   @Get('elections/team/:teamId/active')
-  async getActiveElection(@Param('teamId') teamId: string) {
-    return this.electionService.getActiveElection(teamId);
+  async getActiveElection(@Param('teamId') teamId: string, @Req() req: any) {
+    const requesterId = req.user.id || req.user.sub;
+    return this.electionService.getActiveElection(teamId, requesterId, req.user.role);
   }
 
   @UseGuards(JwtAuthGuard)
   @Get('elections/:id/nominees')
-  async getNominees(@Param('id') id: string) {
-    return this.electionService.getNominees(id);
+  async getNominees(@Param('id') id: string, @Req() req: any) {
+    const requesterId = req.user.id || req.user.sub;
+    return this.electionService.getNominees(id, requesterId, req.user.role);
   }
 
   @UseGuards(JwtAuthGuard)
   @Get('elections/:id/results')
-  async getResults(@Param('id') id: string) {
-    return this.electionService.getResults(id);
+  async getResults(@Param('id') id: string, @Req() req: any) {
+    const requesterId = req.user.id || req.user.sub;
+    return this.electionService.getResults(id, requesterId, req.user.role);
   }
 
   @UseGuards(JwtAuthGuard)

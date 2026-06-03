@@ -7,7 +7,9 @@ import {
   Param,
   Query,
   UseGuards,
+  BadRequestException,
 } from '@nestjs/common';
+import { BatchStatus } from '@prisma/client';
 import { BatchService } from './batch.service';
 import { AdminGuard } from '../auth/guards';
 
@@ -24,6 +26,12 @@ export class BatchController {
   @Get('batches/:batchNumber/status')
   async getBatchStatus(@Param('batchNumber') batchNumber: string) {
     return this.batchService.getPublicBatchStatus(parseInt(batchNumber, 10));
+  }
+
+  // Public, safe-field list of all batches for the Archives page.
+  @Get('batches/public')
+  async listPublicBatches() {
+    return this.batchService.listPublic();
   }
 
   // ─── Admin endpoints ──────────────────────────────────
@@ -62,7 +70,15 @@ export class BatchController {
     @Param('id') id: string,
     @Body('status') status: string,
   ) {
-    return this.batchService.transitionStatus(id, status as any);
+    if (
+      typeof status !== 'string' ||
+      !Object.values(BatchStatus).includes(status as BatchStatus)
+    ) {
+      throw new BadRequestException(
+        `Invalid status. Must be one of: ${Object.values(BatchStatus).join(', ')}`,
+      );
+    }
+    return this.batchService.transitionStatus(id, status as BatchStatus);
   }
 
   @UseGuards(AdminGuard)

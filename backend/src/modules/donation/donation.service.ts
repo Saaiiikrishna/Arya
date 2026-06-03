@@ -126,7 +126,19 @@ export class DonationService {
   }
 
   async getDonations(params?: { status?: string; page?: number; limit?: number }) {
-    const { page = 1, limit = 20, status } = params || {};
+    const DEFAULT_LIMIT = 20;
+    const MAX_LIMIT = 100;
+
+    const { status } = params || {};
+    // Clamp client-supplied pagination: limit to [1, MAX_LIMIT] (sane default),
+    // page to a minimum of 1 so `skip` never goes negative.
+    const rawLimit = Number(params?.limit);
+    const limit = Number.isFinite(rawLimit)
+      ? Math.min(Math.max(Math.trunc(rawLimit), 1), MAX_LIMIT)
+      : DEFAULT_LIMIT;
+    const rawPage = Number(params?.page);
+    const page = Number.isFinite(rawPage) ? Math.max(Math.trunc(rawPage), 1) : 1;
+
     const where: any = {};
     if (status) where.status = status;
 

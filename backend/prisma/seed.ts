@@ -231,7 +231,8 @@ async function main() {
       body: `
         <h2>Hi {{firstName}},</h2>
         <p>Your interview is booked for <strong>{{date}} at {{time}}</strong>.</p>
-        <p>Join link: <a href="{{meetLink}}">{{meetLink}}</a></p>
+        <p>Join link: <strong>{{meetLink}}</strong></p>
+        <p>If a link is not shown above, it will be shared closer to the date.</p>
         <p>Please be on time and keep your idea and motivation front of mind.</p>
         <br/>
         <p>Best regards,<br/>The Aryavartham Team</p>

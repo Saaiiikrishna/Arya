@@ -348,7 +348,9 @@ export class ReferralService {
    * Admin: get all referral records with filters.
    */
   async getAllReferrals(params: { page?: number; limit?: number; search?: string }) {
-    const { page = 1, limit = 20, search } = params;
+    const { page = 1, search } = params;
+    // Clamp client-supplied limit to a sane range to prevent unbounded queries.
+    const limit = Math.min(Math.max(params.limit ?? 20, 1), 100);
     const skip = (page - 1) * limit;
 
     const where: any = { referredById: { not: null } };

@@ -65,6 +65,28 @@ export class BatchService {
     });
   }
 
+  /**
+   * Public, safe-field batch list for the Archives page (no applicant PII).
+   * Newest first. Used by an unauthenticated/public surface, so it returns only
+   * non-sensitive batch metadata + aggregate counts.
+   */
+  async listPublic() {
+    return this.prisma.batch.findMany({
+      orderBy: { batchNumber: 'desc' },
+      select: {
+        id: true,
+        batchNumber: true,
+        name: true,
+        nickname: true,
+        status: true,
+        capacity: true,
+        currentCount: true,
+        createdAt: true,
+        _count: { select: { applicants: true, teams: true } },
+      },
+    });
+  }
+
   async findOne(id: string) {
     const batch = await this.prisma.batch.findUnique({
       where: { id },

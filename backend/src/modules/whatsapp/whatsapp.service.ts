@@ -34,6 +34,17 @@ export class WhatsappService {
     // Clean phone number (remove +, spaces, leading zeros)
     const cleanPhone = to.replace(/\D/g, '');
 
+    // Honor STOP opt-out: if a known applicant matching this phone has
+    // whatsappOptOut=true, skip the send. Unknown numbers (no matching
+    // applicant row) still send, e.g. OTP for new signups. Best-effort:
+    // never block a send because the lookup itself errored.
+    if (await this.isOptedOut(cleanPhone)) {
+      this.logger.log(
+        `[WHATSAPP SKIP] To: ${cleanPhone}, Template: ${templateName} — recipient opted out (STOP)`,
+      );
+      return false;
+    }
+
     if (this.isDev || !this.apiToken || this.apiToken === 'your_meta_token_here') {
       this.logger.log(`[WHATSAPP MOCK] To: ${cleanPhone}, Template: ${templateName}, Components: ${JSON.stringify(components)}`);
       return true;
@@ -168,6 +179,47 @@ export class WhatsappService {
   }
   sendBatchOpening(to: string, batchNumber: string, applyUrl: string) {
     return this.notify(to, 'batch_opening', this.body(batchNumber, applyUrl));
+  }
+
+  /**
+   * Returns true only when a known applicant matches this phone (on
+   * digits-only normalization of either `phone` or `whatsappPhone`) AND that
+   * applicant has whatsappVerified=false (i.e. opted out via STOP).
+   *
+   * Mirrors WhatsappController.optOutByPhone matching: a cheap substring
+   * filter narrows candidates, then an exact normalized-digits comparison
+   * confirms the match. Unknown numbers return false so they still send.
+   * Best-effort: any lookup error is swallowed and treated as "not opted out"
+   * so a transient DB issue never silently drops legitimate messages.
+   */
+  private async isOptedOut(normalizedPhone: string): Promise<boolean> {
+    try {
+      const normalized = (normalizedPhone ?? '').replace(/\D/g, '');
+      if (!normalized) return false;
+
+      const candidates = await this.prisma.applicant.findMany({
+        where: {
+          OR: [
+            { phone: { contains: normalized } },
+            { whatsappPhone: { contains: normalized } },
+          ],
+        },
+        select: { phone: true, whatsappPhone: true, whatsappOptOut: true },
+      });
+
+      return candidates.some((a) => {
+        const phoneDigits = (a.phone ?? '').replace(/\D/g, '');
+        const waDigits = (a.whatsappPhone ?? '').replace(/\D/g, '');
+        const matches = phoneDigits === normalized || waDigits === normalized;
+        return matches && a.whatsappOptOut === true;
+      });
+    } catch (err) {
+      this.logger.error(
+        `Opt-out lookup failed for ${normalizedPhone}; allowing send`,
+        err as any,
+      );
+      return false;
+    }
   }
 
   private async logNotification(applicantId: string, subject: string, body: string, success: boolean) {

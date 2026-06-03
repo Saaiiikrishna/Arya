@@ -90,14 +90,14 @@ export default function Hub() {
   };
 
   return (
-    <div className="min-h-screen flex text-ink selection:bg-forest/20 selection:text-forest">
+    <div className="min-h-screen flex flex-col lg:flex-row text-ink selection:bg-forest/20 selection:text-forest">
       {/* Sidebar Navigation */}
-      <aside className="w-[250px] border-r border-hairline flex-shrink-0 h-screen sticky top-0 flex flex-col justify-between py-12 px-8 bg-parchment">
+      <aside className="w-full lg:w-[250px] border-b lg:border-b-0 lg:border-r border-hairline flex-shrink-0 lg:h-screen lg:sticky lg:top-0 flex flex-col justify-between py-8 lg:py-12 px-6 lg:px-8 bg-parchment">
         <div>
-          <div className="mb-16">
+          <div className="mb-8 lg:mb-16">
             <span className="font-serif text-2xl font-bold tracking-tight">The Founder's<br />Club.</span>
           </div>
-          <nav className="flex flex-col gap-6">
+          <nav className="flex flex-row flex-wrap lg:flex-col gap-x-5 gap-y-3 lg:gap-6">
             {[
               { label: 'Overview', active: true, href: '/hub' },
               { label: 'Team Roster', active: false, href: '/hub/team' },
@@ -118,7 +118,7 @@ export default function Hub() {
             ))}
           </nav>
         </div>
-        <div className="border-t border-hairline pt-8 mt-12">
+        <div className="border-t border-hairline pt-6 lg:pt-8 mt-6 lg:mt-12">
           <p className="text-xs uppercase tracking-widest text-ink/40 mb-2">
             {batch ? `Cohort #${batch.batchNumber}` : 'Cohort'}
           </p>
@@ -136,15 +136,15 @@ export default function Hub() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 px-16 py-12 overflow-y-auto">
+      <main className="flex-1 px-5 sm:px-8 lg:px-16 py-8 lg:py-12 overflow-y-auto">
         <div className="max-w-[960px] mx-auto">
           {/* Header Section */}
-          <header className="border-b border-hairline pb-8 mb-12 flex justify-between items-end">
+          <header className="border-b border-hairline pb-8 mb-12 flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-end">
             <div>
               <p className="text-sm uppercase tracking-widest text-forest font-medium mb-3">
                 {firstName}&apos;s Command Center
               </p>
-              <h1 className="font-serif text-5xl font-bold leading-none">Founder&apos;s Club</h1>
+              <h1 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-bold leading-none">Founder&apos;s Club</h1>
             </div>
             {renderSprintHeader()}
           </header>
@@ -249,7 +249,11 @@ export default function Hub() {
                         </div>
                       ))}
                     </div>
-                    <button className="mt-6 text-[13px] uppercase tracking-widest font-medium text-forest hover:text-terracotta-warm transition-colors flex items-center gap-2">
+                    <button
+                      disabled
+                      title="Coming soon"
+                      className="mt-6 text-[13px] uppercase tracking-widest font-medium text-ink/40 cursor-not-allowed flex items-center gap-2"
+                    >
                       <Plus className="w-4 h-4" />
                       Request Additional Talent
                     </button>
@@ -364,10 +368,14 @@ export default function Hub() {
                       <p className="text-sm text-ink/40">
                         {sprint?.status === 'ACTIVE' ? 'Sprint in progress' : 'Sprint not started'}
                       </p>
-                      <a href="#" className="text-[13px] uppercase tracking-widest text-forest hover:text-white transition-colors flex items-center gap-1">
+                      <button
+                        disabled
+                        title="Coming soon"
+                        className="text-[13px] uppercase tracking-widest text-ink/40 cursor-not-allowed flex items-center gap-1"
+                      >
                         View Ledger
                         <ArrowRight className="w-4 h-4" />
-                      </a>
+                      </button>
                     </div>
                   </div>
                 </section>

@@ -2,6 +2,22 @@ import { Injectable, NotFoundException, ConflictException, Logger } from '@nestj
 import { PrismaService } from '../../prisma';
 import * as bcrypt from 'bcrypt';
 
+// Safe investor fields — excludes passwordHash (and any future secrets) from all responses.
+const INVESTOR_SAFE_SELECT = {
+  id: true,
+  email: true,
+  firstName: true,
+  lastName: true,
+  firm: true,
+  bio: true,
+  linkedIn: true,
+  interests: true,
+  isApproved: true,
+  avatarUrl: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
 @Injectable()
 export class InvestorService {
   private readonly logger = new Logger(InvestorService.name);
@@ -36,6 +52,7 @@ export class InvestorService {
         interests: data.interests || [],
         passwordHash,
       },
+      select: INVESTOR_SAFE_SELECT,
     });
   }
 
@@ -43,13 +60,17 @@ export class InvestorService {
     return this.prisma.investor.findMany({
       where: params?.isApproved !== undefined ? { isApproved: params.isApproved } : {},
       orderBy: { createdAt: 'desc' },
+      select: INVESTOR_SAFE_SELECT,
     });
   }
 
   async findById(id: string) {
     const investor = await this.prisma.investor.findUnique({
       where: { id },
-      include: { meetingRequests: { include: { showcase: true } } },
+      select: {
+        ...INVESTOR_SAFE_SELECT,
+        meetingRequests: { include: { showcase: true } },
+      },
     });
     if (!investor) throw new NotFoundException('Investor not found');
     return investor;
@@ -59,6 +80,7 @@ export class InvestorService {
     return this.prisma.investor.update({
       where: { id },
       data: { isApproved: true },
+      select: INVESTOR_SAFE_SELECT,
     });
   }
 
@@ -122,7 +144,10 @@ export class InvestorService {
         ...(showcaseId ? { showcaseId } : {}),
         ...(investorId ? { investorId } : {}),
       },
-      include: { investor: true, showcase: true },
+      include: {
+        investor: { select: INVESTOR_SAFE_SELECT },
+        showcase: true,
+      },
       orderBy: { createdAt: 'desc' },
     });
   }

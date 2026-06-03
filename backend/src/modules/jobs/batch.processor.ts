@@ -74,7 +74,7 @@ export class BatchProcessor extends WorkerHost {
 
   private async handleBackfillCascade(job: Job) {
     const { batchId, removedCount = 1 } = job.data;
-    this.logger.log(`Backfill cascade for batch ${batchId}, need ${removedCount} users`);
+    this.logger.log(`Backfill cascade for batch ${batchId}, requested ${removedCount} users`);
 
     const batch = await this.prisma.batch.findUnique({ where: { id: batchId } });
     if (!batch) return;
@@ -90,36 +90,79 @@ export class BatchProcessor extends WorkerHost {
       return;
     }
 
-    // Get oldest applicants from next batch
-    const movedApplicants = await this.prisma.applicant.findMany({
+    // Idempotency: this job can be retried by BullMQ after a partial or even a
+    // full run. Re-derive the real shortfall from a live active count of the
+    // target batch instead of blindly trusting `removedCount`, so a retry never
+    // over-fills the target. We never move more than the free seats currently
+    // available, capped further by how many were actually removed.
+    const realActiveCount = await this.prisma.applicant.count({
+      where: { batchId: batch.id, status: { not: 'REMOVED' } },
+    });
+    const freeSeats = Math.max(0, batch.capacity - realActiveCount);
+    const toMove = Math.min(removedCount, freeSeats);
+
+    if (toMove <= 0) {
+      this.logger.log(
+        `Batch ${batch.batchNumber} already at capacity (${realActiveCount}/${batch.capacity}); nothing to backfill`,
+      );
+      return { movedCount: 0 };
+    }
+
+    // Get oldest applicants from next batch, limited to the real shortfall.
+    const candidates = await this.prisma.applicant.findMany({
       where: { batchId: nextBatch.id, status: { not: 'REMOVED' } },
       orderBy: { appliedAt: 'asc' },
-      take: removedCount,
+      take: toMove,
     });
 
     const frontendUrl = this.configService.get<string>('FRONTEND_URL', 'http://localhost:3000');
 
-    for (const applicant of movedApplicants) {
-      // Move to current batch
-      await this.prisma.$transaction([
-        this.prisma.applicant.update({
-          where: { id: applicant.id },
+    let movedCount = 0;
+    for (const applicant of candidates) {
+      // Move + counter updates in one atomic transaction, scoped to a single
+      // applicant. A retry that re-runs this loop won't double-move because the
+      // move only applies while the row still belongs to nextBatch (guarded by
+      // updateMany's where clause), and the counters only change when a row was
+      // actually moved.
+      const moved = await this.prisma.$transaction(async (tx) => {
+        const res = await tx.applicant.updateMany({
+          where: {
+            id: applicant.id,
+            batchId: nextBatch.id,
+            status: { not: 'REMOVED' },
+          },
           data: {
             batchId: batch.id,
             movedAt: new Date(),
             status: ApplicantStatus.ELIGIBLE,
             teamId: null,
           },
-        }),
-        this.prisma.batch.update({
+        });
+
+        if (res.count === 0) {
+          // Already moved (e.g. by a previous attempt) — skip counter updates.
+          return false;
+        }
+
+        await tx.batch.update({
           where: { id: batch.id },
           data: { currentCount: { increment: 1 } },
-        }),
-        this.prisma.batch.update({
+        });
+        await tx.batch.update({
           where: { id: nextBatch.id },
           data: { currentCount: { decrement: 1 } },
-        }),
-      ]);
+        });
+        return true;
+      });
+
+      if (!moved) {
+        this.logger.log(
+          `Applicant ${applicant.email} already moved out of batch ${nextBatch.batchNumber}; skipping`,
+        );
+        continue;
+      }
+
+      movedCount++;
 
       // Fresh team matching — don't replace, match to best fit.
       // matchToExistingTeam re-checks capacity atomically and may throw if all
@@ -150,7 +193,7 @@ export class BatchProcessor extends WorkerHost {
       );
     }
 
-    return { movedCount: movedApplicants.length };
+    return { movedCount };
   }
 
   private async handleSendBatchNotifications(job: Job) {

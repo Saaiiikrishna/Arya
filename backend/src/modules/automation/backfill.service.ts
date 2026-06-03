@@ -37,4 +37,27 @@ export class BackfillService {
       this.logger.error(`Failed to enqueue backfill for batch ${batchId}: ${(e as any)?.message}`);
     }
   }
+
+  /**
+   * Enqueue a 'check-batch-capacity' job so a FILLING batch that has reached its
+   * capacity can auto-transition FILLING->SCREENING. The processor scans for full
+   * batches itself; `batchId` is passed through only for traceability. Best-effort:
+   * a queue failure is logged and swallowed so it never aborts the apply() that
+   * triggered it.
+   */
+  async enqueueCapacityCheck(batchId?: string | null): Promise<void> {
+    try {
+      await this.batchQueue.add(
+        'check-batch-capacity',
+        { batchId: batchId ?? null },
+        {
+          removeOnComplete: true,
+          attempts: 3,
+        },
+      );
+      this.logger.log(`Enqueued check-batch-capacity${batchId ? ` for batch ${batchId}` : ''}`);
+    } catch (e) {
+      this.logger.error(`Failed to enqueue check-batch-capacity: ${(e as any)?.message}`);
+    }
+  }
 }

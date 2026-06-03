@@ -29,7 +29,7 @@ export class AutomationScheduler {
    * itself re-checks the day-1000 gate and flips status to HANDED_OVER, so a
    * repeated run is a no-op for companies already transferred.
    */
-  @Cron(CronExpression.EVERY_DAY_AT_1AM, { name: 'equity-timers' })
+  @Cron(CronExpression.EVERY_DAY_AT_1AM, { name: 'equity-timers', timeZone: 'Asia/Kolkata' })
   async processEquityTimers() {
     try {
       await this.equity.updateTimers();
@@ -69,7 +69,7 @@ export class AutomationScheduler {
    * within the next 24 hours so the warning lands on the final day. Running once
    * a day keeps each applicant to ~one reminder per deadline.
    */
-  @Cron(CronExpression.EVERY_DAY_AT_9AM, { name: 'screening-deadline-reminders' })
+  @Cron(CronExpression.EVERY_DAY_AT_9AM, { name: 'screening-deadline-reminders', timeZone: 'Asia/Kolkata' })
   async sendScreeningDeadlineReminders() {
     const now = new Date();
     const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);

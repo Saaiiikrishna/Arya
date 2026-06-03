@@ -56,13 +56,28 @@ export class PaymentService {
     if (pricingSetting && pricingSetting.value) {
       try {
         const pricingItems = JSON.parse(pricingSetting.value);
-        if (Array.isArray(pricingItems)) {
-          const sum = pricingItems.reduce((acc: number, item: any) => acc + Number(item.amount), 0);
+        if (Array.isArray(pricingItems) && pricingItems.length > 0) {
+          let sum = 0;
+          for (const item of pricingItems) {
+            const itemAmount = Number(item?.amount);
+            // Each amount must be a finite, positive integer (rupees). Reject
+            // fractional, negative, zero, or non-numeric values so we never
+            // send fractional/negative paise to Razorpay.
+            if (!Number.isInteger(itemAmount) || itemAmount <= 0) {
+              throw new BadRequestException('Invalid pledge pricing amount');
+            }
+            sum += itemAmount;
+          }
           if (sum > 0) {
             amount = sum * 100;
           }
         }
       } catch (e) {
+        // Surface validation failures; only swallow JSON/parse errors so a
+        // malformed setting falls back to the batch pledge amount.
+        if (e instanceof BadRequestException) {
+          throw e;
+        }
         console.error('Failed to parse dynamic pledge pricing', e);
       }
     }
