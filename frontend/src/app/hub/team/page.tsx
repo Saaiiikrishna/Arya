@@ -66,7 +66,7 @@ export default function HubTeamPage() {
               className="bg-white border border-hairline p-6 hover:border-forest transition-all hover:-translate-y-0.5 group"
             >
               <div className="flex items-start gap-4">
-                <div className="w-14 h-14 bg-gradient-to-br from-forest to-forest/60 rounded-full flex items-center justify-center text-white font-bold text-xl flex-shrink-0 shadow-md">
+                <div className="w-14 h-14 bg-gradient-to-br from-forest to-forest/60 rounded-full flex items-center justify-center text-white font-bold text-xl flex-shrink-0">
                   {(member.firstName?.[0] || '?')}{(member.lastName?.[0] || '')}
                 </div>
                 <div className="flex-1 min-w-0">

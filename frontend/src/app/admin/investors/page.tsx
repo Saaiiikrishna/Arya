@@ -334,7 +334,7 @@ export default function AdminInvestorsPage() {
                         <button
                           onClick={() => handleApprove(inv.id)}
                           disabled={approving === inv.id}
-                          className="px-5 py-2 bg-saffron text-parchment text-[10px] uppercase tracking-widest font-bold hover:bg-saffron-deep shadow-pop transition-colors disabled:opacity-50"
+                          className="px-5 py-2 bg-saffron text-parchment text-[10px] uppercase tracking-widest font-bold hover:bg-saffron-deep transition-colors disabled:opacity-50"
                         >
                           {approving === inv.id ? 'Approving...' : 'Approve'}
                         </button>
@@ -357,7 +357,7 @@ export default function AdminInvestorsPage() {
             </p>
             <button
               onClick={() => { setEditingShowcase(null); setShowShowcaseModal(true); }}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-saffron text-parchment text-[10px] uppercase tracking-widest font-bold hover:bg-saffron-deep shadow-pop transition-colors shrink-0"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-saffron text-parchment text-[10px] uppercase tracking-widest font-bold hover:bg-saffron-deep transition-colors shrink-0"
             >
               <Plus className="w-4 h-4" /> New Showcase
             </button>
@@ -409,7 +409,7 @@ export default function AdminInvestorsPage() {
                           className={`px-4 py-2 text-[10px] uppercase tracking-widest font-bold transition-colors disabled:opacity-50 ${
                             s.isPublished
                               ? 'border border-hairline text-ink/60 hover:border-ink/30'
-                              : 'bg-saffron text-parchment hover:bg-saffron-deep shadow-pop'
+                              : 'bg-saffron text-parchment hover:bg-saffron-deep'
                           }`}
                         >
                           {togglingShowcase === s.id ? '...' : s.isPublished ? 'Unpublish' : 'Publish'}
@@ -493,7 +493,7 @@ export default function AdminInvestorsPage() {
                             <button
                               onClick={() => handleMeetingStatus(m, 'ACCEPTED')}
                               disabled={savingMeeting === m.id}
-                              className="px-4 py-2 bg-saffron text-parchment text-[10px] uppercase tracking-widest font-bold hover:bg-saffron-deep shadow-pop transition-colors disabled:opacity-50"
+                              className="px-4 py-2 bg-saffron text-parchment text-[10px] uppercase tracking-widest font-bold hover:bg-saffron-deep transition-colors disabled:opacity-50"
                             >
                               {m.status === 'ACCEPTED' ? 'Reschedule' : 'Accept'}
                             </button>
@@ -699,7 +699,7 @@ function ShowcaseModal({
             <button
               type="submit"
               disabled={submitting}
-              className="px-6 py-3 bg-saffron text-parchment text-[10px] uppercase tracking-widest font-bold hover:bg-saffron-deep shadow-pop transition-colors disabled:opacity-50"
+              className="px-6 py-3 bg-saffron text-parchment text-[10px] uppercase tracking-widest font-bold hover:bg-saffron-deep transition-colors disabled:opacity-50"
             >
               {submitting ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Showcase'}
             </button>

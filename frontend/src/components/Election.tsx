@@ -223,7 +223,7 @@ export default function Election({ id }: { id: string }) {
                           setShowSelfNomPrompt(true);
                         }
                       }}
-                      className="bg-saffron text-parchment px-6 py-2 text-[11px] uppercase tracking-widest font-bold hover:bg-saffron-deep transition-colors shadow-pop"
+                      className="bg-saffron text-parchment px-6 py-2 text-[11px] uppercase tracking-widest font-bold hover:bg-saffron-deep transition-colors"
                     >
                       Yes, I want to lead
                     </button>
@@ -274,7 +274,7 @@ export default function Election({ id }: { id: string }) {
                     <button
                       onClick={handleSelfNominate}
                       disabled={isSubmitting}
-                      className="bg-saffron text-parchment px-6 py-2 text-[11px] uppercase tracking-widest font-bold hover:bg-saffron-deep shadow-pop"
+                      className="bg-saffron text-parchment px-6 py-2 text-[11px] uppercase tracking-widest font-bold hover:bg-saffron-deep"
                     >
                       {isSubmitting ? 'Submitting...' : 'Submit Self-Nomination'}
                     </button>
@@ -308,7 +308,7 @@ export default function Election({ id }: { id: string }) {
                     <button
                       onClick={handleSelfNominate}
                       disabled={isSubmitting}
-                      className="bg-saffron text-parchment px-6 py-2 text-[11px] uppercase tracking-widest font-bold hover:bg-saffron-deep shadow-pop"
+                      className="bg-saffron text-parchment px-6 py-2 text-[11px] uppercase tracking-widest font-bold hover:bg-saffron-deep"
                     >
                       {isSubmitting ? 'Submitting...' : 'Confirm Self-Nomination'}
                     </button>
@@ -344,7 +344,7 @@ export default function Election({ id }: { id: string }) {
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="bg-saffron text-parchment px-6 py-3 text-[13px] uppercase tracking-widest font-bold hover:bg-saffron-deep transition-colors shadow-pop"
+                    className="bg-saffron text-parchment px-6 py-3 text-[13px] uppercase tracking-widest font-bold hover:bg-saffron-deep transition-colors"
                   >
                     {isSubmitting ? 'Saving...' : 'Update Pitch'}
                   </button>

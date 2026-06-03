@@ -9,6 +9,13 @@ import { BatchStatus, ApplicantStatus } from '@prisma/client';
 export class BatchService {
   private readonly logger = new Logger(BatchService.name);
 
+  /**
+   * Fixed cohort size. Every batch ships as a team of exactly 100; this is a
+   * hard service-layer rule that overrides any configurable capacity setting
+   * for AUTO-created batches.
+   */
+  private static readonly COHORT_SIZE = 100;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
@@ -149,74 +156,110 @@ export class BatchService {
       where: { batchId: fillingBatch.id, status: { not: 'REMOVED' } },
     });
 
-    if (realCount >= fillingBatch.capacity) {
-      // Move to SCREENING
-      await this.prisma.batch.update({
-        where: { id: fillingBatch.id },
+    if (realCount < fillingBatch.capacity) {
+      return { triggered: false };
+    }
+
+    // ── Atomic FILLING -> SCREENING transition ──────────────────────────────
+    // Two callers (cron tick + queue job) can both observe the batch as full
+    // and both try to flip it, double-firing "batch filled" notifications and
+    // racing to create batch N+1. Serialize the flip with the same advisory
+    // lock used for batch creation, and gate it on a compare-and-swap: only the
+    // caller whose updateMany actually moves the row out of FILLING wins. Side
+    // effects (notifications + next-batch creation) run AFTER the winning CAS,
+    // outside the critical transaction.
+    const won = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('aryavartham_batch_create'))`;
+
+      // Re-confirm fullness inside the lock against the live count so a
+      // concurrent removal between the gate above and the lock can't push a
+      // no-longer-full batch into SCREENING.
+      const lockedCount = await tx.applicant.count({
+        where: { batchId: fillingBatch.id, status: { not: 'REMOVED' } },
+      });
+      if (lockedCount < fillingBatch.capacity) return false;
+
+      const flip = await tx.batch.updateMany({
+        where: { id: fillingBatch.id, status: BatchStatus.FILLING },
         data: { status: BatchStatus.SCREENING },
       });
+      // Exactly one transaction can see status=FILLING and flip it; everyone
+      // else gets count=0 and bails without re-running the side effects.
+      return flip.count === 1;
+    });
 
-      // Notify every applicant in the now-filled batch (best-effort; must not
-      // block the transition or auto-create of the next batch).
-      const filledApplicants = await this.prisma.applicant.findMany({
-        where: { batchId: fillingBatch.id, status: { not: 'REMOVED' } },
-        select: { id: true, email: true, firstName: true, phone: true },
-      });
-      await Promise.allSettled(
-        filledApplicants.map((applicant) =>
-          this.notifications.batchFilled({
-            ...applicant,
-            batchNumber: fillingBatch.batchNumber,
-          }),
-        ),
-      );
+    if (!won) {
+      // Another caller already flipped this batch; nothing to do.
+      return { triggered: false };
+    }
 
-      // Get auto-batch config
-      const capacitySetting = await this.prisma.siteSetting.findUnique({
-        where: { key: 'auto_batch_capacity' },
+    // ── Side effects (best-effort, outside the critical txn) ────────────────
+    // Notify every applicant in the now-filled batch. Must not block or roll
+    // back the transition or the auto-create of the next batch.
+    const filledApplicants = await this.prisma.applicant.findMany({
+      where: { batchId: fillingBatch.id, status: { not: 'REMOVED' } },
+      select: { id: true, email: true, firstName: true, phone: true },
+    });
+    await Promise.allSettled(
+      filledApplicants.map((applicant) =>
+        this.notifications.batchFilled({
+          ...applicant,
+          batchNumber: fillingBatch.batchNumber,
+        }),
+      ),
+    );
+
+    // Auto-create the next FILLING batch. Reuse the advisory lock + unique
+    // batchNumber guard so a concurrent sign-up (applicant.service) that also
+    // mints the next batch can't create a duplicate; we no-op if a later batch
+    // already exists.
+    const nextBatchNumber = fillingBatch.batchNumber + 1;
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('aryavartham_batch_create'))`;
+
+      // Someone may have already created batch N+1 (or beyond) inside the lock.
+      const existingNext = await tx.batch.findFirst({
+        where: { batchNumber: { gte: nextBatchNumber } },
       });
-      const nicknameSetting = await this.prisma.siteSetting.findUnique({
+      if (existingNext) return;
+
+      const nicknameSetting = await tx.siteSetting.findUnique({
         where: { key: 'auto_batch_nicknames' },
       });
-      const namingSetting = await this.prisma.siteSetting.findUnique({
+      const namingSetting = await tx.siteSetting.findUnique({
         where: { key: 'auto_batch_naming_sequence' },
       });
 
-      const capacity = capacitySetting
-        ? parseInt(capacitySetting.value, 10) || 1000
-        : 1000;
       const nicknames: string[] = nicknameSetting
         ? JSON.parse(nicknameSetting.value)
         : [];
       const namingSequence = namingSetting?.value || 'Batch';
-      const nextBatchNumber = fillingBatch.batchNumber + 1;
-      const nickname =
-        nicknames.length > 0 ? nicknames.shift() : undefined;
+      const nickname = nicknames.length > 0 ? nicknames.shift() : undefined;
 
-      // Save remaining nicknames back
-      if (nicknameSetting && nicknames.length >= 0) {
-        await this.prisma.siteSetting.update({
+      // Save remaining nicknames back (only meaningful when one was consumed).
+      if (nicknameSetting) {
+        await tx.siteSetting.update({
           where: { key: 'auto_batch_nicknames' },
           data: { value: JSON.stringify(nicknames) },
         });
       }
 
-      await this.prisma.batch.create({
+      await tx.batch.create({
         data: {
           batchNumber: nextBatchNumber,
           name: `${namingSequence} ${nextBatchNumber}`,
           nickname: nickname || null,
-          capacity,
+          // Fixed cohort rule: auto-created batches are EXACTLY 100 seats,
+          // regardless of any configurable auto_batch_capacity setting.
+          capacity: BatchService.COHORT_SIZE,
         },
       });
+    });
 
-      this.logger.log(
-        `Batch ${fillingBatch.batchNumber} filled. Auto-created batch ${nextBatchNumber}.`,
-      );
-      return { triggered: true, batchId: fillingBatch.id };
-    }
-
-    return { triggered: false };
+    this.logger.log(
+      `Batch ${fillingBatch.batchNumber} filled. Auto-created batch ${nextBatchNumber} (capacity ${BatchService.COHORT_SIZE}).`,
+    );
+    return { triggered: true, batchId: fillingBatch.id };
   }
 
   async transitionStatus(id: string, newStatus: BatchStatus) {

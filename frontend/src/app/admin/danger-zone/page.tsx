@@ -94,7 +94,7 @@ export default function DangerZonePage() {
         </div>
       </header>
 
-      <div className="bg-alabaster border border-terracotta/20 overflow-x-auto mb-16 shadow-sm">
+      <div className="bg-alabaster border border-terracotta/20 overflow-x-auto mb-16">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-terracotta/20 text-left bg-terracotta/5">
@@ -140,7 +140,7 @@ export default function DangerZonePage() {
                 {expandedTable === t.table_name && (
                   <tr>
                     <td colSpan={3} className="p-0 border-b border-terracotta/20">
-                      <div className="bg-white p-6 border-x-4 border-l-terracotta border-r-transparent overflow-x-auto shadow-inner">
+                      <div className="bg-white p-6 border-x-4 border-l-terracotta border-r-transparent overflow-x-auto">
                         {loadingData ? (
                           <div className="text-center text-xs text-ink/50 py-8 animate-pulse">Fetching dataset...</div>
                         ) : tableData && tableData.columns ? (

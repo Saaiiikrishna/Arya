@@ -226,7 +226,7 @@ export default function AdminAnalyticsPage() {
             <h2 className="font-serif text-2xl font-bold">Global Leaderboard</h2>
           </div>
           
-          <div className="bg-ink text-parchment border border-hairline p-6 shadow-sm">
+          <div className="bg-ink text-parchment border border-hairline p-6">
             {rankings.length === 0 ? (
               <p className="text-center text-parchment/60 py-8">Not enough data to rank teams.</p>
             ) : (
@@ -300,7 +300,7 @@ function TeamReportDrawer({ teamId, onClose }: { teamId: string; onClose: () => 
       onClick={onClose}
     >
       <div
-        className="bg-parchment border-l border-hairline w-full max-w-md h-full overflow-y-auto text-ink shadow-xl"
+        className="bg-parchment border-l border-hairline w-full max-w-md h-full overflow-y-auto text-ink"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-hairline px-6 py-5 bg-white sticky top-0 z-10">

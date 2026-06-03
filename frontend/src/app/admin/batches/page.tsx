@@ -124,11 +124,15 @@ export default function BatchesPage() {
                 {autoEnabled ? 'ON' : 'OFF'}
               </span>
               <button
+                type="button"
+                role="switch"
+                aria-checked={autoEnabled}
+                aria-label="Enable auto-create batches"
                 onClick={() => setAutoEnabled(!autoEnabled)}
-                className={`relative w-12 h-7 rounded-full transition-colors ${autoEnabled ? 'bg-saffron' : 'bg-ink/20'}`}
+                className={`relative w-12 h-7 border transition-colors focus:outline-none focus:ring-1 focus:ring-forest ${autoEnabled ? 'bg-saffron border-saffron-deep' : 'bg-ink/10 border-hairline'}`}
               >
                 <span
-                  className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow transition-transform ${autoEnabled ? 'left-6' : 'left-1'}`}
+                  className={`absolute top-1 w-5 h-5 border transition-all ${autoEnabled ? 'left-6 bg-white border-saffron-deep' : 'left-1 bg-white border-hairline'}`}
                 />
               </button>
             </label>
@@ -196,9 +200,9 @@ export default function BatchesPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {batches.map((batch) => (
             <Link key={batch.id} href={`/admin/batches/${batch.id}`} className="group block h-full">
-              <div className="border border-hairline bg-white p-8 h-full flex flex-col hover:border-forest hover:-translate-y-1 transition-all shadow-sm">
+              <div className="border border-hairline bg-white p-8 h-full flex flex-col hover:border-forest hover:-translate-y-1 transition-all">
                 <div className="flex justify-between items-start mb-4">
-                  <div className="w-16 h-16 bg-ink flex items-center justify-center font-serif text-2xl text-white font-bold shadow-md">
+                  <div className="w-16 h-16 bg-ink flex items-center justify-center font-serif text-2xl text-white font-bold">
                     #{batch.batchNumber}
                   </div>
                   <span className={`px-3 py-1 text-[10px] uppercase tracking-widest font-bold border ${batch.status === 'PRODUCTION' ? 'bg-saffron/10 text-saffron-deep border-saffron/20' : 'bg-parchment text-ink/60 border-ink/20'}`}>
@@ -216,7 +220,7 @@ export default function BatchesPage() {
                     <span className="text-xs uppercase tracking-widest text-ink/60 font-semibold">Network Capacity</span>
                     <span className="font-serif text-xl font-bold">{batch.currentCount} / {batch.capacity}</span>
                   </div>
-                  <div className="h-2 bg-parchment w-full shadow-inner border border-hairline">
+                  <div className="h-2 bg-parchment w-full border border-hairline">
                     <div
                       className={`h-full transition-all ${batch.status === 'PRODUCTION' ? 'bg-saffron' : 'bg-ink'}`}
                       style={{ width: `${Math.min(100, (batch.currentCount / batch.capacity) * 100)}%` }}

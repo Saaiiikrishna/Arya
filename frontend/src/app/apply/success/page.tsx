@@ -70,7 +70,7 @@ function SuccessContent() {
 
         <Link
           href="/"
-          className="inline-flex items-center justify-center bg-saffron text-parchment px-7 py-3.5 font-bold uppercase tracking-widest text-xs shadow-pop hover:bg-saffron-deep active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-colors"
+          className="inline-flex items-center justify-center bg-saffron text-parchment px-7 py-3.5 font-bold uppercase tracking-widest text-xs hover:bg-saffron-deep active:translate-x-0.5 active:translate-y-0.5 transition-colors"
         >
           Back to Home
         </Link>

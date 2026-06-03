@@ -389,7 +389,7 @@ export default function AdminEquityPage() {
               })
               .catch(() => {});
           }}
-          className="px-6 py-3 bg-saffron text-parchment text-[10px] uppercase tracking-widest font-bold hover:bg-saffron-deep transition-colors shadow-pop flex items-center gap-2"
+          className="px-6 py-3 bg-saffron text-parchment text-[10px] uppercase tracking-widest font-bold hover:bg-saffron-deep transition-colors flex items-center gap-2"
         >
           <Plus className="w-4 h-4" /> Register Company
         </button>
@@ -594,7 +594,7 @@ export default function AdminEquityPage() {
                       <button
                         onClick={() => startTimer(detail.id)}
                         disabled={actionLoading}
-                        className="px-4 py-2 bg-saffron text-parchment text-[10px] uppercase tracking-widest font-bold hover:bg-saffron-deep shadow-pop disabled:opacity-50 flex items-center gap-2"
+                        className="px-4 py-2 bg-saffron text-parchment text-[10px] uppercase tracking-widest font-bold hover:bg-saffron-deep disabled:opacity-50 flex items-center gap-2"
                       >
                         <Play className="w-3 h-3" /> Start Timer
                       </button>
@@ -896,7 +896,7 @@ export default function AdminEquityPage() {
                       <button
                         onClick={createAgreement}
                         disabled={actionLoading}
-                        className="px-6 py-3 bg-saffron text-parchment text-[10px] uppercase tracking-widest font-bold hover:bg-saffron-deep shadow-pop disabled:opacity-50 transition-colors"
+                        className="px-6 py-3 bg-saffron text-parchment text-[10px] uppercase tracking-widest font-bold hover:bg-saffron-deep disabled:opacity-50 transition-colors"
                       >
                         {actionLoading ? 'Creating…' : 'Create Agreement'}
                       </button>
@@ -1051,7 +1051,7 @@ export default function AdminEquityPage() {
                         <button
                           onClick={recordEvent}
                           disabled={actionLoading}
-                          className="px-6 py-3 bg-saffron text-parchment text-[10px] uppercase tracking-widest font-bold hover:bg-saffron-deep shadow-pop disabled:opacity-50 transition-colors"
+                          className="px-6 py-3 bg-saffron text-parchment text-[10px] uppercase tracking-widest font-bold hover:bg-saffron-deep disabled:opacity-50 transition-colors"
                         >
                           {actionLoading ? 'Recording…' : 'Record Event'}
                         </button>
@@ -1203,7 +1203,7 @@ export default function AdminEquityPage() {
                 <button
                   onClick={handleCreate}
                   disabled={actionLoading}
-                  className="px-8 py-3 bg-saffron text-parchment text-[10px] uppercase tracking-widest font-bold hover:bg-saffron-deep shadow-pop disabled:opacity-50 transition-colors"
+                  className="px-8 py-3 bg-saffron text-parchment text-[10px] uppercase tracking-widest font-bold hover:bg-saffron-deep disabled:opacity-50 transition-colors"
                 >
                   {actionLoading ? 'Creating...' : 'Create Company'}
                 </button>

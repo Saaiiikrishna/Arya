@@ -86,19 +86,16 @@ export class InterviewService {
     const booking = await this.prisma.interviewBooking.findUnique({ where: { id: bookingId } });
     if (!booking) throw new NotFoundException('Booking not found');
 
-    // Idempotency guard: once a booking has a terminal decision recorded
-    // (COMPLETED with a non-null decision), do not re-apply applicant status
-    // changes or re-enqueue backfill. Re-firing those would clobber any
-    // post-interview status progression and pull duplicate replacements.
-    if (booking.status === BookingStatus.COMPLETED && booking.decision != null) {
-      throw new BadRequestException(
-        'A decision has already been recorded for this booking.',
-      );
-    }
-
-    const [updated] = await this.prisma.$transaction([
-      this.prisma.interviewBooking.update({
-        where: { id: bookingId },
+    // Idempotency / race guard. Two admins can both read an undecided booking,
+    // both pass a plain status check, and apply conflicting terminal decisions
+    // plus duplicate backfill. To make this safe we perform an atomic
+    // compare-and-set inside the transaction: conditionally update the booking
+    // ONLY while it is still undecided (decision IS NULL), then check the
+    // affected-row count. Exactly one concurrent call can flip NULL -> decision,
+    // so only the winner runs the applicant status change + backfill enqueue.
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.interviewBooking.updateMany({
+        where: { id: bookingId, decision: null },
         data: {
           status: 'COMPLETED',
           decision,
@@ -107,17 +104,41 @@ export class InterviewService {
           decidedAt: new Date(),
           decidedById: adminId,
         },
-      }),
-      ...(decision === 'SELECTED'
-        ? [this.prisma.applicant.update({ where: { id: booking.applicantId }, data: { status: 'ELIGIBLE' } })]
-        : decision === 'REJECTED'
-        ? [this.prisma.applicant.update({ where: { id: booking.applicantId }, data: { status: 'REMOVED' } })]
-        : []),
-    ]);
+      });
+
+      // We lost the CAS (a concurrent call already recorded a decision) — or a
+      // decision was recorded between our initial read and this update.
+      if (count === 0) {
+        throw new BadRequestException(
+          'A decision has already been recorded for this booking.',
+        );
+      }
+
+      if (decision === 'SELECTED') {
+        await tx.applicant.update({
+          where: { id: booking.applicantId },
+          data: { status: 'ELIGIBLE' },
+        });
+      } else if (decision === 'REJECTED') {
+        await tx.applicant.update({
+          where: { id: booking.applicantId },
+          data: { status: 'REMOVED' },
+        });
+      }
+
+      // Return the freshly-updated booking to preserve the previous response
+      // shape (the committed booking row). The CAS above guarantees the row
+      // exists, so this re-read is always non-null.
+      const row = await tx.interviewBooking.findUnique({ where: { id: bookingId } });
+      if (!row) throw new NotFoundException('Booking not found');
+      return row;
+    });
 
     this.logger.log(`Interview decision ${decision} recorded for booking ${bookingId}`);
 
     // Notify the applicant of the interview outcome (best-effort, post-commit).
+    // Only reached when THIS call won the compare-and-set above; a loser throws
+    // before this point, so notifications/backfill never fire twice.
     if (decision === 'SELECTED' || decision === 'REJECTED') {
       const applicant = await this.prisma.applicant.findUnique({
         where: { id: booking.applicantId },

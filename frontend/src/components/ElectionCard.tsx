@@ -83,7 +83,7 @@ export default function ElectionCard({ team }: { team: any }) {
 
         <a 
           href={`/hub/election/${election.id}`}
-          className="bg-saffron hover:bg-saffron-deep text-parchment text-[13px] uppercase tracking-widest py-3 px-6 transition-colors inline-flex items-center gap-2 shadow-pop"
+          className="bg-saffron hover:bg-saffron-deep text-parchment text-[13px] uppercase tracking-widest py-3 px-6 transition-colors inline-flex items-center gap-2"
         >
           Enter Election Portal
           <ArrowRight className="w-4 h-4" />

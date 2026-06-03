@@ -270,6 +270,30 @@ export class MatchingService {
     // the count gate alone wouldn't hold. Serializable makes one of them abort.
     await this.prisma.$transaction(
       async (tx) => {
+        // Reject cross-batch moves. An applicant may only be assigned to a team
+        // in the SAME batch — otherwise the applicant's batchId and the team's
+        // batchId become inconsistent while both memberCounts are mutated.
+        // Re-read both batchIds inside the serializable snapshot so the check is
+        // consistent with the mutations below (the pre-transaction reads above
+        // are only advisory).
+        const [applicantRow, targetTeamRow] = await Promise.all([
+          tx.applicant.findUnique({
+            where: { id: applicantId },
+            select: { batchId: true },
+          }),
+          tx.team.findUnique({
+            where: { id: targetTeamId },
+            select: { batchId: true },
+          }),
+        ]);
+        if (!applicantRow) throw new NotFoundException('Applicant not found');
+        if (!targetTeamRow) throw new NotFoundException('Target team not found');
+        if (applicantRow.batchId !== targetTeamRow.batchId) {
+          throw new BadRequestException(
+            'Cannot move applicant to a team in a different batch',
+          );
+        }
+
         const liveCount = await tx.applicant.count({
           where: { teamId: targetTeamId },
         });

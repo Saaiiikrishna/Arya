@@ -32,7 +32,7 @@ export default function LoginPage() {
       router.push('/hub');
       return (
         <div className="min-h-screen bg-parchment flex items-center justify-center p-8">
-          <div className="w-full max-w-md bg-white border border-hairline p-12 text-center shadow-sm">
+          <div className="w-full max-w-md bg-white border border-hairline p-12 text-center">
             <h2 className="font-serif text-2xl font-bold mb-4 text-terracotta">Access Restricted</h2>
             <p className="text-ink/60 mb-6 text-sm">
               This area is reserved for administrators. Redirecting you to your Hub...
@@ -45,7 +45,7 @@ export default function LoginPage() {
 
     return (
       <div className="min-h-screen bg-parchment flex items-center justify-center p-8 selection:bg-forest selection:text-parchment">
-        <div className="w-full max-w-md bg-white border border-hairline p-12 text-center shadow-sm relative overflow-hidden">
+        <div className="w-full max-w-md bg-white border border-hairline p-12 text-center relative overflow-hidden">
           <div className="absolute top-0 right-0 w-16 h-16 bg-forest/5 -mr-8 -mt-8 rotate-45 border border-forest/10" />
           <div className="flex justify-center mb-6 relative z-10 pt-4">
             <span className="text-4xl font-serif italic text-forest leading-none">Aryavartham</span>
@@ -77,7 +77,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-parchment flex items-center justify-center p-8 selection:bg-forest selection:text-parchment">
-      <div className="w-full max-w-md bg-white border border-hairline p-12 shadow-pop-lg animate-fade-in relative overflow-hidden">
+      <div className="w-full max-w-md bg-white border border-hairline p-12 animate-fade-in relative overflow-hidden">
         {/* Decorative corner */}
         <div className="absolute top-0 right-0 w-16 h-16 bg-forest/5 -mr-8 -mt-8 rotate-45 border border-forest/10" />
         

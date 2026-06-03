@@ -52,7 +52,7 @@
   align-items: center;
   gap: var(--space-md);
   padding: 0.625rem var(--space-md);
-  border-radius: var(--radius-md);
+  border-radius: 0;
   color: var(--color-text-secondary);
   font-size: 0.875rem;
   font-weight: 500;
@@ -141,7 +141,7 @@
 .logoutBtn {
   width: 32px;
   height: 32px;
-  border-radius: var(--radius-md);
+  border-radius: 0;
   border: 1px solid var(--color-border);
   background: transparent;
   color: var(--color-text-muted);

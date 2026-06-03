@@ -222,7 +222,7 @@ export default function AdminTrainingPage() {
           {modules.map(mod => {
             const isActive = mod.isActive !== false;
             return (
-              <div key={mod.id} className={`border flex flex-col h-full hover:shadow-sm ${isActive ? 'border-hairline bg-white' : 'border-ink/10 bg-parchment/40 opacity-70'}`}>
+              <div key={mod.id} className={`border flex flex-col h-full ${isActive ? 'border-hairline bg-white' : 'border-ink/10 bg-parchment/40 opacity-70'}`}>
                 <div className="p-6 flex-1">
                   <div className="flex justify-between items-start mb-3">
                     <span className="text-[10px] uppercase tracking-widest font-bold bg-ink/5 px-2 py-1">

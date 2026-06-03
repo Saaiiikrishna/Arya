@@ -61,11 +61,12 @@ export class ApplicantService {
           throw new BadRequestException('Admissions are temporarily closed. No open batches available.');
         }
 
-        const capacitySetting = await tx.siteSetting.findUnique({ where: { key: 'auto_batch_capacity' } });
         const nicknameSetting = await tx.siteSetting.findUnique({ where: { key: 'auto_batch_nicknames' } });
         const namingSetting = await tx.siteSetting.findUnique({ where: { key: 'auto_batch_naming_sequence' } });
 
-        const capacity = capacitySetting ? parseInt(capacitySetting.value, 10) || 1000 : 1000;
+        // Fixed cohort rule: auto-created batches are ALWAYS exactly 100 seats,
+        // regardless of any auto_batch_capacity setting.
+        const capacity = 100;
         const nicknames: string[] = nicknameSetting ? JSON.parse(nicknameSetting.value) : [];
         const namingSequence = namingSetting?.value || 'Batch';
 
@@ -277,8 +278,16 @@ export class ApplicantService {
       );
     }
 
-    // Send WhatsApp welcome when opt-in is first confirmed
-    if (data.whatsappVerified && !applicant.whatsappVerified && updated.whatsappPhone) {
+    // Send WhatsApp welcome only on a genuine SERVER-SIDE verification — never on
+    // the client-supplied data.whatsappVerified (a client could otherwise fire the
+    // welcome without ever verifying). The dossier payload deliberately does not
+    // write whatsappVerified (see the update above), so applicant.whatsappVerified
+    // (pre-update) and updated.whatsappVerified both reflect only the persisted
+    // state set by the real verification flow. We fire exactly once — on the
+    // transition from not-verified to verified as observed in the persisted state.
+    // Best-effort, kept outside any critical transaction.
+    const newlyVerifiedServerSide = !applicant.whatsappVerified && updated.whatsappVerified;
+    if (newlyVerifiedServerSide && updated.whatsappPhone) {
       this.whatsappService.sendApplicationReceived(updated.whatsappPhone, updated.firstName, applicantId).catch((e: any) =>
         this.logger.error(`WhatsApp welcome failed for ${applicantId}`, e)
       );
@@ -680,16 +689,24 @@ export class ApplicantService {
     });
     if (!applicant) throw new NotFoundException('Applicant not found');
 
-    // Only adjust counters when this is a genuine transition INTO REMOVED from a
-    // non-removed state; re-removing an already-removed applicant must not
-    // double-decrement currentCount/memberCount.
-    const isNewlyRemoved = applicant.status !== ApplicantStatus.REMOVED;
-    const previousTeamId = applicant.teamId;
-
-    await this.prisma.$transaction(async (tx) => {
-      // Mark as removed
-      await tx.applicant.update({
+    // The "is this a genuine NEW transition into REMOVED" decision must be made
+    // INSIDE the transaction and tied to a single successful state change, or two
+    // concurrent removals can both observe a non-removed status and each
+    // decrement currentCount/memberCount. We compare-and-swap with a guarded
+    // updateMany (WHERE status != REMOVED) and only adjust counters when that
+    // update affected exactly one row — i.e. this caller is the one that won.
+    const { isNewlyRemoved } = await this.prisma.$transaction(async (tx) => {
+      // Re-read the team membership inside the txn so the captured previousTeamId
+      // reflects committed state, not a stale pre-transaction snapshot.
+      const current = await tx.applicant.findUnique({
         where: { id },
+        select: { teamId: true },
+      });
+      const previousTeamId = current?.teamId ?? null;
+
+      // Atomic compare-and-swap: flip to REMOVED only if not already REMOVED.
+      const transition = await tx.applicant.updateMany({
+        where: { id, status: { not: ApplicantStatus.REMOVED } },
         data: {
           status: ApplicantStatus.REMOVED,
           teamId: null,
@@ -697,8 +714,10 @@ export class ApplicantService {
         },
       });
 
-      if (isNewlyRemoved) {
-        // Decrement batch count
+      const newlyRemoved = transition.count === 1;
+
+      if (newlyRemoved) {
+        // Decrement batch count — only on the winning transition.
         if (applicant.batchId) {
           await tx.batch.update({
             where: { id: applicant.batchId },
@@ -714,11 +733,14 @@ export class ApplicantService {
           });
         }
       }
+
+      return { isNewlyRemoved: newlyRemoved };
     });
 
     // If the applicant left a batch that has already closed filling, top the gap
     // back up from the next batch. During FILLING a freed slot is just taken by
-    // normal sign-ups, so no cascade is needed. Best-effort; never blocks.
+    // normal sign-ups, so no cascade is needed. Best-effort, post-commit, and only
+    // on the winning transition so we never enqueue a backfill twice.
     if (isNewlyRemoved && applicant.batchId && applicant.batch && applicant.batch.status !== 'FILLING') {
       void this.backfill.enqueueBackfill(applicant.batchId, 1);
     }
@@ -844,40 +866,53 @@ export class ApplicantService {
       throw new BadRequestException(`Invalid status: ${status}`);
     }
 
-    // Only decrement once: when transitioning INTO REMOVED from a non-removed
-    // state. Re-applying REMOVED to an already-removed applicant must not
-    // double-decrement currentCount.
-    const isNewlyRemoved =
-      status === ApplicantStatus.REMOVED && applicant.status !== ApplicantStatus.REMOVED;
-
     // Status change and the batch counter adjustment it causes must commit
-    // atomically so currentCount can't drift if one write fails.
-    const updated = await this.prisma.$transaction(async (tx) => {
+    // atomically so currentCount can't drift if one write fails. The decrement
+    // only happens on a genuine NEW transition INTO REMOVED — and that "is this
+    // new?" decision must be made INSIDE the transaction, tied to a single
+    // successful state change, or two concurrent removals can each decrement
+    // currentCount. We compare-and-swap with a guarded updateMany and only
+    // decrement when that update affected exactly one row (this caller won).
+    const { updated, isNewlyRemoved } = await this.prisma.$transaction(async (tx) => {
+      if (status === ApplicantStatus.REMOVED) {
+        // Atomic compare-and-swap: flip to REMOVED only if not already REMOVED.
+        const transition = await tx.applicant.updateMany({
+          where: { id, status: { not: ApplicantStatus.REMOVED } },
+          data: { status, removedAt: new Date(), teamId: null },
+        });
+
+        const newlyRemoved = transition.count === 1;
+
+        // Decrement batch count only on the winning transition.
+        if (newlyRemoved && applicant.batchId) {
+          await tx.batch.update({
+            where: { id: applicant.batchId },
+            data: { currentCount: { decrement: 1 } },
+          });
+        }
+
+        // Re-read to preserve the existing response shape (full applicant record).
+        const result = await tx.applicant.findUniqueOrThrow({ where: { id } });
+        return { updated: result, isNewlyRemoved: newlyRemoved };
+      }
+
+      // Non-REMOVED transitions don't touch the batch counter.
       const result = await tx.applicant.update({
         where: { id },
         data: {
           status,
-          ...(status === ApplicantStatus.REMOVED && { removedAt: new Date(), teamId: null }),
           ...(status === ('HELD' as ApplicantStatus) && { movedAt: new Date() }),
         },
       });
-
-      // If removing, decrement batch count in the same transaction.
-      if (isNewlyRemoved && applicant.batchId) {
-        await tx.batch.update({
-          where: { id: applicant.batchId },
-          data: { currentCount: { decrement: 1 } },
-        });
-      }
-
-      return result;
+      return { updated: result, isNewlyRemoved: false };
     });
 
     this.logger.log(`Applicant ${id} status changed to ${status}`);
 
     // If an applicant left a batch that has already closed filling, top the gap
     // back up from the next batch. During FILLING a freed slot is just taken by
-    // normal sign-ups, so no cascade is needed. Best-effort; never blocks.
+    // normal sign-ups, so no cascade is needed. Best-effort, post-commit, and only
+    // on the winning transition so we never enqueue a backfill twice.
     if (isNewlyRemoved && applicant.batchId && applicant.batch && applicant.batch.status !== 'FILLING') {
       void this.backfill.enqueueBackfill(applicant.batchId, 1);
     }

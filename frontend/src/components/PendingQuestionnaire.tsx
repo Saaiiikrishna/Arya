@@ -92,7 +92,7 @@ export default function PendingQuestionnaire({ firstName }: Props) {
                 Dear {firstName}, please carefully review and complete the following questionnaire.
               </p>
               {inst.explanation && (
-                <div className="bg-white border border-amber-200 p-4 rounded text-sm text-ink/60 leading-relaxed italic">
+                <div className="bg-white border border-amber-200 p-4 text-sm text-ink/60 leading-relaxed italic">
                   💡 {inst.explanation}
                 </div>
               )}
@@ -208,7 +208,7 @@ export default function PendingQuestionnaire({ firstName }: Props) {
                 <button
                   onClick={() => handleSubmit(inst.instructionId, inst.questions)}
                   disabled={submitting}
-                  className="bg-saffron hover:bg-saffron-deep text-parchment px-8 py-3 text-xs uppercase tracking-widest font-bold transition-colors disabled:opacity-50 shadow-pop"
+                  className="bg-saffron hover:bg-saffron-deep text-parchment px-8 py-3 text-xs uppercase tracking-widest font-bold transition-colors disabled:opacity-50"
                 >
                   {submitting ? 'Submitting...' : `Submit ${inst.questions.length} Answer(s)`}
                 </button>

@@ -159,7 +159,7 @@ export default function InvestorDashboard() {
     return (
       <Layout showNav={false}>
         <div className="min-h-screen bg-parchment flex items-center justify-center p-8">
-          <div className="w-full max-w-md bg-white border border-hairline p-12 text-center shadow-sm">
+          <div className="w-full max-w-md bg-white border border-hairline p-12 text-center">
             <h2 className="font-serif text-2xl font-bold mb-4 text-terracotta">Something went wrong</h2>
             <p className="text-ink/60 mb-8 text-sm">{error}</p>
             <button
@@ -275,7 +275,7 @@ export default function InvestorDashboard() {
                   return (
                     <div
                       key={showcase.id}
-                      className="border border-hairline bg-white hover:shadow-lg transition-shadow flex flex-col h-full"
+                      className="border border-hairline bg-white flex flex-col h-full"
                     >
                       <div className="p-6 flex-1">
                         <p className="text-sm text-ink/80 mb-6 leading-relaxed whitespace-pre-line">

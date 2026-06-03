@@ -32,12 +32,14 @@
   --color-danger: #8C1D14;          /* aligns with terracotta family */
   --color-info: #2C5F7B;
 
-  /* === Stamped-block shadows ====================================
-     0px radius + no shadows is the law; these hard-offset "print
-     block" shadows on CTAs are the one sanctioned exception. */
-  --shadow-pop: 4px 4px 0 0 rgba(91, 9, 2, 0.2);          /* terracotta-tinted (forest/saffron CTAs) */
-  --shadow-pop-saffron: 4px 4px 0 0 rgba(232, 93, 4, 0.25); /* saffron-tinted */
-  --shadow-pop-lg: 8px 8px 0 0 rgba(232, 93, 4, 0.35);     /* large, inverse CTA on dark */
+  /* === Shadows neutralized ======================================
+     0px radius + NO box-shadows is the law (DESIGN.md). These tokens
+     are kept as `none` so any lingering usage renders no shadow;
+     depth comes from tonal surface layering + 1px hairlines, and the
+     primary CTA "pop" is a hover background shift (saffron -> deep). */
+  --shadow-pop: none;
+  --shadow-pop-saffron: none;
+  --shadow-pop-lg: none;
 
   /* === Editorial motion ========================================= */
   --ease-editorial: cubic-bezier(0.22, 1, 0.36, 1);
@@ -134,10 +136,10 @@
 .btn-primary {
   background: var(--color-saffron);
   color: var(--color-parchment);
-  box-shadow: var(--shadow-pop);
 }
+/* "pop" on hover = background color shift (saffron -> saffron-deep), never a shadow */
 .btn-primary:hover { background: var(--color-saffron-deep); }
-.btn-primary:active { transform: translate(2px, 2px); box-shadow: none; }
+.btn-primary:active { background: var(--color-saffron-deep); }
 .btn-secondary {
   background: transparent;
   color: var(--color-forest);

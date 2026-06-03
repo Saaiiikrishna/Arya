@@ -117,7 +117,7 @@ export default function ChatWidget({ teamId, userId, userName }: ChatWidgetProps
     return (
       <button 
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-8 right-8 w-14 h-14 bg-forest text-white rounded-full shadow-lg flex-center hover:bg-forest/90 transition-transform hover:scale-105 z-50"
+        className="fixed bottom-8 right-8 w-14 h-14 bg-forest text-white rounded-full border border-hairline flex-center hover:bg-forest/90 transition-transform hover:scale-105 z-50"
       >
         <MessageSquare className="w-6 h-6" />
       </button>
@@ -125,7 +125,7 @@ export default function ChatWidget({ teamId, userId, userName }: ChatWidgetProps
   }
 
   return (
-    <div className="fixed bottom-8 right-8 w-[380px] h-[550px] bg-white border border-hairline shadow-2xl flex flex-col z-50 animate-fade-in font-sans">
+    <div className="fixed bottom-8 right-8 w-[380px] h-[550px] bg-white border border-hairline flex flex-col z-50 animate-fade-in font-sans">
       {/* Header */}
       <div className="bg-ink text-parchment p-4 flex justify-between items-center shrink-0">
         <div>

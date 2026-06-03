@@ -114,7 +114,7 @@ export default function QuestionsPage() {
         <div className="text-left md:text-right">
           <button 
             onClick={() => { setEditing(null); setForm({ label: '', helpText: '', type: 'TEXT', isRequired: true, category: '', phaseTag: 'INITIAL', options: '' }); setShowModal(true); }}
-            className="bg-ink hover:bg-terracotta-warm text-white px-8 py-4 text-xs uppercase tracking-widest font-semibold transition-colors shadow-sm"
+            className="bg-ink hover:bg-terracotta-warm text-white px-8 py-4 text-xs uppercase tracking-widest font-semibold transition-colors"
           >
             + Add Question
           </button>
@@ -128,7 +128,7 @@ export default function QuestionsPage() {
           <p className="text-ink/60">No questions mapped yet. Applicants will pass the dossier immediately.</p>
         </div>
       ) : (
-        <div className="border border-hairline bg-white overflow-x-auto shadow-sm">
+        <div className="border border-hairline bg-white overflow-x-auto">
           <table className="w-full text-left font-sans">
             <thead className="bg-parchment/80 border-b border-hairline">
               <tr>

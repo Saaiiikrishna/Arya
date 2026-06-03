@@ -266,7 +266,7 @@ export default function Hub() {
                               <p className="font-medium text-lg font-serif group-hover:text-terracotta-warm transition-colors flex items-center gap-2">
                                 {member.name}
                                 {member.isLeader && (
-                                  <span className="text-[10px] uppercase tracking-widest bg-forest/10 text-forest px-2 py-0.5 rounded-sm">
+                                  <span className="text-[10px] uppercase tracking-widest bg-forest/10 text-forest px-2 py-0.5">
                                     Leader
                                   </span>
                                 )}
@@ -338,7 +338,7 @@ export default function Hub() {
                             <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 ${m.isCompleted ? 'bg-saffron' : 'bg-parchment border-2 border-saffron relative'}`}>
                               {m.isCompleted ? <Check className="w-4 h-4 text-white" /> : <div className="w-3 h-3 bg-saffron rounded-full animate-pulse" />}
                             </div>
-                            <div className={m.isCompleted ? "" : "bg-white border border-hairline p-4 shadow-sm w-full border-l-[3px] border-l-saffron"}>
+                            <div className={m.isCompleted ? "" : "bg-white border border-hairline p-4 w-full border-l-[3px] border-l-saffron"}>
                               <p className={`text-[13px] uppercase tracking-widest font-bold mb-1 ${m.isCompleted ? 'text-forest' : 'text-saffron-deep'}`}>
                                 Deadline: {new Date(m.deadline).toLocaleDateString()}
                               </p>

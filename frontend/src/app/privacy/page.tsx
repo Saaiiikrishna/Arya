@@ -27,7 +27,7 @@ export default function PrivacyPage() {
             </p>
           </section>
 
-          <section className="bg-alabaster p-8 border border-hairline rounded-sm my-12">
+          <section className="bg-alabaster p-8 border border-hairline my-12">
             <h2 className="font-serif text-2xl font-bold mb-6 text-forest uppercase tracking-tight">Summary of Key Points</h2>
             <div className="space-y-4 text-sm">
               <p>
@@ -45,7 +45,7 @@ export default function PrivacyPage() {
             </div>
           </section>
 
-          <nav id="toc" className="bg-ink/5 p-8 rounded-sm mb-12">
+          <nav id="toc" className="bg-ink/5 p-8 mb-12">
             <h2 className="font-serif text-xl font-bold mb-4 uppercase tracking-wider">Table of Contents</h2>
             <ol className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 text-xs uppercase tracking-widest font-medium">
               <li><a href="#infocollect" className="hover:text-terracotta-warm transition-colors">1. What information do we collect?</a></li>
@@ -110,7 +110,7 @@ export default function PrivacyPage() {
             <p>
               If you have questions or comments about this notice, you may email us at <a href="mailto:support@aryavartham.com" className="text-forest underline italic font-medium">support@aryavartham.com</a> or contact us by post at:
             </p>
-            <address className="not-italic bg-alabaster p-6 border border-hairline font-bold rounded-sm">
+            <address className="not-italic bg-alabaster p-6 border border-hairline font-bold">
               SKSC MYSILLYDREAMS PRIVATE LIMITED<br />
               KPHB, Hyderabad<br />
               Telangana 500085<br />

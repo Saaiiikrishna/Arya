@@ -37,7 +37,7 @@ export default function InvestorLoginPage() {
   return (
     <Layout showNav={false}>
       <div className="min-h-screen bg-parchment flex items-center justify-center p-8 selection:bg-forest selection:text-parchment">
-        <div className="w-full max-w-md bg-white border border-hairline p-12 shadow-pop-lg animate-fade-in relative overflow-hidden">
+        <div className="w-full max-w-md bg-white border border-hairline p-12 animate-fade-in relative overflow-hidden">
           {/* Decorative corner */}
           <div className="absolute top-0 right-0 w-16 h-16 bg-forest/5 -mr-8 -mt-8 rotate-45 border border-forest/10" />
 

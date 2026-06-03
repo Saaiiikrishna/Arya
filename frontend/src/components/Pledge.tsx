@@ -105,7 +105,7 @@ export default function Pledge({ onCommit, onClose }: PledgeProps) {
               <button
                 type="button"
                 onClick={onCommit}
-                className="w-full bg-saffron text-parchment py-6 font-sans text-xs uppercase tracking-[0.3em] shadow-pop hover:bg-saffron-deep transition-colors duration-300 flex items-center justify-center gap-3 active:scale-[0.98]"
+                className="w-full bg-saffron text-parchment py-6 font-sans text-xs uppercase tracking-[0.3em] border border-saffron-deep/40 hover:bg-saffron-deep transition-colors duration-300 flex items-center justify-center gap-3 active:scale-[0.98]"
               >
                 Proceed to Payment
                 <ArrowRight className="w-4 h-4" />

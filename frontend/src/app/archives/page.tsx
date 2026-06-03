@@ -85,7 +85,7 @@ export default function ArchivesPage() {
         ) : (
           <div className="flex flex-col gap-6">
             {batches.map(batch => (
-              <div key={batch.id || batch.batchNumber} className="border border-hairline bg-white hover:shadow-sm transition-shadow">
+              <div key={batch.id || batch.batchNumber} className="border border-hairline bg-white">
                 <div className="p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                   <div className="flex-1">
                     <div className="flex items-center gap-4 mb-3">

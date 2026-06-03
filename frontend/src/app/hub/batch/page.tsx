@@ -107,7 +107,7 @@ export default function HubBatchPage() {
                   <Link
                     key={m.id}
                     href={`/hub/members/${m.id}`}
-                    className="flex items-center gap-3 p-2 hover:bg-parchment/50 transition-colors rounded group"
+                    className="flex items-center gap-3 p-2 hover:bg-parchment/50 transition-colors group"
                   >
                     <div className="w-8 h-8 bg-forest/10 rounded-full flex items-center justify-center text-forest font-bold text-sm">
                       {(m.firstName?.[0] || '?')}{(m.lastName?.[0] || '')}

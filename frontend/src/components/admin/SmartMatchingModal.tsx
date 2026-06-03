@@ -136,7 +136,7 @@ export default function SmartMatchingModal({ batchId, onClose, onSuccess }: Smar
 
             <div className="grid md:grid-cols-2 gap-4">
               {previewData.assignments?.map((team: any, i: number) => (
-                <div key={i} className="border border-hairline bg-white p-4 hover:shadow-sm transition-shadow">
+                <div key={i} className="border border-hairline bg-white p-4">
                   <div className="flex justify-between items-start mb-3 border-b border-hairline pb-2">
                     <div>
                       <h4 className="font-serif font-bold text-lg">{team.teamName}</h4>
@@ -156,7 +156,7 @@ export default function SmartMatchingModal({ batchId, onClose, onSuccess }: Smar
                       return (
                         <li key={id} className="flex justify-between items-center p-1 hover:bg-parchment/50">
                           <span className="font-medium">{p ? `${p.firstName} ${p.lastName}` : 'Unknown'}</span>
-                          <span className="text-xs text-ink/60 bg-ink/5 px-2 py-0.5 rounded">
+                          <span className="text-xs text-ink/60 bg-ink/5 px-2 py-0.5">
                             {p?.matchingProfile?.skills?.[0] || 'General'}
                           </span>
                         </li>

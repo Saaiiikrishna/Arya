@@ -109,7 +109,7 @@ export default function ReferralHubPage() {
           </header>
 
           {!data?.isAffiliate ? (
-            <section className="bg-white border border-hairline p-12 text-center flex flex-col items-center shadow-sm">
+            <section className="bg-white border border-hairline p-12 text-center flex flex-col items-center">
               <div className="w-20 h-20 bg-forest/10 rounded-full flex items-center justify-center mb-6">
                 <Gift className="w-10 h-10 text-forest" />
               </div>
@@ -120,7 +120,7 @@ export default function ReferralHubPage() {
               <button 
                 onClick={handleEnableAffiliate}
                 disabled={enabling}
-                className="bg-saffron text-parchment px-10 py-4 font-bold uppercase tracking-widest hover:bg-saffron-deep transition-all shadow-lg hover:shadow-saffron/20"
+                className="bg-saffron text-parchment px-10 py-4 font-bold uppercase tracking-widest hover:bg-saffron-deep transition-all"
               >
                 {enabling ? 'Activating...' : 'Activate My Referral Link'}
               </button>
@@ -131,22 +131,22 @@ export default function ReferralHubPage() {
               <div className="lg:col-span-8 flex flex-col gap-10">
                 {/* Stats Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="bg-white border border-hairline p-6 shadow-sm">
+                  <div className="bg-white border border-hairline p-6">
                     <p className="text-[11px] uppercase tracking-widest text-ink/40 font-bold mb-1">Total Referrals</p>
                     <p className="font-serif text-4xl font-bold text-saffron-deep">{data.totalReferrals}</p>
                   </div>
-                  <div className="bg-white border border-hairline p-6 shadow-sm">
+                  <div className="bg-white border border-hairline p-6">
                     <p className="text-[11px] uppercase tracking-widest text-ink/40 font-bold mb-1">Badges Earned</p>
                     <p className="font-serif text-4xl font-bold text-terracotta-warm">{data.badges.length}</p>
                   </div>
-                  <div className="bg-white border border-hairline p-6 shadow-sm">
+                  <div className="bg-white border border-hairline p-6">
                     <p className="text-[11px] uppercase tracking-widest text-ink/40 font-bold mb-1">Certificates</p>
                     <p className="font-serif text-4xl font-bold text-ink">{data.certificates.length}</p>
                   </div>
                 </div>
 
                 {/* Referral Link Card */}
-                <div className="bg-ink text-parchment p-8 shadow-xl relative overflow-hidden group">
+                <div className="bg-ink text-parchment p-8 border border-hairline relative overflow-hidden group">
                   <div className="absolute top-0 right-0 w-32 h-32 bg-forest/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-700"></div>
                   <div className="relative z-10">
                     <h3 className="font-serif text-2xl font-bold mb-2">Your Personal Invite Link</h3>
@@ -168,7 +168,7 @@ export default function ReferralHubPage() {
 
                 {/* Progress Bar */}
                 {nextTier && (
-                  <div className="bg-white border border-hairline p-8 shadow-sm">
+                  <div className="bg-white border border-hairline p-8">
                     <div className="flex justify-between items-end mb-4">
                       <div>
                         <p className="text-xs uppercase tracking-widest text-ink/40 mb-1">Quest to {nextTier.label}</p>
@@ -209,7 +209,7 @@ export default function ReferralHubPage() {
                               <td className="px-6 py-4 font-medium">{r.name}</td>
                               <td className="px-6 py-4 text-ink/60">{new Date(r.appliedAt).toLocaleDateString()}</td>
                               <td className="px-6 py-4">
-                                <span className={`inline-block px-2 py-1 text-[10px] font-bold uppercase tracking-widest rounded-sm ${
+                                <span className={`inline-block px-2 py-1 text-[10px] font-bold uppercase tracking-widest ${
                                   r.status === 'ACCEPTED' ? 'bg-forest/10 text-forest' : 
                                   r.status === 'REJECTED' ? 'bg-terracotta/10 text-terracotta' : 
                                   'bg-ink/5 text-ink/40'
@@ -241,7 +241,7 @@ export default function ReferralHubPage() {
                   <div className="flex flex-col gap-4">
                     {data.badges.map((b: any) => (
                       <div key={b.id} className="bg-white border border-hairline p-5 flex items-center gap-4 group hover:border-terracotta-warm/50 transition-colors">
-                        <div className="w-12 h-12 bg-parchment rounded-full flex items-center justify-center text-2xl shadow-inner group-hover:bg-terracotta-warm/10 transition-colors">
+                        <div className="w-12 h-12 bg-parchment rounded-full flex items-center justify-center text-2xl group-hover:bg-terracotta-warm/10 transition-colors">
                           {b.icon || '🏅'}
                         </div>
                         <div>
@@ -268,7 +268,7 @@ export default function ReferralHubPage() {
                   </h2>
                   <div className="flex flex-col gap-4">
                     {data.certificates.map((c: any) => (
-                      <div key={c.id} className="bg-white border-2 border-ink p-6 relative group overflow-hidden shadow-pop">
+                      <div key={c.id} className="bg-white border-2 border-ink p-6 relative group overflow-hidden">
                         <div className="relative z-10">
                           <p className="text-[10px] uppercase tracking-widest text-ink/40 font-bold mb-2">Verified Credential</p>
                           <h4 className="font-serif text-lg font-bold mb-4">{c.title}</h4>

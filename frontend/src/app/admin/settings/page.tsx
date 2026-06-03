@@ -626,7 +626,7 @@ export default function AdminSettingsPage() {
                           <td className="px-4 py-4">
                             <div className="font-serif text-sm text-ink mb-1">{pv.applicantName || pv.applicantEmail || 'Anonymous'}</div>
                             <div className="font-mono text-[10px] text-ink/40 flex items-center gap-2">
-                              <span className="bg-alabaster border border-hairline px-1.5 py-0.5 rounded">{pv.ip || 'Unknown IP'}</span>
+                              <span className="bg-alabaster border border-hairline px-1.5 py-0.5">{pv.ip || 'Unknown IP'}</span>
                             </div>
                           </td>
                           <td className="px-4 py-4 whitespace-nowrap text-xs text-ink/60">
@@ -667,7 +667,7 @@ export default function AdminSettingsPage() {
                                 {pv.aggregatedPaths?.map((p, idx) => (
                                   <div key={idx} className="flex justify-between items-center py-2 border-b border-forest/10 last:border-0 hover:bg-forest/5 px-2 -mx-2 transition-colors">
                                     <span className="font-mono text-xs text-ink/70 truncate mr-4" title={p.path}>{p.path}</span>
-                                    <span className="font-mono text-[10px] bg-forest/10 px-2 py-0.5 rounded-sm text-forest font-bold flex-shrink-0">
+                                    <span className="font-mono text-[10px] bg-forest/10 px-2 py-0.5 text-forest font-bold flex-shrink-0">
                                       {p.count} ×
                                     </span>
                                   </div>

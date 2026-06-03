@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Fragment, useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import Link from 'next/link';
 
@@ -223,7 +223,7 @@ export default function UsersPage() {
         </div>
       ) : (
         <>
-          <div className="border border-hairline bg-white overflow-x-auto shadow-sm">
+          <div className="border border-hairline bg-white overflow-x-auto">
             <table className="w-full text-left font-sans">
               <thead className="bg-parchment/80 border-b border-hairline">
                 <tr>
@@ -237,8 +237,8 @@ export default function UsersPage() {
               </thead>
               <tbody>
                 {data.data.map((user) => (
-                  <>
-                    <tr key={user.id} className={`border-b border-hairline last:border-0 hover:bg-parchment/30 transition-colors ${expandedId === user.id ? 'bg-parchment/40' : ''}`}>
+                  <Fragment key={user.id}>
+                    <tr className={`border-b border-hairline last:border-0 hover:bg-parchment/30 transition-colors ${expandedId === user.id ? 'bg-parchment/40' : ''}`}>
                       <td className="px-6 py-5 font-serif text-lg font-bold">
                         <button onClick={() => toggleExpand(user.id)} className="text-left hover:text-forest transition-colors">
                           {user.firstName} {user.lastName}
@@ -306,7 +306,7 @@ export default function UsersPage() {
                     
                     {/* Expandable Detail Row */}
                     {expandedId === user.id && (
-                      <tr key={`${user.id}-detail`} className="bg-parchment/30">
+                      <tr className="bg-parchment/30">
                         <td colSpan={6} className="px-6 py-8">
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                             {/* Personal Info */}
@@ -448,7 +448,7 @@ export default function UsersPage() {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 ))}
               </tbody>
             </table>

@@ -143,7 +143,7 @@ export default function TeamRequests({ team, userId }: { team: any, userId: stri
               <button 
                 type="submit" 
                 disabled={loading}
-                className="w-full bg-saffron hover:bg-saffron-deep text-parchment font-medium text-[13px] uppercase tracking-widest py-4 transition-colors disabled:opacity-50 shadow-pop"
+                className="w-full bg-saffron hover:bg-saffron-deep text-parchment font-medium text-[13px] uppercase tracking-widest py-4 transition-colors disabled:opacity-50"
               >
                 {loading ? 'Submitting...' : 'Submit Request'}
               </button>

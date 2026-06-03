@@ -347,7 +347,7 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {teams.map((team) => (
-              <div key={team.id} className="border border-hairline bg-white p-6 hover:border-forest transition-colors shadow-sm">
+              <div key={team.id} className="border border-hairline bg-white p-6 hover:border-forest transition-colors">
                 <div className="flex items-center justify-between mb-4">
                   <span className="font-serif text-xl font-bold">{team.name}</span>
                   <div className="flex items-center gap-2">
@@ -448,7 +448,7 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
       {batch.instructions && batch.instructions.length > 0 && (
         <section className="mb-16">
           <h2 className="font-serif text-2xl font-bold mb-6">Instructions Sent</h2>
-          <div className="border border-hairline bg-white shadow-sm">
+          <div className="border border-hairline bg-white">
             {batch.instructions.map((inst: any) => (
               <div key={inst.id} className="p-6 border-b border-hairline last:border-0 hover:bg-parchment/30 transition-colors">
                 <div className="flex items-center justify-between mb-2">

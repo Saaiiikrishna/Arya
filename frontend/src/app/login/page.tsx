@@ -58,7 +58,7 @@ function LoginContent() {
   if (isAuthenticated && user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-parchment p-8">
-        <div className="bg-white border border-hairline p-12 max-w-md w-full text-center shadow-sm">
+        <div className="bg-white border border-hairline p-12 max-w-md w-full text-center">
           <h2 className="font-serif text-2xl font-bold mb-4 text-forest">Active Session</h2>
           <p className="text-ink/60 mb-6 text-sm">
             You are logged in as <strong>{user.email}</strong>.
@@ -225,7 +225,7 @@ function LoginContent() {
           ← Back
         </button>
         
-        <div className="border border-hairline bg-white shadow-sm p-12">
+        <div className="border border-hairline bg-white p-12">
           <div className="flex flex-col items-center text-center space-y-6">
             {/* Logo – respects site settings toggle */}
             {mounted && logoMode === 'text' ? (

@@ -119,7 +119,7 @@ export default function SupportPage() {
           </div>
 
           {/* Checkout Form */}
-          <div className="bg-white border border-hairline p-8 lg:p-10 shadow-sm">
+          <div className="bg-white border border-hairline p-8 lg:p-10">
             {paymentStatus === 'SUCCESS' ? (
               <div className="text-center py-12">
                 <div className="w-16 h-16 rounded-full bg-forest/10 flex-center mx-auto mb-6">
@@ -194,7 +194,7 @@ export default function SupportPage() {
                 <button
                   type="submit"
                   disabled={paymentStatus === 'PROCESSING'}
-                  className="w-full btn bg-saffron text-parchment hover:bg-saffron-deep py-4 font-bold tracking-widest mt-4 shadow-pop"
+                  className="w-full btn bg-saffron text-parchment hover:bg-saffron-deep py-4 font-bold tracking-widest mt-4"
                 >
                   {paymentStatus === 'PROCESSING' ? 'Initializing Checkout...' : 'CONTRIBUTE'}
                 </button>

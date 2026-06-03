@@ -1,6 +1,6 @@
 import {
   Controller, Get, Post, Patch, Body, Param, Query, UseGuards, Req,
-  BadRequestException,
+  BadRequestException, ForbiddenException,
 } from '@nestjs/common';
 import { EquityService } from './equity.service';
 import { AdminGuard, JwtAuthGuard, SuperAdminGuard } from '../auth/guards';
@@ -72,14 +72,29 @@ export class EquityController {
     return this.equityService.startTimer(id, adminId);
   }
 
+  /**
+   * Transfer the platform's controlling 51% to the founders. This is an
+   * irreversible danger-zone action, so it is SuperAdminGuard-protected, the
+   * super-admin role is re-verified here as defence-in-depth, and the caller
+   * must send an explicit confirmation flag in the body.
+   */
   @UseGuards(SuperAdminGuard)
   @Post('admin/equity/companies/:id/handover')
   executeHandover(
     @Param('id') id: string,
     @Req() req: any,
+    @Body() body: { confirm?: boolean },
   ) {
+    // Defence-in-depth: re-verify SUPER_ADMIN even though the guard already did,
+    // so a misconfiguration of the guard cannot let a lesser role transfer 51%.
+    if (!req.user || req.user.role !== 'SUPER_ADMIN') {
+      throw new ForbiddenException('Super admin access required to execute a handover');
+    }
     const adminId = req.user.id || req.user.sub;
-    return this.equityService.executeHandover(id, adminId);
+    if (!adminId) {
+      throw new ForbiddenException('Authenticated super-admin actor required');
+    }
+    return this.equityService.executeHandover(id, adminId, body?.confirm === true);
   }
 
   @UseGuards(AdminGuard)
@@ -167,7 +182,9 @@ export class EquityController {
       metadata?: any;
     },
   ) {
+    // The audit actor is pinned to the JWT and passed as a trusted, separate
+    // argument. Any triggeredBy on the request body is ignored by the service.
     const triggeredBy = req.user.id || req.user.sub;
-    return this.equityService.recordEvent({ ...body, triggeredBy });
+    return this.equityService.recordEvent(body, triggeredBy);
   }
 }

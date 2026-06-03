@@ -86,64 +86,87 @@ export class PaymentService {
     // Window keeps a stale order from being reused forever while still
     // de-duplicating rapid/repeated checkout attempts.
     const REUSE_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
-    const existingOrder = await (this.prisma as any).payment.findFirst({
-      where: {
-        applicantId,
-        status: 'CREATED',
-        currency,
-        razorpayOrderId: { not: null },
-        createdAt: { gte: new Date(Date.now() - REUSE_WINDOW_MS) },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
 
-    if (existingOrder && existingOrder.amount === amount) {
-      return {
-        orderId: existingOrder.razorpayOrderId,
-        amount: existingOrder.amount,
-        currency: existingOrder.currency,
-        key: this.configService.get<string>('RAZORPAY_KEY_ID'),
-        // Prefill data for Razorpay checkout
-        applicantName: `${applicant.firstName} ${applicant.lastName}`.trim(),
-        applicantEmail: applicant.email,
-        applicantPhone: applicant.phone || '',
-      };
-    }
-
-    const orderOptions = {
-      amount,
-      currency,
-      receipt: `receipt_${applicant.id.split('-')[0]}`,
-    };
-
+    // Race-safe order issuance.
+    //
+    // Two concurrent checkout attempts for the same applicant could both miss
+    // the reuse lookup and both mint a Razorpay order. Serialize per applicant
+    // with a transaction-scoped advisory lock, then re-check for a reusable
+    // CREATED order inside the lock and reuse it; otherwise create exactly one.
+    // The Razorpay API call lives inside the lock so the order id we persist is
+    // the only one minted for the window.
+    let orderId: string;
+    let persistedAmount: number;
+    let persistedCurrency: string;
     try {
-      const order = await this.razorpay.orders.create(orderOptions);
+      const result = await this.prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`payment_order_${applicantId}`}))`;
 
-      // Save the intent
-      await (this.prisma as any).payment.create({
-        data: {
-          applicantId,
-          razorpayOrderId: order.id,
-          amount, // integer paise
+        // Re-check inside the lock — another request may have just created one.
+        const existingOrder = await (tx as any).payment.findFirst({
+          where: {
+            applicantId,
+            status: 'CREATED',
+            currency,
+            razorpayOrderId: { not: null },
+            createdAt: { gte: new Date(Date.now() - REUSE_WINDOW_MS) },
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        if (existingOrder && existingOrder.amount === amount) {
+          return {
+            orderId: existingOrder.razorpayOrderId as string,
+            amount: existingOrder.amount as number,
+            currency: existingOrder.currency as string,
+          };
+        }
+
+        const order = await this.razorpay.orders.create({
+          amount,
           currency,
-          status: 'CREATED',
-        },
+          receipt: `receipt_${applicant.id.split('-')[0]}`,
+        });
+
+        // Save the intent inside the same locked transaction.
+        const created = await (tx as any).payment.create({
+          data: {
+            applicantId,
+            razorpayOrderId: order.id,
+            amount, // integer paise
+            currency,
+            status: 'CREATED',
+          },
+        });
+
+        return {
+          orderId: created.razorpayOrderId as string,
+          amount: created.amount as number,
+          currency: created.currency as string,
+        };
       });
 
-      return {
-        orderId: order.id,
-        amount: order.amount,
-        currency: order.currency,
-        key: this.configService.get<string>('RAZORPAY_KEY_ID'),
-        // Prefill data for Razorpay checkout
-        applicantName: `${applicant.firstName} ${applicant.lastName}`.trim(),
-        applicantEmail: applicant.email,
-        applicantPhone: applicant.phone || '',
-      };
+      orderId = result.orderId;
+      persistedAmount = result.amount;
+      persistedCurrency = result.currency;
     } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
       console.error('Razorpay Error', error);
       throw new BadRequestException('Failed to generate payment order');
     }
+
+    return {
+      orderId,
+      amount: persistedAmount,
+      currency: persistedCurrency,
+      key: this.configService.get<string>('RAZORPAY_KEY_ID'),
+      // Prefill data for Razorpay checkout
+      applicantName: `${applicant.firstName} ${applicant.lastName}`.trim(),
+      applicantEmail: applicant.email,
+      applicantPhone: applicant.phone || '',
+    };
   }
 
   async handleWebhook(signature: string, requestBody: Buffer | any) {
@@ -203,17 +226,39 @@ export class PaymentService {
         return { success: true };
       }
 
-      // Atomic: capture the payment and promote the applicant together.
-      await this.prisma.$transaction([
-        (this.prisma as any).payment.update({
-          where: { id: payment.id },
+      // Exactly-once capture + promote.
+      //
+      // Razorpay retries webhook deliveries, so the same payment.captured event
+      // can arrive multiple times concurrently. The read-then-update check above
+      // is advisory only; the real dedupe is a conditional compare-and-swap:
+      // promote the payment from "not yet captured" to CAPTURED with an
+      // updateMany guarded on status != 'CAPTURED'. Exactly one concurrent
+      // delivery flips the row (count === 1) and is allowed to promote the
+      // applicant + notify; any duplicate sees count === 0 and is a no-op.
+      const captured = await this.prisma.$transaction(async (tx) => {
+        const promoted = await (tx as any).payment.updateMany({
+          where: { id: payment.id, status: { not: 'CAPTURED' } },
           data: { razorpayPaymentId: paymentEntity.id, status: 'CAPTURED' },
-        }),
-        this.prisma.applicant.update({
+        });
+
+        // Lost the race / already captured by a prior delivery — no-op.
+        if (promoted.count !== 1) {
+          return false;
+        }
+
+        await tx.applicant.update({
           where: { id: payment.applicantId },
           data: { status: 'CONSENTED' },
-        }),
-      ]);
+        });
+
+        return true;
+      });
+
+      // A duplicate delivery already captured this order; ack without re-firing
+      // notifications or re-promoting.
+      if (!captured) {
+        return { success: true };
+      }
 
       // Fire payment-success notification AFTER the transaction commits.
       // Best-effort and non-throwing: must never block/abort the webhook ack.

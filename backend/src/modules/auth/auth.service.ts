@@ -372,8 +372,9 @@ export class AuthService {
       });
       if (inLock) return inLock as any;
       const lastBatch = await tx.batch.findFirst({ orderBy: { batchNumber: 'desc' } });
+      // Fixed cohort rule: auto-created batches are always exactly 100 seats.
       return tx.batch.create({
-        data: { batchNumber: ((lastBatch as any)?.batchNumber ?? 0) + 1 } as any,
+        data: { batchNumber: ((lastBatch as any)?.batchNumber ?? 0) + 1, capacity: 100 } as any,
       }) as any;
     });
   }

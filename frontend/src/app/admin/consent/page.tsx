@@ -94,7 +94,7 @@ export default function ConsentPage() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Video Card */}
-            <div className="border border-hairline bg-white p-8 group hover:border-forest transition-colors shadow-sm flex flex-col">
+            <div className="border border-hairline bg-white p-8 group hover:border-forest transition-colors flex flex-col">
               <h3 className="font-serif text-2xl font-bold mb-4 flex items-center gap-3">
                 <span className="text-2xl">📹</span> Initialization Broadcast
               </h3>
@@ -131,7 +131,7 @@ export default function ConsentPage() {
             </div>
 
             {/* Agreement Card */}
-            <div className="border border-hairline bg-white p-8 group hover:border-forest transition-colors shadow-sm flex flex-col">
+            <div className="border border-hairline bg-white p-8 group hover:border-forest transition-colors flex flex-col">
               <h3 className="font-serif text-2xl font-bold mb-4 flex items-center gap-3">
                 <span className="text-2xl">📄</span> Binding Affidavit
               </h3>
@@ -161,7 +161,7 @@ export default function ConsentPage() {
               <button
                 onClick={saveAffidavit}
                 disabled={savingAffidavit}
-                className="bg-saffron hover:bg-saffron-deep text-parchment px-8 py-3 text-xs uppercase tracking-widest font-semibold transition-colors shadow-pop self-start disabled:opacity-50"
+                className="bg-saffron hover:bg-saffron-deep text-parchment px-8 py-3 text-xs uppercase tracking-widest font-semibold transition-colors self-start disabled:opacity-50"
               >
                 {savingAffidavit ? 'Transmitting...' : 'Transmit Payload'}
               </button>
@@ -170,7 +170,7 @@ export default function ConsentPage() {
         </>
       )}
 
-      <div className="border border-hairline bg-ink text-parchment p-8 mt-12 shadow-sm">
+      <div className="border border-hairline bg-ink text-parchment p-8 mt-12">
         <h3 className="font-serif text-2xl font-bold mb-8">
           Standard Execution Funnel
         </h3>

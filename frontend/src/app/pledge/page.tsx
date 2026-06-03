@@ -140,7 +140,7 @@ export default function PledgePage() {
       <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
       
       <div className="min-h-screen py-24 px-6 flex items-center justify-center">
-        <div className="max-w-lg w-full bg-white border border-hairline p-12 text-center shadow-sm">
+        <div className="max-w-lg w-full bg-white border border-hairline p-12 text-center">
           <h1 className="font-serif text-4xl font-bold mb-4 text-forest">The Pledge</h1>
           
           <hr className="w-16 mx-auto border-t border-hairline my-6" />
@@ -215,7 +215,7 @@ export default function PledgePage() {
 
               <button 
                 onClick={initiatePayment} 
-                className="w-full bg-saffron text-parchment p-4 font-bold uppercase tracking-widest text-sm shadow-pop hover:bg-saffron-deep transition-colors disabled:opacity-50"
+                className="w-full bg-saffron text-parchment p-4 font-bold uppercase tracking-widest text-sm hover:bg-saffron-deep transition-colors disabled:opacity-50"
                 disabled={paymentStatus === 'PROCESSING'}
               >
                 {paymentStatus === 'PROCESSING' ? 'Establishing Connection...' : 'Initiate Secure Checkout'}

@@ -110,7 +110,7 @@ export default function AnnouncementsPage() {
           {announcements.map((ann) => (
             <div
               key={ann.id}
-              className={`bg-white border p-6 hover:shadow-sm transition-shadow ${ann.isActive ? 'border-hairline' : 'border-ink/10 opacity-60'}`}
+              className={`bg-white border p-6 ${ann.isActive ? 'border-hairline' : 'border-ink/10 opacity-60'}`}
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1">

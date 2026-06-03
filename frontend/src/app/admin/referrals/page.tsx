@@ -300,7 +300,7 @@ export default function AdminReferralsPage() {
             </div>
             <button
               onClick={() => loadReferrals(1)}
-              className="px-6 py-3 bg-saffron text-parchment text-[10px] uppercase tracking-widest font-bold hover:bg-saffron-deep shadow-pop transition-colors"
+              className="px-6 py-3 bg-saffron text-parchment text-[10px] uppercase tracking-widest font-bold hover:bg-saffron-deep transition-colors"
             >
               Search
             </button>

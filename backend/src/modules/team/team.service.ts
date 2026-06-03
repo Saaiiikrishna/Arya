@@ -355,30 +355,34 @@ export class TeamService {
   }
 
   async lockTeam(teamId: string, adminId: string) {
-    const team = await this.prisma.team.findUnique({
-      where: { id: teamId },
-      include: { members: { where: { status: { not: 'REMOVED' } } } },
-    });
-    if (!team) throw new NotFoundException('Team not found');
-    if (team.isLocked) throw new BadRequestException('Team is already locked');
+    // Take the SAME per-team advisory lock the resolve path uses, so a lock can't
+    // commit in the TOCTOU window of an in-flight member move (and vice-versa).
+    // Read-validate-flip all happen inside the lock for Stage-2 immutability.
+    const lockedTeam = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${teamId}))`;
 
-    // Validate all 5 departments are filled
-    const filledDepts = new Set(
-      team.members.map((m) => m.department).filter(Boolean),
-    );
-    const missing = ALL_DEPARTMENTS.filter((d) => !filledDepts.has(d));
-    if (missing.length > 0) {
-      throw new BadRequestException(
-        `Cannot lock team: missing department roles: ${missing.join(', ')}`,
+      const team = await tx.team.findUnique({
+        where: { id: teamId },
+        include: { members: { where: { status: { not: 'REMOVED' } } } },
+      });
+      if (!team) throw new NotFoundException('Team not found');
+      if (team.isLocked) throw new BadRequestException('Team is already locked');
+
+      // Validate all 5 departments are filled
+      const filledDepts = new Set(
+        team.members.map((m) => m.department).filter(Boolean),
       );
-    }
+      const missing = ALL_DEPARTMENTS.filter((d) => !filledDepts.has(d));
+      if (missing.length > 0) {
+        throw new BadRequestException(
+          `Cannot lock team: missing department roles: ${missing.join(', ')}`,
+        );
+      }
 
-    const lockedTeam = await this.prisma.team.update({
-      where: { id: teamId },
-      data: { isLocked: true },
+      return tx.team.update({ where: { id: teamId }, data: { isLocked: true } });
     });
 
-    // Notify all team members — non-fatal; team is already locked in DB
+    // Notify all team members — non-fatal, post-commit; team is already locked in DB
     try {
       const members = await this.prisma.applicant.findMany({
         where: { teamId, status: { not: 'REMOVED' } },
@@ -389,14 +393,14 @@ export class TeamService {
           this.emailService.sendTemplatedEmail(
             m.email,
             'team-locked',
-            { firstName: m.firstName, teamName: team.name },
+            { firstName: m.firstName, teamName: lockedTeam.name },
             m.id,
           ),
         ),
         ...members
           .filter((m) => m.whatsappPhone && m.whatsappVerified)
           .map((m) =>
-            this.whatsappService.sendTeamLocked(m.whatsappPhone!, m.firstName, team.name, m.id),
+            this.whatsappService.sendTeamLocked(m.whatsappPhone!, m.firstName, lockedTeam.name, m.id),
           ),
       ]);
     } catch (e: any) {
@@ -654,12 +658,47 @@ export class TeamService {
     if (request.status !== 'PENDING') throw new BadRequestException('Request has already been resolved');
 
     const CHANGE_TYPES = ['SEPARATION', 'JOIN_EXISTING', 'CREATE_NEW'];
-    if (CHANGE_TYPES.includes(request.type) && (request as any).mentorStatus !== 'APPROVED') {
-      throw new BadRequestException('Mentor approval is required before admin can resolve this request');
+    const isMembershipChange = CHANGE_TYPES.includes(request.type);
+
+    // Stage-2 immutability guard (a): mentor approval is mandatory before an admin
+    // may APPROVE a membership-changing request. (Rejection is still allowed without
+    // mentor approval so admins can clear bad/stale requests.)
+    if (isMembershipChange && resolution === 'APPROVED' && (request as any).mentorStatus !== 'APPROVED') {
+      throw new BadRequestException('Mentor approval is required before admin can approve this request');
     }
 
     if (resolution === 'APPROVED') {
-      await this.prisma.$transaction(async (tx) => {
+      return await this.prisma.$transaction(async (tx) => {
+        // Stage-2 immutability guard (b): once a team isLocked, its membership is
+        // frozen. Serialize against concurrent lockTeam / membership moves with a
+        // team-scoped advisory lock, then re-read the source team's lock state
+        // inside the transaction so a lock that lands after the pre-read still wins.
+        if (isMembershipChange) {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${request.teamId}))`;
+          const sourceLockState = await tx.team.findUnique({
+            where: { id: request.teamId },
+            select: { isLocked: true },
+          });
+          if (!sourceLockState) throw new NotFoundException('Source team not found');
+          if (sourceLockState.isLocked) {
+            throw new ForbiddenException(
+              'Team membership changes are not permitted after the team is locked',
+            );
+          }
+        }
+
+        // Claim the request atomically BEFORE mutating membership, so two admins
+        // can't both pass the PENDING pre-check and double-apply (double decrement
+        // / double join). Only the caller whose CAS flips PENDING -> resolution wins;
+        // the status stamp and the membership mutation now commit together.
+        const claimed = await tx.teamRequest.updateMany({
+          where: { id: reqId, status: 'PENDING' },
+          data: { status: resolution, resolvedById: adminId, resolvedAt: new Date() },
+        });
+        if (claimed.count !== 1) {
+          throw new BadRequestException('Request has already been resolved');
+        }
+
         if (request.type === 'SEPARATION') {
           // Remove from current team
           const member = await tx.applicant.findUnique({ where: { id: request.requesterId } });
@@ -679,7 +718,8 @@ export class TeamService {
           const [targetTeam, sourceTeam] = await Promise.all([
             tx.team.findUnique({
               where: { id: request.targetTeamId },
-              include: { _count: { select: { members: true } } },
+              // Count only ACTIVE members (exclude REMOVED) for the capacity gate.
+              include: { _count: { select: { members: { where: { status: { not: 'REMOVED' } } } } } },
             }),
             tx.team.findUnique({ where: { id: request.teamId } }),
           ]);
@@ -714,6 +754,8 @@ export class TeamService {
           });
         }
         // CREATE_NEW is handled manually by admins (requires 5 members + all depts)
+
+        return tx.teamRequest.findUnique({ where: { id: reqId } });
       });
     }
 

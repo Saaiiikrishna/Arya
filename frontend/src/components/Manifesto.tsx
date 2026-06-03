@@ -109,7 +109,7 @@ export default function Manifesto({ onApply, batchInfo }: ManifestoProps) {
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.2 }}
-            className={`relative group p-[1px] rounded-full flex items-center justify-center shadow-[0_4px_20px_rgb(0,0,0,0.04)] ${isClosed ? '' : 'overflow-hidden'}`}
+            className={`relative group p-[1px] flex items-center justify-center ${isClosed ? '' : 'overflow-hidden'}`}
           >
             {/* Animated rotating gradient border */}
             {!isClosed && (
@@ -121,7 +121,7 @@ export default function Manifesto({ onApply, batchInfo }: ManifestoProps) {
               />
             )}
             {/* Inner Container */}
-            <div className={`relative z-10 w-full inline-flex justify-center items-center px-4 md:px-5 py-2 rounded-full border ${badgeBorder} ${bgClass} cursor-default transition-colors duration-500`}>
+            <div className={`relative z-10 w-full inline-flex justify-center items-center px-4 md:px-5 py-2 border ${badgeBorder} ${bgClass} cursor-default transition-colors duration-500`}>
               <span className="relative flex items-center justify-center h-2 w-2 mr-3 shrink-0">
                 {!isClosed && <span className={`animate-ping absolute inline-flex h-3 w-3 rounded-full opacity-60 ${dotColor}`}></span>}
                 <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${dotColor}`}></span>
@@ -153,7 +153,7 @@ export default function Manifesto({ onApply, batchInfo }: ManifestoProps) {
           <div className="flex flex-col sm:flex-row gap-4 mb-4 justify-center w-full sm:w-auto">
             <button
               onClick={onApply}
-              className="px-8 py-4 md:px-10 md:py-5 bg-saffron text-parchment font-sans text-[10px] uppercase tracking-widest font-bold hover:bg-saffron-deep transition-all shadow-pop active:translate-x-[2px] active:translate-y-[2px] active:shadow-none w-full sm:w-auto"
+              className="px-8 py-4 md:px-10 md:py-5 bg-saffron text-parchment font-sans text-[10px] uppercase tracking-widest font-bold hover:bg-saffron-deep transition-all active:translate-x-[2px] active:translate-y-[2px] w-full sm:w-auto"
             >
               Apply Now
             </button>
@@ -180,7 +180,7 @@ export default function Manifesto({ onApply, batchInfo }: ManifestoProps) {
           <div className="hidden md:block relative pt-12 pb-16">
             <div className="absolute top-[60px] left-0 w-full h-[2px] bg-forest/10" />
             <motion.div
-              className="absolute top-[59px] left-0 h-[4px] bg-gradient-to-r from-saffron/70 to-saffron rounded-r-full shadow-[0_0_12px_rgba(232,93,4,0.3)] origin-left"
+              className="absolute top-[59px] left-0 h-[4px] bg-gradient-to-r from-saffron/70 to-saffron origin-left"
               initial={{ width: "10%" }}
               animate={{ width: `${(activeStep * 20) + 10}%` }}
               transition={{ duration: 0.6, type: "spring", bounce: 0.2 }}
@@ -194,7 +194,7 @@ export default function Manifesto({ onApply, batchInfo }: ManifestoProps) {
                   <div key={i} className="relative pt-12 text-center group cursor-pointer select-none" onClick={() => setActiveStep(i)}>
                     <div className="absolute top-[-6px] left-1/2 -translate-x-1/2 z-10 flex flex-col items-center justify-center">
                       <motion.div
-                        className={`rounded-full shadow-md flex items-center justify-center transition-colors duration-300 ${isActive ? 'w-8 h-8 bg-saffron border-4 border-white' : (isPassed ? 'w-5 h-5 bg-saffron border-2 border-white mt-1.5' : 'w-4 h-4 bg-forest/20 mt-2 border-2 border-white')}`}
+                        className={`rounded-full flex items-center justify-center transition-colors duration-300 ${isActive ? 'w-8 h-8 bg-saffron border-4 border-white' : (isPassed ? 'w-5 h-5 bg-saffron border-2 border-white mt-1.5' : 'w-4 h-4 bg-forest/20 mt-2 border-2 border-white')}`}
                         whileHover={{ scale: 1.15 }}
                       >
                         {isActive && <div className="w-2 h-2 bg-white rounded-full" />}
@@ -226,7 +226,7 @@ export default function Manifesto({ onApply, batchInfo }: ManifestoProps) {
                 <div key={i} className="flex gap-6 relative z-10 cursor-pointer" onClick={() => setActiveStep(i)}>
                   <div className="flex flex-col items-center mt-1">
                     <motion.div
-                      className={`rounded-full border-2 border-white shadow-sm flex items-center justify-center transition-colors duration-300 ${isActive ? 'w-6 h-6 bg-saffron' : (isPassed ? 'w-5 h-5 bg-saffron' : 'w-4 h-4 bg-forest/20')} shrink-0`}
+                      className={`rounded-full border-2 border-white flex items-center justify-center transition-colors duration-300 ${isActive ? 'w-6 h-6 bg-saffron' : (isPassed ? 'w-5 h-5 bg-saffron' : 'w-4 h-4 bg-forest/20')} shrink-0`}
                     >
                       {isActive && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
                       {(isPassed && !isActive) && <CheckCircle2 className="w-3 h-3 text-white" strokeWidth={3} />}
@@ -259,7 +259,7 @@ export default function Manifesto({ onApply, batchInfo }: ManifestoProps) {
                     dragConstraints={{ left: 0, right: 0 }}
                     dragElastic={1}
                     onDragEnd={isCenter ? swipeHandlers.onDragEnd : undefined}
-                    className="absolute w-full max-w-lg lg:max-w-2xl bg-white border border-hairline/40 rounded-sm overflow-hidden flex flex-col shadow-2xl cursor-grab active:cursor-grabbing will-change-[transform,opacity,filter]"
+                    className="absolute w-full max-w-lg lg:max-w-2xl bg-white border border-hairline/40 overflow-hidden flex flex-col cursor-grab active:cursor-grabbing will-change-[transform,opacity,filter]"
                     animate={{
                       x: `${offset * 70}%`,
                       y: `${Math.abs(offset) * 4}%`,
@@ -405,7 +405,7 @@ export default function Manifesto({ onApply, batchInfo }: ManifestoProps) {
           </h3>
 
           <motion.div
-            className="w-full max-w-lg mx-auto mb-12 relative rounded-2xl overflow-hidden shadow-2xl border border-hairline/20"
+            className="w-full max-w-lg mx-auto mb-12 relative overflow-hidden border border-hairline/20"
             initial={{ scale: 0.95, opacity: 0 }}
             whileInView={{ scale: 1, opacity: 1 }}
             viewport={{ once: true, amount: 0.2 }}
@@ -441,7 +441,7 @@ export default function Manifesto({ onApply, batchInfo }: ManifestoProps) {
           </h2>
           <button
             onClick={onApply}
-            className="group relative inline-flex items-center justify-center px-16 py-8 bg-parchment text-forest font-sans text-sm uppercase tracking-[0.2em] font-bold hover:bg-parchment/90 transition-all duration-300 shadow-pop-lg active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
+            className="group relative inline-flex items-center justify-center px-16 py-8 bg-parchment text-forest font-sans text-sm uppercase tracking-[0.2em] font-bold hover:bg-parchment/90 transition-all duration-300 active:translate-x-[2px] active:translate-y-[2px]"
           >
             Apply Now
             <ArrowRight className="ml-6 w-5 h-5 group-hover:translate-x-2 transition-transform" />
@@ -453,7 +453,7 @@ export default function Manifesto({ onApply, batchInfo }: ManifestoProps) {
       <div className="fixed bottom-8 right-8 z-40 md:hidden">
         <button
           onClick={onApply}
-          className="bg-saffron text-parchment w-16 h-16 flex items-center justify-center shadow-2xl"
+          className="bg-saffron text-parchment w-16 h-16 flex items-center justify-center border border-saffron-deep"
         >
           <Edit3 className="w-6 h-6" />
         </button>

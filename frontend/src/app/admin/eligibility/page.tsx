@@ -139,7 +139,7 @@ export default function EligibilityPage() {
           </button>
           <button
             onClick={openCreate}
-            className="bg-saffron hover:bg-saffron-deep text-parchment px-8 py-4 text-xs uppercase tracking-widest font-semibold transition-colors shadow-pop"
+            className="bg-saffron hover:bg-saffron-deep text-parchment px-8 py-4 text-xs uppercase tracking-widest font-semibold transition-colors"
           >
             + Add Criterion
           </button>
@@ -153,7 +153,7 @@ export default function EligibilityPage() {
           <p className="text-ink/60 max-w-md">No criteria filtering defined. All inbound applicants will be marked eligible by default unless manually rejected.</p>
         </div>
       ) : (
-        <div className="border border-hairline bg-white overflow-x-auto shadow-sm">
+        <div className="border border-hairline bg-white overflow-x-auto">
           <table className="w-full text-left font-sans">
             <thead className="bg-parchment/80 border-b border-hairline">
               <tr>
@@ -277,7 +277,7 @@ export default function EligibilityPage() {
                 </button>
                 <button
                   type="submit"
-                  className="bg-saffron hover:bg-saffron-deep text-parchment px-8 py-3 text-xs uppercase tracking-widest font-semibold transition-colors shadow-pop"
+                  className="bg-saffron hover:bg-saffron-deep text-parchment px-8 py-3 text-xs uppercase tracking-widest font-semibold transition-colors"
                 >
                   {editing ? 'Commit Modifications' : 'Inject Criterion'}
                 </button>
@@ -320,7 +320,7 @@ export default function EligibilityPage() {
                 <button
                   type="submit"
                   disabled={evaluating}
-                  className="bg-saffron hover:bg-saffron-deep text-parchment px-8 py-3 text-xs uppercase tracking-widest font-semibold transition-colors shadow-pop disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="bg-saffron hover:bg-saffron-deep text-parchment px-8 py-3 text-xs uppercase tracking-widest font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {evaluating ? 'Evaluating…' : 'Run Evaluation'}
                 </button>

@@ -175,18 +175,27 @@ export class BatchProcessor extends WorkerHost {
         );
       }
 
-      // Notify user about batch move
-      await this.emailService.sendTemplatedEmail(
-        applicant.email,
-        'user-moved-to-batch',
-        {
-          firstName: applicant.firstName,
-          oldBatchNumber: String(nextBatch.batchNumber),
-          newBatchNumber: String(batch.batchNumber),
-          statusUrl: `${frontendUrl}/applicants/status/${applicant.accessToken}`,
-        },
-        applicant.id,
-      );
+      // Notify user about batch move. Best-effort: a send failure must not
+      // abort the rest of the cascade (the move already committed). On retry,
+      // the live-shortfall re-derivation above means we won't re-move this
+      // applicant, so at worst this notification is skipped, never duplicated.
+      try {
+        await this.emailService.sendTemplatedEmail(
+          applicant.email,
+          'user-moved-to-batch',
+          {
+            firstName: applicant.firstName,
+            oldBatchNumber: String(nextBatch.batchNumber),
+            newBatchNumber: String(batch.batchNumber),
+            statusUrl: `${frontendUrl}/applicants/status/${applicant.accessToken}`,
+          },
+          applicant.id,
+        );
+      } catch (err) {
+        this.logger.warn(
+          `Could not send batch-move email to ${applicant.email}: ${(err as Error)?.message}`,
+        );
+      }
 
       this.logger.log(
         `Moved applicant ${applicant.email} from batch ${nextBatch.batchNumber} to ${batch.batchNumber}`,

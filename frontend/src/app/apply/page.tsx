@@ -121,7 +121,7 @@ export default function ApplyPage() {
         </div>
       ) : isSubmitted ? (
          <div className="min-h-screen py-24 px-6 flex flex-col items-center max-w-4xl mx-auto space-y-12">
-           <div className="bg-white border border-hairline p-12 max-w-lg w-full text-center shadow-lg">
+           <div className="bg-white border border-hairline p-12 max-w-lg w-full text-center">
              <div className="w-16 h-16 bg-forest/10 rounded-full flex items-center justify-center mx-auto mb-6 text-2xl">
                ✅
              </div>
@@ -149,7 +149,7 @@ export default function ApplyPage() {
          </div>
       ) : paymentPending && !isEditingUnpaid ? (
          <div className="min-h-screen py-24 px-6 flex items-center justify-center">
-           <div className="bg-white border border-hairline p-12 max-w-lg w-full text-center shadow-lg">
+           <div className="bg-white border border-hairline p-12 max-w-lg w-full text-center">
              <div className="w-16 h-16 bg-saffron/10 rounded-full flex items-center justify-center mx-auto mb-6 text-2xl">
                ⏳
              </div>
@@ -178,7 +178,7 @@ export default function ApplyPage() {
           {/* Submitting overlay */}
           {submitting && (
             <div className="fixed inset-0 z-50 bg-parchment/90 backdrop-blur-sm flex items-center justify-center p-6">
-              <div className="bg-white border border-hairline p-12 max-w-lg w-full text-center shadow-2xl">
+              <div className="bg-white border border-hairline p-12 max-w-lg w-full text-center">
                 <div className="w-8 h-8 border-2 border-forest border-t-transparent rounded-full animate-spin mx-auto mb-6" />
                 <h2 className="font-serif text-2xl font-bold mb-2 text-forest">Sealing Your Application</h2>
                 <p className="text-ink/50 text-sm uppercase tracking-widest">Transmitting dossier...</p>
@@ -188,7 +188,7 @@ export default function ApplyPage() {
 
           {/* Error banner */}
           {error && !submitting && (
-            <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-terracotta text-parchment px-8 py-4 shadow-lg max-w-lg text-center">
+            <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-terracotta text-parchment px-8 py-4 border border-hairline max-w-lg text-center">
               <p className="text-sm font-bold uppercase tracking-widest">{error}</p>
               <button onClick={() => setError('')} className="text-xs underline mt-2 opacity-70 hover:opacity-100">Dismiss</button>
             </div>
@@ -196,7 +196,7 @@ export default function ApplyPage() {
 
           {authTriggered && !isAuthenticated ? (
             <div className="fixed inset-0 z-50 bg-parchment/90 backdrop-blur-sm flex items-center justify-center p-6">
-              <div className="bg-white border border-hairline p-12 max-w-lg w-full text-center shadow-2xl">
+              <div className="bg-white border border-hairline p-12 max-w-lg w-full text-center">
                 <h2 className="font-serif text-3xl font-bold mb-4 text-forest">Identity Required</h2>
                 <p className="text-ink/60 mb-8 leading-relaxed">
                   Your application is ready to be sealed. Please authenticate your identity to proceed to the pledge phase.

@@ -9,8 +9,6 @@ export default function InvestorShowcase() {
   const [showcases, setShowcases] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedShowcase, setSelectedShowcase] = useState<any>(null);
-  const [meetingForm, setMeetingForm] = useState({ investorId: '', date: '', message: '' });
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Documentary
   const [docShowcase, setDocShowcase] = useState<any>(null);
@@ -60,14 +58,6 @@ export default function InvestorShowcase() {
       .finally(() => setLoading(false));
   }, []);
 
-  const handleRequestMeeting = (e: React.FormEvent) => {
-    e.preventDefault();
-    // Meeting requests are now made from the authenticated investor portal
-    // (the investor's identity comes from their login, not a typed-in ID).
-    // Send them there to sign in and request as themselves.
-    window.location.href = '/investor/login';
-  };
-
   return (
     <Layout activeTab="investors">
       <div className="max-w-[1200px] mx-auto py-20 px-6 animate-fade-in">
@@ -99,7 +89,7 @@ export default function InvestorShowcase() {
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
             {showcases.map(showcase => (
-              <div key={showcase.id} className="border border-hairline bg-white hover:shadow-lg transition-shadow flex flex-col h-full">
+              <div key={showcase.id} className="border border-hairline bg-white hover:border-forest transition-colors flex flex-col h-full">
                 <div className="p-6 flex-1">
                   <div className="flex justify-between items-start mb-4">
                     <span className="bg-forest/10 text-forest text-[10px] uppercase font-bold tracking-widest px-2 py-1">
@@ -167,48 +157,25 @@ export default function InvestorShowcase() {
                 Connect with <span className="font-bold text-ink">{selectedShowcase.team.name}</span>
               </p>
 
-              <form onSubmit={handleRequestMeeting} className="grid gap-6">
-                <div>
-                  <label className="block text-xs uppercase tracking-widest font-semibold text-ink/70 mb-2">
-                    Your Investor ID
-                  </label>
-                  <input 
-                    type="text" required 
-                    placeholder="INV-..."
-                    className="w-full bg-parchment/30 border border-hairline px-4 py-3 focus:border-forest outline-none"
-                    value={meetingForm.investorId} onChange={e => setMeetingForm({...meetingForm, investorId: e.target.value})} 
-                  />
-                  <p className="text-[10px] text-ink/50 mt-1 uppercase tracking-widest">Provided in your approval email</p>
-                </div>
+              <p className="text-sm text-ink/80 mb-8 leading-relaxed">
+                Sign in to your investor account to request a meeting. Requests are made as
+                yourself, using the identity tied to your approved investor login.
+              </p>
 
-                <div>
-                  <label className="block text-xs uppercase tracking-widest font-semibold text-ink/70 mb-2">
-                    Proposed Date
-                  </label>
-                  <input 
-                    type="date" required 
-                    className="w-full bg-parchment/30 border border-hairline px-4 py-3 focus:border-forest outline-none"
-                    value={meetingForm.date} onChange={e => setMeetingForm({...meetingForm, date: e.target.value})} 
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs uppercase tracking-widest font-semibold text-ink/70 mb-2">
-                    Message to Founders (Optional)
-                  </label>
-                  <textarea 
-                    rows={3}
-                    className="w-full bg-parchment/30 border border-hairline px-4 py-3 focus:border-forest outline-none resize-none"
-                    value={meetingForm.message} onChange={e => setMeetingForm({...meetingForm, message: e.target.value})} 
-                  />
-                </div>
-
-                <div className="pt-6 border-t border-hairline mt-2">
-                  <button type="submit" disabled={isSubmitting} className="w-full btn bg-saffron hover:bg-saffron-deep text-parchment py-4 font-bold tracking-widest shadow-pop">
-                    {isSubmitting ? 'Sending Request...' : 'SUBMIT REQUEST'}
-                  </button>
-                </div>
-              </form>
+              <div className="grid gap-3">
+                <Link
+                  href="/investor/login"
+                  className="w-full btn bg-saffron hover:bg-saffron-deep text-parchment py-4 font-bold tracking-widest text-center"
+                >
+                  SIGN IN TO REQUEST
+                </Link>
+                <p className="text-center text-xs text-ink/60">
+                  Don&apos;t have access yet?{' '}
+                  <Link href="/investors/register" className="text-forest font-semibold hover:underline">
+                    Apply for access
+                  </Link>
+                </p>
+              </div>
             </div>
           </div>
         )}

@@ -61,7 +61,7 @@ export default function MemberProfilePage({ params }: { params: Promise<{ id: st
         <div className="bg-white border border-hairline mb-8 overflow-hidden">
           <div className="h-32 bg-gradient-to-r from-forest via-forest/80 to-sage relative">
             <div className="absolute -bottom-12 left-8">
-              <div className="w-24 h-24 bg-white rounded-full border-4 border-white shadow-lg flex items-center justify-center text-4xl font-serif font-black text-forest">
+              <div className="w-24 h-24 bg-white rounded-full border-4 border-white flex items-center justify-center text-4xl font-serif font-black text-forest">
                 {initials}
               </div>
             </div>

@@ -171,75 +171,116 @@ export class EquityService {
     return updated;
   }
 
-  /** Execute the handover: transfer platform's 51% to founders */
-  async executeHandover(companyId: string, adminId?: string) {
-    const company = await this.prisma.companyEntity.findUnique({
-      where: { id: companyId },
-      include: {
-        equityHolders: true,
-      },
-    });
+  /**
+   * Trusted system actor used by the daily cron sweep, which only reaches
+   * executeHandover for companies whose 1000-day timerEndDate has already
+   * elapsed. Calls made under this actor are treated as auto-confirmed because
+   * the time-based policy condition is what gated the sweep in the first place.
+   */
+  private static readonly SYSTEM_CRON_ACTOR = 'SYSTEM_CRON';
 
-    if (!company) throw new NotFoundException('Company not found');
-    if (company.status === 'HANDED_OVER') throw new BadRequestException('Handover already completed');
-    if (!company.timerStartDate) throw new BadRequestException('Timer not started — cannot hand over');
+  /**
+   * Execute the handover: transfer platform's 51% to founders.
+   *
+   * This is an irreversible transfer of the platform's controlling stake, so a
+   * human caller MUST pass an explicit confirmation flag (defence against an
+   * accidental or single-click trigger) and the route MUST be
+   * SuperAdminGuard-protected (enforced in the controller). The acting actor id
+   * is required so the audit row records who/what authorised the transfer.
+   *
+   * The automated daily cron sweep passes the trusted SYSTEM_CRON actor; that
+   * path is auto-confirmed because the sweep already gates on the 1000-day
+   * timer having elapsed.
+   *
+   * NOTE: This is NOT the full "profitable & sustainable, jointly approved by
+   * co-founder + admin" gate — that needs a dedicated approval record (schema).
+   * See the flagged follow-up. This is the strongest guard possible without a
+   * schema change.
+   */
+  async executeHandover(
+    companyId: string,
+    adminId: string,
+    confirm: boolean = false,
+  ) {
+    const isSystemActor = adminId === EquityService.SYSTEM_CRON_ACTOR;
 
-    const now = new Date();
-    const dayNumber = Math.floor((now.getTime() - company.timerStartDate.getTime()) / (1000 * 60 * 60 * 24));
-
-    // The platform's controlling 51% only vests after the full 1000-day period.
-    // Without this guard the entire stake could be handed over on day 1.
-    if (dayNumber < 1000) {
+    // Require an explicit, deliberate confirmation from a human caller so the
+    // platform's 51% cannot be transferred by an accidental/empty request. The
+    // trusted system cron actor is exempt (it only runs after the timer elapsed).
+    if (confirm !== true && !isSystemActor) {
       throw new BadRequestException(
-        `Handover not permitted before day 1000 (currently day ${dayNumber})`,
+        'Handover requires explicit confirmation (confirm: true) — refusing to transfer the platform stake without it.',
       );
     }
+    // The acting actor must be identified for the audit trail. The controller
+    // sources this from the JWT; reject if it is missing.
+    if (!adminId) {
+      throw new ForbiddenException('Handover requires an authenticated super-admin actor.');
+    }
 
-    const platformHolder = company.equityHolders.find(h => h.holderType === 'PLATFORM');
-    const founderHolders = company.equityHolders.filter(h => h.holderType === 'FOUNDER' && h.isActive);
+    // Everything that decides eligibility + mutates the cap table runs INSIDE one
+    // transaction, serialized by a per-company advisory lock and gated on a status
+    // compare-and-swap, so two concurrent handover calls can't both read a
+    // not-yet-handed-over snapshot and double-transfer the platform's 51%.
+    const result = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`equity_${companyId}`}))`;
 
-    if (!platformHolder) throw new BadRequestException('No platform equity holder found');
-    if (founderHolders.length === 0) throw new BadRequestException('No active founder holders');
+      const company = await tx.companyEntity.findUnique({
+        where: { id: companyId },
+        include: { equityHolders: true },
+      });
+      if (!company) throw new NotFoundException('Company not found');
+      if (company.status === 'HANDED_OVER') throw new BadRequestException('Handover already completed');
+      if (!company.timerStartDate) throw new BadRequestException('Timer not started — cannot hand over');
 
-    const platformEquity = platformHolder.equityPct;
-    // Distribute the platform's stake using a largest-remainder allocation so the
-    // transferred shares sum EXACTLY to platformEquity (and founders' total to 100%),
-    // instead of drifting because each per-founder share was rounded independently.
-    const founderTransfers = EquityService.largestRemainderSplit(platformEquity, founderHolders.length);
+      const now = new Date();
+      const dayNumber = Math.floor((now.getTime() - company.timerStartDate.getTime()) / (1000 * 60 * 60 * 24));
+      // The platform's controlling 51% only vests after the full 1000-day period.
+      if (dayNumber < 1000) {
+        throw new BadRequestException(`Handover not permitted before day 1000 (currently day ${dayNumber})`);
+      }
 
-    await this.prisma.$transaction(async (tx) => {
-      // Zero out platform holder
+      const platformHolder = company.equityHolders.find((h) => h.holderType === 'PLATFORM' && h.isActive);
+      const founderHolders = company.equityHolders.filter((h) => h.holderType === 'FOUNDER' && h.isActive);
+      if (!platformHolder) throw new BadRequestException('No active platform equity holder found');
+      if (founderHolders.length === 0) throw new BadRequestException('No active founder holders');
+
+      const platformEquity = platformHolder.equityPct;
+      // Largest-remainder split so transferred shares sum EXACTLY to platformEquity.
+      const founderTransfers = EquityService.largestRemainderSplit(platformEquity, founderHolders.length);
+
+      // CAS the status: only the transaction that flips it out of its current
+      // (non-HANDED_OVER) state proceeds; a racing duplicate sees count 0 and aborts.
+      const flipped = await tx.companyEntity.updateMany({
+        where: { id: companyId, status: { not: 'HANDED_OVER' } },
+        data: { status: 'HANDED_OVER', platformEquityPct: 0, foundersEquityPct: 100, handoverDate: now, daysElapsed: dayNumber },
+      });
+      if (flipped.count !== 1) throw new BadRequestException('Handover already completed');
+
       await tx.equityHolder.update({
         where: { id: platformHolder.id },
         data: { equityPct: 0, isActive: false },
       });
-
-      // Distribute to founders
       for (let i = 0; i < founderHolders.length; i++) {
         const founder = founderHolders[i];
-        const newPct = founder.equityPct + founderTransfers[i];
+        const newPct = Math.round((founder.equityPct + founderTransfers[i]) * 100) / 100;
         await tx.equityHolder.update({
           where: { id: founder.id },
-          data: {
-            equityPct: newPct,
-            vestedPct: newPct, // Fully vested after handover
-          },
+          data: { equityPct: newPct, vestedPct: newPct },
         });
       }
 
-      // Update company status
-      await tx.companyEntity.update({
-        where: { id: companyId },
-        data: {
-          status: 'HANDED_OVER',
-          platformEquityPct: 0,
-          foundersEquityPct: 100,
-          handoverDate: now,
-          daysElapsed: dayNumber,
-        },
+      // Defense-in-depth: assert the active cap table sums to EXACTLY 100% post-transfer
+      // (integer hundredths) — any drift/double-apply aborts the whole transaction.
+      const activeAfter = await tx.equityHolder.findMany({
+        where: { companyId, isActive: true },
+        select: { equityPct: true },
       });
+      const activeUnits = activeAfter.reduce((sum, h) => sum + Math.round(h.equityPct * 100), 0);
+      if (activeUnits !== 10000) {
+        throw new BadRequestException(`Handover would not leave the cap table at 100% (got ${activeUnits / 100}%)`);
+      }
 
-      // Record handover event
       await tx.equityEvent.create({
         data: {
           companyId,
@@ -249,15 +290,17 @@ export class EquityService {
           percentageAmount: platformEquity,
           platformEquityAfter: 0,
           foundersEquityAfter: 100,
-          description: `1000-day period completed (Day ${dayNumber}). Platform transferred ${platformEquity}% equity to ${founderHolders.length} founders (largest-remainder split). Per-founder additions: ${founderTransfers.join('%, ')}%.`,
-          triggeredBy: adminId || 'SYSTEM',
+          description: `1000-day period completed (Day ${dayNumber}). Platform transferred ${platformEquity}% equity to ${founderHolders.length} founders (largest-remainder split). Per-founder additions: ${founderTransfers.join('%, ')}%. Authorised by super-admin ${adminId}.`,
+          triggeredBy: adminId,
           dayNumber,
         },
       });
+
+      return { dayNumber, transferred: platformEquity };
     });
 
-    this.logger.log(`Handover executed for company ${companyId} on day ${dayNumber}`);
-    return { success: true, dayNumber, transferred: platformEquity };
+    this.logger.log(`Handover executed for company ${companyId} on day ${result.dayNumber} (authorised by ${adminId})`);
+    return { success: true, dayNumber: result.dayNumber, transferred: result.transferred };
   }
 
   /** Update the days-elapsed counter for all active companies (cron-friendly) */
@@ -565,18 +608,25 @@ export class EquityService {
    * float drift, and the active holders' equityPct is asserted to sum to exactly
    * 100% after every mutation.
    */
-  async recordEvent(data: {
-    companyId: string;
-    eventType: EquityEventType;
-    fromHolder?: string;
-    toHolder?: string;
-    fromHolderId?: string;
-    toHolderId?: string;
-    percentageAmount: number;
-    description: string;
-    metadata?: any;
-    triggeredBy?: string;
-  }) {
+  async recordEvent(
+    data: {
+      companyId: string;
+      eventType: EquityEventType;
+      fromHolder?: string;
+      toHolder?: string;
+      fromHolderId?: string;
+      toHolderId?: string;
+      percentageAmount: number;
+      description: string;
+      metadata?: any;
+      // NOTE: triggeredBy is intentionally NOT read from `data`. The audit actor
+      // is a separate, trusted parameter sourced from the JWT by the controller.
+      // Any client-supplied triggeredBy on this object is ignored to prevent a
+      // caller forging the audit actor.
+      triggeredBy?: never;
+    },
+    triggeredBy?: string,
+  ) {
     const company = await this.prisma.companyEntity.findUnique({ where: { id: data.companyId } });
     if (!company) throw new NotFoundException('Company not found');
 
@@ -588,6 +638,12 @@ export class EquityService {
     const amountUnits = Math.round((data.percentageAmount || 0) * 100);
 
     return this.prisma.$transaction(async (tx) => {
+      // Serialize cap-table mutations per company: under READ COMMITTED two
+      // concurrent recordEvent calls would each read the same starting holders
+      // and the later commit would silently overwrite the earlier mutation (lost
+      // update) while both audit rows persist. The advisory lock forces them to
+      // run one-at-a-time so each operates on the previous one's committed state.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`equity_${data.companyId}`}))`;
       const holders = await tx.equityHolder.findMany({ where: { companyId: data.companyId } });
       const activeHolders = holders.filter((h) => h.isActive);
 
@@ -762,7 +818,8 @@ export class EquityService {
           foundersEquityAfter: foundersAfter,
           description: data.description,
           metadata: data.metadata,
-          triggeredBy: data.triggeredBy || 'SYSTEM',
+          // Trusted audit actor passed by the controller from the JWT; never the body.
+          triggeredBy: triggeredBy || 'SYSTEM',
           dayNumber,
         },
       });
