@@ -3,7 +3,9 @@ import { ProjectService } from './project.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { JwtAuthGuard, AdminGuard } from '../auth/guards';
 
-@Controller('projects')
+// Mounted under /api/projects to match the frontend client base (was at root
+// '/projects', unreachable from the /api-based client).
+@Controller('api/projects')
 export class ProjectController {
   constructor(private readonly projectService: ProjectService) {}
 
