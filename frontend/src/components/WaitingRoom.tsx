@@ -19,7 +19,7 @@ export default function WaitingRoom({ onComplete }: WaitingRoomProps) {
       
       {/* Global Progress Bar */}
       <div className="fixed top-0 left-0 w-full h-[2px] bg-hairline z-50">
-        <div className="h-full bg-forest transition-all duration-1000" style={{ width: '74.2%' }} />
+        <div className="h-full bg-saffron transition-all duration-1000" style={{ width: '74.2%' }} />
       </div>
 
       <div className="max-w-4xl w-full text-center z-10">
@@ -37,8 +37,8 @@ export default function WaitingRoom({ onComplete }: WaitingRoomProps) {
           <p className="font-sans text-lg md:text-xl text-ink max-w-md">
             Awaiting cohort completion. Your spot is secured.
           </p>
-          <div className="flex items-center gap-3 text-terracotta">
-            <span className="w-2 h-2 bg-terracotta inline-block animate-pulse" />
+          <div className="flex items-center gap-3 text-saffron-deep">
+            <span className="w-2 h-2 bg-saffron inline-block animate-pulse" />
             <span className="font-sans text-[12px] uppercase tracking-wider font-bold">
               Synchronizing with node network
             </span>
@@ -65,7 +65,7 @@ export default function WaitingRoom({ onComplete }: WaitingRoomProps) {
 
       {/* Signature Pull Quote */}
       <aside className="hidden lg:block absolute left-12 bottom-32 max-w-xs border-l border-forest pl-6">
-        <h3 className="font-serif italic text-2xl text-terracotta leading-snug">
+        <h3 className="font-serif italic text-2xl text-terracotta-warm leading-snug">
           "The quiet before the storm is where the most significant alliances are forged."
         </h3>
         <p className="font-sans text-[10px] uppercase mt-4 text-ink/40">— Founder's Log, entry 012</p>

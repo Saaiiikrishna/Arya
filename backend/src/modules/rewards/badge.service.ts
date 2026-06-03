@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
+import { NotificationService } from '../notifications/notification.service';
 
 export const REWARD_CRITERIA = {
   REFERRAL_TIER_1: 5,   // "Tribe Builder"
@@ -15,6 +16,7 @@ export class BadgeService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly whatsappService: WhatsappService,
+    private readonly notifications: NotificationService,
   ) {}
 
   /**
@@ -83,15 +85,26 @@ export class BadgeService {
 
     this.logger.log(`Awarded badge ${badgeName} to applicant ${applicantId}`);
 
-    // Notify via WhatsApp
+    // Notify via WhatsApp + email
     const applicant = await this.prisma.applicant.findUnique({ where: { id: applicantId } });
-    if (applicant && applicant.phone) {
-      await this.whatsappService.sendReferralMilestone(
-        applicant.phone,
-        applicant.firstName,
-        await this.getReferralCount(applicantId),
+    if (applicant) {
+      const referralCount = await this.getReferralCount(applicantId);
+
+      if (applicant.phone) {
+        await this.whatsappService.sendReferralMilestone(
+          applicant.phone,
+          applicant.firstName,
+          referralCount,
+          badgeName,
+          applicantId
+        );
+      }
+
+      // Email side of the referral milestone (best-effort, never throws)
+      await this.notifications.referralMilestoneEmail(
+        { id: applicant.id, email: applicant.email, firstName: applicant.firstName },
+        referralCount,
         badgeName,
-        applicantId
       );
     }
   }

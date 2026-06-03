@@ -54,7 +54,7 @@ export default function ConsentPage() {
               accept=".pdf,.doc,.docx" 
             />
           </div>
-          <button className="bg-forest hover:opacity-90 text-white px-8 py-3 text-xs uppercase tracking-widest font-semibold transition-opacity self-start">
+          <button className="bg-saffron hover:bg-saffron-deep text-parchment px-8 py-3 text-xs uppercase tracking-widest font-semibold transition-colors shadow-pop self-start">
             Transmit Payload
           </button>
         </div>
@@ -67,7 +67,7 @@ export default function ConsentPage() {
         <div className="flex flex-col md:flex-row gap-6 items-start md:items-center flex-wrap">
           {['Consume Broadcast', 'Parse Covenant', 'Affix Primary Consent', 'Transmit Signature', 'Notarization Complete'].map((step, i) => (
             <div key={i} className="flex items-center gap-4 group">
-              <div className="w-10 h-10 border border-parchment/30 bg-white/5 flex items-center justify-center font-serif text-xl font-bold group-hover:bg-terracotta group-hover:text-white group-hover:border-terracotta transition-colors">
+              <div className="w-10 h-10 border border-parchment/30 bg-white/5 flex items-center justify-center font-serif text-xl font-bold group-hover:bg-terracotta-warm group-hover:text-white group-hover:border-terracotta-warm transition-colors">
                 {i + 1}
               </div>
               <span className="text-xs uppercase tracking-widest font-semibold">{step}</span>

@@ -72,7 +72,7 @@ export default function SmartMatchingModal({ batchId, onClose, onSuccess }: Smar
       <div className="modal max-w-[800px] w-[90vw] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-md border-b border-hairline pb-4">
           <h2 className="font-serif text-2xl font-bold">Smart Matching Engine</h2>
-          <button onClick={onClose} className="text-ink/60 hover:text-terracotta">✕</button>
+          <button onClick={onClose} className="text-ink/60 hover:text-terracotta-warm">✕</button>
         </div>
 
         {!previewData ? (
@@ -122,7 +122,7 @@ export default function SmartMatchingModal({ batchId, onClose, onSuccess }: Smar
               </div>
               <div className="flex gap-2">
                 <button className="btn btn-secondary border border-hairline" onClick={() => setPreviewData(null)}>Recalculate</button>
-                <button className="btn bg-forest text-white hover:bg-forest/90" onClick={handleExecute} disabled={!!actionLoading}>
+                <button className="btn bg-saffron text-white hover:bg-saffron-deep" onClick={handleExecute} disabled={!!actionLoading}>
                   {actionLoading === 'execute' ? 'Saving...' : 'Deploy Teams to DB'}
                 </button>
               </div>

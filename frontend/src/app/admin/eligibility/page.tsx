@@ -55,9 +55,9 @@ export default function EligibilityPage() {
           <h1 className="font-serif text-5xl font-bold leading-none">Eligibility Protocol</h1>
         </div>
         <div className="text-left md:text-right">
-          <button 
-            onClick={() => setShowModal(true)} 
-            className="bg-ink hover:bg-terracotta text-white px-8 py-4 text-xs uppercase tracking-widest font-semibold transition-colors shadow-sm"
+          <button
+            onClick={() => setShowModal(true)}
+            className="bg-saffron hover:bg-saffron-deep text-parchment px-8 py-4 text-xs uppercase tracking-widest font-semibold transition-colors shadow-pop"
           >
             + Add Criterion
           </button>
@@ -91,7 +91,7 @@ export default function EligibilityPage() {
                       {c.operator}
                     </span>
                   </td>
-                  <td className="px-6 py-5 font-mono text-sm bg-parchment/40 text-terracotta font-semibold">{JSON.stringify(c.value)}</td>
+                  <td className="px-6 py-5 font-mono text-sm bg-parchment/40 text-terracotta-warm font-semibold">{JSON.stringify(c.value)}</td>
                   <td className="px-6 py-5 font-serif text-xl font-bold">{c.weight}</td>
                   <td className="px-6 py-5">
                     <button 
@@ -116,8 +116,8 @@ export default function EligibilityPage() {
           >
             <div className="flex justify-between items-center mb-8 pb-4 border-b border-hairline">
               <h2 className="font-serif text-3xl font-bold">Add Eligibility Criterion</h2>
-              <button 
-                className="text-2xl text-ink/40 hover:text-terracotta transition-colors leading-none" 
+              <button
+                className="text-2xl text-ink/40 hover:text-terracotta-warm transition-colors leading-none"
                 onClick={() => setShowModal(false)}
               >
                 ×
@@ -181,9 +181,9 @@ export default function EligibilityPage() {
                 >
                   Cancel
                 </button>
-                <button 
-                  type="submit" 
-                  className="bg-forest hover:opacity-90 text-white px-8 py-3 text-xs uppercase tracking-widest font-semibold transition-colors"
+                <button
+                  type="submit"
+                  className="bg-saffron hover:bg-saffron-deep text-parchment px-8 py-3 text-xs uppercase tracking-widest font-semibold transition-colors shadow-pop"
                 >
                   Inject Criterion
                 </button>

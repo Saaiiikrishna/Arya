@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, InternalServerErrorException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma';
 import Razorpay from 'razorpay';
@@ -27,7 +27,21 @@ export class DonationService {
     message?: string;
     isAnonymous?: boolean;
   }) {
-    const amountPaise = Math.round(data.amount * 100);
+    // Validate the client-supplied amount (rupees) before any side effects.
+    const MIN_RUPEES = 100;
+    const MAX_RUPEES = 500_000;
+    const amountRupees = data.amount;
+    if (typeof amountRupees !== 'number' || !Number.isFinite(amountRupees) || amountRupees <= 0) {
+      throw new BadRequestException('Donation amount must be a positive number');
+    }
+    if (amountRupees < MIN_RUPEES) {
+      throw new BadRequestException(`Donation amount must be at least ₹${MIN_RUPEES}`);
+    }
+    if (amountRupees > MAX_RUPEES) {
+      throw new BadRequestException(`Donation amount must not exceed ₹${MAX_RUPEES}`);
+    }
+
+    const amountPaise = Math.round(amountRupees * 100);
 
     const order = await this.razorpay.orders.create({
       amount: amountPaise,
@@ -39,7 +53,7 @@ export class DonationService {
       data: {
         donorName: data.donorName,
         donorEmail: data.donorEmail,
-        amount: data.amount,
+        amount: amountPaise, // store integer paise (client sends rupees)
         type: data.type || 'ONE_TIME',
         message: data.message,
         isAnonymous: data.isAnonymous || false,
@@ -57,7 +71,12 @@ export class DonationService {
   }
 
   async handleWebhook(signature: string, requestBody: Buffer | any) {
-    const webHookSecret = this.configService.get<string>('RAZORPAY_WEBHOOK_SECRET', '');
+    // Fail closed: never verify against an empty/absent key.
+    const webHookSecret = this.configService.get<string>('RAZORPAY_WEBHOOK_SECRET');
+    if (!webHookSecret) {
+      this.logger.error('RAZORPAY_WEBHOOK_SECRET not configured; rejecting donation webhook');
+      throw new InternalServerErrorException('Payment webhook secret not configured');
+    }
 
     const bodyBuf = Buffer.isBuffer(requestBody)
       ? requestBody
@@ -85,13 +104,19 @@ export class DonationService {
         where: { razorpayOrderId: orderId },
       });
 
-      if (donation) {
+      // Idempotency: ignore retries of an already-captured donation.
+      if (donation && donation.status !== 'CAPTURED') {
+        // Verify the captured amount matches what we recorded (paise).
+        const expectedPaise = donation.amount; // stored as integer paise
+        if (Number(paymentEntity.amount) !== expectedPaise) {
+          this.logger.error(
+            `Donation amount mismatch on order ${orderId}: expected ${expectedPaise}, got ${paymentEntity.amount}; not marking captured`,
+          );
+          return { success: true };
+        }
         await this.prisma.donation.update({
           where: { id: donation.id },
-          data: {
-            razorpayPaymentId: paymentEntity.id,
-            status: 'CAPTURED',
-          },
+          data: { razorpayPaymentId: paymentEntity.id, status: 'CAPTURED' },
         });
         this.logger.log(`Donation captured: ${donation.donorEmail} - ₹${donation.amount}`);
       }
@@ -119,13 +144,16 @@ export class DonationService {
   }
 
   async getStats() {
-    const [totalDonations, totalAmount, donorCount, recentDonations] = await Promise.all([
+    const [totalDonations, totalAmount, donorCountRows, recentDonations] = await Promise.all([
       this.prisma.donation.count({ where: { status: 'CAPTURED' } }),
       this.prisma.donation.aggregate({ where: { status: 'CAPTURED' }, _sum: { amount: true } }),
-      this.prisma.donation.groupBy({
-        by: ['donorEmail'],
-        where: { status: 'CAPTURED' },
-      }),
+      // Efficient unique-donor count: aggregate in the DB instead of
+      // materializing one row per distinct donor via groupBy.
+      this.prisma.$queryRaw<{ count: bigint }[]>`
+        SELECT COUNT(DISTINCT donor_email) AS count
+        FROM donations
+        WHERE status = 'CAPTURED'::"PaymentStatus"
+      `,
       this.prisma.donation.findMany({
         where: { status: 'CAPTURED', isAnonymous: false },
         orderBy: { createdAt: 'desc' },
@@ -134,10 +162,13 @@ export class DonationService {
       }),
     ]);
 
+    // queryRaw returns COUNT as a bigint; coerce to a JSON-safe number.
+    const uniqueDonors = Number(donorCountRows[0]?.count ?? 0);
+
     return {
       totalDonations,
       totalAmount: totalAmount._sum.amount || 0,
-      uniqueDonors: donorCount.length,
+      uniqueDonors,
       recentDonations,
     };
   }

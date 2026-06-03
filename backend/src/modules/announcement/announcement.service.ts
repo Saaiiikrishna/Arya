@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma';
 import { EmailService } from '../email';
+import { NotificationService } from '../notifications/notification.service';
 
 @Injectable()
 export class AnnouncementService {
@@ -9,6 +10,7 @@ export class AnnouncementService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
+    private readonly notifications: NotificationService,
   ) {}
 
   async create(data: {
@@ -31,29 +33,49 @@ export class AnnouncementService {
     if (data.sendEmail && data.batchId) {
       const applicants = await this.prisma.applicant.findMany({
         where: { batchId: data.batchId, status: { not: 'REMOVED' } },
-        select: { id: true, email: true, firstName: true },
+        select: { id: true, email: true, firstName: true, phone: true },
       });
 
-      for (const applicant of applicants) {
-        await this.emailService.sendTemplatedEmail(
-          applicant.email,
-          'announcement',
-          {
-            firstName: applicant.firstName,
-            title: data.title,
-            content: data.content,
-            deadline: data.deadline
-              ? new Date(data.deadline).toLocaleDateString('en-US', {
-                  weekday: 'long',
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                })
-              : 'No specific deadline',
-          },
-          applicant.id,
-        );
-      }
+      const deadlineStr = data.deadline
+        ? new Date(data.deadline).toLocaleDateString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          })
+        : 'No specific deadline';
+      // Dispatch in parallel rather than serially blocking the request per recipient.
+      await Promise.allSettled(
+        applicants.map((applicant) =>
+          this.emailService.sendTemplatedEmail(
+            applicant.email,
+            'announcement',
+            {
+              firstName: applicant.firstName,
+              title: data.title,
+              content: data.content,
+              deadline: deadlineStr,
+            },
+            applicant.id,
+          ),
+        ),
+      );
+
+      // Also fan the broadcast out over WhatsApp (best-effort, never throws).
+      await Promise.allSettled(
+        applicants.map((applicant) =>
+          this.notifications.platformAnnouncement(
+            {
+              id: applicant.id,
+              email: applicant.email,
+              firstName: applicant.firstName,
+              phone: applicant.phone,
+            },
+            data.title,
+            data.content,
+          ),
+        ),
+      );
 
       this.logger.log(
         `Announcement "${data.title}" emailed to ${applicants.length} participants`,

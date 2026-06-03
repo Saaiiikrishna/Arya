@@ -104,7 +104,7 @@ export default function InvestorRegistration() {
               </div>
 
               <div className="pt-4 border-t border-hairline border-dashed">
-                <button type="submit" disabled={loading} className="w-full btn bg-ink text-white hover:bg-forest py-4 font-bold tracking-widest">
+                <button type="submit" disabled={loading} className="w-full btn bg-saffron text-parchment hover:bg-saffron-deep py-4 font-bold tracking-widest shadow-pop">
                   {loading ? 'Submitting...' : 'REQUEST ACCESS'}
                 </button>
               </div>

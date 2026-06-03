@@ -33,7 +33,12 @@ function LoginContent() {
   useEffect(() => {
     if (!authLoading && isAuthenticated && user) {
       if (role === 'APPLICANT') {
-        router.push('/apply');
+        // Already paid / past the PENDING stage → send to the Hub, not the form
+        if (user.hasPaid || (user.status && user.status !== 'PENDING')) {
+          router.push('/hub');
+        } else {
+          router.push('/apply');
+        }
       } else {
         router.push('/admin/dashboard');
       }
@@ -64,13 +69,29 @@ function LoginContent() {
     );
   }
 
+  // Decide post-login destination: a user who has already paid or moved past
+  // the PENDING stage belongs in the Hub, not back on the apply form. Fall back
+  // to /apply if the profile lookup fails for any reason.
+  const redirectAfterLogin = async () => {
+    try {
+      const profile = await api.getMyProfile();
+      if (profile?.hasPaid || (profile?.status && profile.status !== 'PENDING')) {
+        window.location.href = '/hub';
+        return;
+      }
+    } catch (e) {
+      console.error('Post-login profile lookup failed', e);
+    }
+    window.location.href = '/apply';
+  };
+
   const handleGoogleSuccess = async (credentialResponse: any) => {
     try {
       const data = await api.googleLogin(credentialResponse.credential);
       if (data.accessToken) {
         api.setToken(data.accessToken);
       }
-      window.location.href = '/apply';
+      await redirectAfterLogin();
     } catch (e) {
       setError('Authentication failed. Please try again.');
       console.error('Google Auth Error', e);
@@ -147,7 +168,7 @@ function LoginContent() {
       if (data.accessToken) {
         api.setToken(data.accessToken);
       }
-      window.location.href = '/apply';
+      await redirectAfterLogin();
     } catch (e: any) {
       if (e?.message?.toLowerCase().includes('too many requests')) {
         setError('Rate limit exceeded. Please wait a minute.');
@@ -182,13 +203,24 @@ function LoginContent() {
     }
   };
 
+  // Robust back: return to the previous in-app page if there is history,
+  // otherwise fall back to home. (window.history.back() was a no-op on a
+  // direct/bookmarked load and could navigate off-site.)
+  const handleBack = () => {
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      router.back();
+    } else {
+      router.push('/');
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-parchment font-sans relative">
       <div className="max-w-md w-full">
         {/* Back button above auth card */}
         <button 
-          onClick={() => window.history.back()}
-          className="text-sm uppercase tracking-widest text-forest/70 hover:text-terracotta font-medium transition-colors mb-6 block"
+          onClick={handleBack}
+          className="text-sm uppercase tracking-widest text-forest/70 hover:text-terracotta-warm font-medium transition-colors mb-6 block"
         >
           ← Back
         </button>
@@ -217,7 +249,7 @@ function LoginContent() {
                 {/* OTP Login Button */}
                 <button
                   onClick={() => setAuthMode('otp-email')}
-                  className="w-full bg-forest text-parchment p-3.5 font-bold uppercase tracking-widest text-xs hover:bg-forest/90 transition-colors flex items-center justify-center gap-3"
+                  className="w-full bg-saffron text-parchment p-3.5 font-bold uppercase tracking-widest text-xs hover:bg-saffron-deep transition-colors flex items-center justify-center gap-3"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
                   Continue with Email OTP
@@ -260,7 +292,7 @@ function LoginContent() {
                 <button
                   onClick={handleSendOtp}
                   disabled={otpLoading}
-                  className="w-full bg-forest text-parchment p-3.5 font-bold uppercase tracking-widest text-xs hover:bg-forest/90 transition-colors disabled:opacity-50"
+                  className="w-full bg-saffron text-parchment p-3.5 font-bold uppercase tracking-widest text-xs hover:bg-saffron-deep transition-colors disabled:opacity-50"
                 >
                   {otpLoading ? 'Sending...' : 'Send Verification Code'}
                 </button>
@@ -282,9 +314,9 @@ function LoginContent() {
 
                 {/* Show OTP code on screen for test account only */}
                 {testOtpCode && (
-                  <div className="bg-amber-50 border border-amber-200 p-4">
-                    <p className="text-[10px] uppercase tracking-widest text-amber-600 font-bold mb-1">Test Account — OTP Code</p>
-                    <p className="font-mono text-2xl font-bold text-amber-800 tracking-[6px]">{testOtpCode}</p>
+                  <div className="bg-saffron-glow/15 border border-saffron/30 p-4">
+                    <p className="text-[10px] uppercase tracking-widest text-saffron-deep font-bold mb-1">Test Account — OTP Code</p>
+                    <p className="font-mono text-2xl font-bold text-ink tracking-[6px]">{testOtpCode}</p>
                   </div>
                 )}
 

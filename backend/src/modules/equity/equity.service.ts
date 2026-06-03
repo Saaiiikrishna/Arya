@@ -68,18 +68,22 @@ export class EquityService {
         },
       });
 
-      // Split founders' equity equally among team members
+      // Split founders' equity equally among team members.
+      // Use a largest-remainder allocation (round each share down to 2dp, then
+      // distribute the leftover hundredths one-by-one) so the per-member shares
+      // sum EXACTLY to FOUNDERS_EQUITY rather than drifting from independent rounding.
       const memberCount = team.members.length;
       if (memberCount > 0) {
-        const perMemberPct = Math.round((FOUNDERS_EQUITY / memberCount) * 100) / 100;
-        for (const member of team.members) {
+        const memberShares = EquityService.largestRemainderSplit(FOUNDERS_EQUITY, memberCount);
+        for (let i = 0; i < team.members.length; i++) {
+          const member = team.members[i];
           await tx.equityHolder.create({
             data: {
               companyId: entity.id,
               applicantId: member.id,
               holderName: `${member.firstName} ${member.lastName || ''}`.trim(),
               holderType: 'FOUNDER',
-              equityPct: perMemberPct,
+              equityPct: memberShares[i],
               vestedPct: 0, // Founders start unvested
               vestingSchedule: {
                 cliff: 90,      // 90-day cliff
@@ -168,6 +172,14 @@ export class EquityService {
     const now = new Date();
     const dayNumber = Math.floor((now.getTime() - company.timerStartDate.getTime()) / (1000 * 60 * 60 * 24));
 
+    // The platform's controlling 51% only vests after the full 1000-day period.
+    // Without this guard the entire stake could be handed over on day 1.
+    if (dayNumber < 1000) {
+      throw new BadRequestException(
+        `Handover not permitted before day 1000 (currently day ${dayNumber})`,
+      );
+    }
+
     const platformHolder = company.equityHolders.find(h => h.holderType === 'PLATFORM');
     const founderHolders = company.equityHolders.filter(h => h.holderType === 'FOUNDER' && h.isActive);
 
@@ -175,7 +187,10 @@ export class EquityService {
     if (founderHolders.length === 0) throw new BadRequestException('No active founder holders');
 
     const platformEquity = platformHolder.equityPct;
-    const perFounderTransfer = Math.round((platformEquity / founderHolders.length) * 100) / 100;
+    // Distribute the platform's stake using a largest-remainder allocation so the
+    // transferred shares sum EXACTLY to platformEquity (and founders' total to 100%),
+    // instead of drifting because each per-founder share was rounded independently.
+    const founderTransfers = EquityService.largestRemainderSplit(platformEquity, founderHolders.length);
 
     await this.prisma.$transaction(async (tx) => {
       // Zero out platform holder
@@ -185,12 +200,14 @@ export class EquityService {
       });
 
       // Distribute to founders
-      for (const founder of founderHolders) {
+      for (let i = 0; i < founderHolders.length; i++) {
+        const founder = founderHolders[i];
+        const newPct = founder.equityPct + founderTransfers[i];
         await tx.equityHolder.update({
           where: { id: founder.id },
           data: {
-            equityPct: founder.equityPct + perFounderTransfer,
-            vestedPct: founder.equityPct + perFounderTransfer, // Fully vested after handover
+            equityPct: newPct,
+            vestedPct: newPct, // Fully vested after handover
           },
         });
       }
@@ -217,7 +234,7 @@ export class EquityService {
           percentageAmount: platformEquity,
           platformEquityAfter: 0,
           foundersEquityAfter: 100,
-          description: `1000-day period completed (Day ${dayNumber}). Platform transferred ${platformEquity}% equity equally to ${founderHolders.length} founders. Each founder received ${perFounderTransfer}% additional equity.`,
+          description: `1000-day period completed (Day ${dayNumber}). Platform transferred ${platformEquity}% equity to ${founderHolders.length} founders (largest-remainder split). Per-founder additions: ${founderTransfers.join('%, ')}%.`,
           triggeredBy: adminId || 'SYSTEM',
           dayNumber,
         },
@@ -238,18 +255,30 @@ export class EquityService {
     });
 
     const now = new Date();
-    let updated = 0;
 
+    // Group companies by their computed elapsed-day value so we can issue one
+    // updateMany() per distinct value instead of one UPDATE per company.
+    const byElapsed = new Map<number, string[]>();
     for (const company of activeCompanies) {
       if (!company.timerStartDate) continue;
       const elapsed = Math.floor((now.getTime() - company.timerStartDate.getTime()) / (1000 * 60 * 60 * 24));
-      
-      await this.prisma.companyEntity.update({
-        where: { id: company.id },
-        data: { daysElapsed: elapsed },
-      });
-      updated++;
+      const ids = byElapsed.get(elapsed);
+      if (ids) ids.push(company.id);
+      else byElapsed.set(elapsed, [company.id]);
     }
+
+    if (byElapsed.size > 0) {
+      await this.prisma.$transaction(
+        Array.from(byElapsed.entries()).map(([elapsed, ids]) =>
+          this.prisma.companyEntity.updateMany({
+            where: { id: { in: ids } },
+            data: { daysElapsed: elapsed },
+          }),
+        ),
+      );
+    }
+
+    const updated = Array.from(byElapsed.values()).reduce((sum, ids) => sum + ids.length, 0);
 
     this.logger.log(`Updated timers for ${updated} active companies`);
     return { updated };
@@ -526,5 +555,41 @@ export class EquityService {
         dayNumber,
       },
     });
+  }
+
+  // ─── HELPERS ──────────────────────────────────────────────
+
+  /**
+   * Split a total percentage into `count` shares (rounded to 2 decimal places)
+   * that sum EXACTLY to `total`, using the largest-remainder method.
+   *
+   * Each share is first floored to the nearest 0.01; the leftover hundredths are
+   * then handed out one at a time to the shares with the largest fractional
+   * remainder. This avoids the drift you get from rounding each share
+   * independently (e.g. 49 / 3 → 16.33 × 3 = 48.99 ≠ 49).
+   */
+  private static largestRemainderSplit(total: number, count: number): number[] {
+    if (count <= 0) return [];
+
+    // Work in integer hundredths to avoid float accumulation error.
+    const totalUnits = Math.round(total * 100);
+    const base = Math.floor(totalUnits / count);
+    let remainder = totalUnits - base * count; // leftover hundredths to distribute
+
+    // Fractional remainder of each ideal share, used to order distribution.
+    const fractions = Array.from({ length: count }, (_, i) => ({
+      i,
+      frac: (totalUnits / count) - base,
+    }));
+    // All ideal shares have the same fractional part here, so distribute by index
+    // order (earliest holders first) — deterministic and stable.
+    fractions.sort((a, b) => (b.frac - a.frac) || (a.i - b.i));
+
+    const units = new Array<number>(count).fill(base);
+    for (let k = 0; k < remainder; k++) {
+      units[fractions[k].i] += 1;
+    }
+
+    return units.map((u) => u / 100);
   }
 }

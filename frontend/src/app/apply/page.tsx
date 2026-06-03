@@ -131,7 +131,7 @@ export default function ApplyPage() {
              </p>
              <button
                onClick={() => router.push('/hub')}
-               className="inline-block bg-forest text-parchment px-8 py-4 text-sm uppercase tracking-widest font-bold hover:bg-forest/90 transition-colors"
+               className="inline-block bg-saffron text-parchment px-8 py-4 text-sm uppercase tracking-widest font-bold hover:bg-saffron-deep transition-colors"
              >
                Return to Hub →
              </button>
@@ -150,7 +150,7 @@ export default function ApplyPage() {
       ) : paymentPending && !isEditingUnpaid ? (
          <div className="min-h-screen py-24 px-6 flex items-center justify-center">
            <div className="bg-white border border-hairline p-12 max-w-lg w-full text-center shadow-lg">
-             <div className="w-16 h-16 bg-terracotta/10 rounded-full flex items-center justify-center mx-auto mb-6 text-2xl">
+             <div className="w-16 h-16 bg-saffron/10 rounded-full flex items-center justify-center mx-auto mb-6 text-2xl">
                ⏳
              </div>
              <h2 className="font-serif text-3xl font-bold mb-4 text-forest">Final Step Required</h2>
@@ -160,13 +160,13 @@ export default function ApplyPage() {
              <div className="flex flex-col gap-4 max-w-xs mx-auto">
                <button
                  onClick={() => router.push('/pledge')}
-                 className="inline-block bg-terracotta text-parchment px-8 py-4 text-sm uppercase tracking-widest font-bold hover:bg-terracotta/90 transition-colors w-full"
+                 className="inline-block bg-saffron text-parchment px-8 py-4 text-sm uppercase tracking-widest font-bold hover:bg-saffron-deep transition-colors w-full"
                >
                  Commit Pledge →
                </button>
                <button
                  onClick={() => setIsEditingUnpaid(true)}
-                 className="bg-transparent border border-terracotta text-terracotta px-8 py-4 text-sm uppercase tracking-widest font-bold hover:bg-terracotta/5 transition-colors w-full"
+                 className="bg-transparent border border-forest text-forest px-8 py-4 text-sm uppercase tracking-widest font-bold hover:bg-forest/5 transition-colors w-full"
                >
                  Edit Application
                </button>
@@ -202,8 +202,8 @@ export default function ApplyPage() {
                   Your application is ready to be sealed. Please authenticate your identity to proceed to the pledge phase.
                 </p>
                 <a 
-                  href="/login" 
-                  className="inline-block bg-forest text-parchment px-8 py-4 text-sm uppercase tracking-widest font-bold hover:bg-forest/90 transition-colors"
+                  href="/login"
+                  className="inline-block bg-saffron text-parchment px-8 py-4 text-sm uppercase tracking-widest font-bold hover:bg-saffron-deep transition-colors"
                 >
                   Login to Submit →
                 </a>

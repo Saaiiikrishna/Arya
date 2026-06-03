@@ -137,7 +137,7 @@ export default function MemberProfilePage({ params }: { params: Promise<{ id: st
         {screeningAnswers.length > 0 && (
           <div className="mb-8">
             <h2 className="font-serif text-2xl font-bold mb-4 flex items-center gap-2">
-              <GraduationCap className="w-5 h-5 text-terracotta" /> Screening Responses
+              <GraduationCap className="w-5 h-5 text-terracotta-warm" /> Screening Responses
             </h2>
             <div className="bg-white border border-hairline divide-y divide-hairline">
               {screeningAnswers.map((answer: any) => (

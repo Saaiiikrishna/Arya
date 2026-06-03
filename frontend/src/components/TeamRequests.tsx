@@ -14,7 +14,7 @@ export default function TeamRequests({ team, userId }: { team: any, userId: stri
   const [title, setTitle] = useState('');
   const [details, setDetails] = useState('');
 
-  const isLeader = team.leaderId === userId;
+  const isLeader = !!userId && team.leaderId === userId;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,7 +50,7 @@ export default function TeamRequests({ team, userId }: { team: any, userId: stri
         </h2>
         <button 
           onClick={() => setShowModal(true)}
-          className="text-[13px] uppercase tracking-widest font-medium text-forest hover:text-terracotta transition-colors flex items-center gap-2"
+          className="text-[13px] uppercase tracking-widest font-medium text-forest hover:text-terracotta-warm transition-colors flex items-center gap-2"
         >
           <Plus className="w-4 h-4" />
           New Request
@@ -143,7 +143,7 @@ export default function TeamRequests({ team, userId }: { team: any, userId: stri
               <button 
                 type="submit" 
                 disabled={loading}
-                className="w-full bg-forest hover:bg-forest/90 text-white font-medium text-[13px] uppercase tracking-widest py-4 transition-colors disabled:opacity-50"
+                className="w-full bg-saffron hover:bg-saffron-deep text-parchment font-medium text-[13px] uppercase tracking-widest py-4 transition-colors disabled:opacity-50 shadow-pop"
               >
                 {loading ? 'Submitting...' : 'Submit Request'}
               </button>

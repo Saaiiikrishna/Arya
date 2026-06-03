@@ -121,8 +121,16 @@ export class BatchProcessor extends WorkerHost {
         }),
       ]);
 
-      // Fresh team matching — don't replace, match to best fit
-      await this.teamService.matchToExistingTeam(applicant.id, batch.id);
+      // Fresh team matching — don't replace, match to best fit.
+      // matchToExistingTeam re-checks capacity atomically and may throw if all
+      // teams filled up concurrently; don't let that abort the whole backfill.
+      try {
+        await this.teamService.matchToExistingTeam(applicant.id, batch.id);
+      } catch (err) {
+        this.logger.warn(
+          `Could not match moved applicant ${applicant.email} to a team: ${(err as Error)?.message}`,
+        );
+      }
 
       // Notify user about batch move
       await this.emailService.sendTemplatedEmail(
@@ -155,20 +163,24 @@ export class BatchProcessor extends WorkerHost {
     const frontendUrl = this.configService.get<string>('FRONTEND_URL', 'http://localhost:3000');
     let sentCount = 0;
 
-    for (const applicant of applicants) {
-      const success = await this.emailService.sendTemplatedEmail(
-        applicant.email,
-        templateSlug,
-        {
-          firstName: applicant.firstName,
-          lastName: applicant.lastName,
-          email: applicant.email,
-          statusUrl: `${frontendUrl}/applicants/status/${applicant.accessToken}`,
-          ...extraVars,
-        },
-        applicant.id,
-      );
-      if (success) sentCount++;
+    const sendResults = await Promise.allSettled(
+      applicants.map((applicant) =>
+        this.emailService.sendTemplatedEmail(
+          applicant.email,
+          templateSlug,
+          {
+            firstName: applicant.firstName,
+            lastName: applicant.lastName,
+            email: applicant.email,
+            statusUrl: `${frontendUrl}/applicants/status/${applicant.accessToken}`,
+            ...extraVars,
+          },
+          applicant.id,
+        ),
+      ),
+    );
+    for (const r of sendResults) {
+      if (r.status === 'fulfilled' && r.value) sentCount++;
     }
 
     this.logger.log(`Sent ${sentCount}/${applicants.length} emails for batch ${batchId}`);

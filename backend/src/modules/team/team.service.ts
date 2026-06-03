@@ -162,16 +162,25 @@ export class TeamService {
       return null;
     }
 
-    await this.prisma.$transaction([
-      this.prisma.applicant.update({
+    // Re-check capacity against the REAL member count inside the transaction so
+    // concurrent matches can't both pass the pre-read gate and over-fill the team.
+    // memberCount is maintained atomically alongside the membership change but is
+    // never trusted for the gate.
+    await this.prisma.$transaction(async (tx) => {
+      const liveCount = await tx.applicant.count({ where: { teamId: targetTeam.id } });
+      if (liveCount >= maxSize) {
+        throw new BadRequestException('Target team is at max capacity');
+      }
+
+      await tx.applicant.update({
         where: { id: applicantId },
         data: { teamId: targetTeam.id, status: ApplicantStatus.ACTIVE },
-      }),
-      this.prisma.team.update({
+      });
+      await tx.team.update({
         where: { id: targetTeam.id },
         data: { memberCount: { increment: 1 } },
-      }),
-    ]);
+      });
+    });
 
     this.logger.log(`Applicant ${applicantId} matched to team ${targetTeam.name}`);
     return targetTeam;

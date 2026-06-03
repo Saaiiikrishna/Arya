@@ -185,10 +185,10 @@ export default function DashboardPage() {
                 </div>
                 <span className="text-[10px] uppercase tracking-widest text-ink/60 leading-relaxed mt-auto">Platform telemetry & data</span>
               </Link>
-              <Link href="/admin/referrals" className="border border-hairline p-5 bg-white hover:border-terracotta hover:shadow-md shadow-sm transition-all group flex flex-col border-l-4 border-l-terracotta/30">
+              <Link href="/admin/referrals" className="border border-hairline p-5 bg-white hover:border-terracotta-warm hover:shadow-md shadow-sm transition-all group flex flex-col border-l-4 border-l-terracotta-warm/30">
                 <div className="flex items-center gap-3 mb-3">
-                  <span className="group-hover:scale-110 transition-transform text-ink/40 group-hover:text-terracotta"><UserPlus size={22} strokeWidth={1.5} /></span>
-                  <span className="font-serif text-lg font-bold group-hover:text-terracotta transition-colors">Referrals</span>
+                  <span className="group-hover:scale-110 transition-transform text-ink/40 group-hover:text-terracotta-warm"><UserPlus size={22} strokeWidth={1.5} /></span>
+                  <span className="font-serif text-lg font-bold group-hover:text-terracotta-warm transition-colors">Referrals</span>
                 </div>
                 <span className="text-[10px] uppercase tracking-widest text-ink/60 leading-relaxed mt-auto">Affiliate engine & tracking</span>
               </Link>
@@ -247,9 +247,9 @@ export default function DashboardPage() {
                       <span>{activeBatch.currentCount} / {activeBatch.capacity}</span>
                     </div>
                     <div className="h-2 bg-parchment w-full shadow-inner rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-forest transition-all" 
-                        style={{ width: `${Math.min(100, (activeBatch.currentCount / activeBatch.capacity) * 100)}%` }} 
+                      <div
+                        className="h-full bg-saffron transition-all"
+                        style={{ width: `${Math.min(100, (activeBatch.currentCount / activeBatch.capacity) * 100)}%` }}
                       />
                     </div>
                   </div>
@@ -258,7 +258,7 @@ export default function DashboardPage() {
                     <span className="font-serif text-lg font-bold">{activeBatch.teamCount}</span>
                   </div>
                   <div className="pt-4 border-t border-hairline">
-                    <Link href={`/admin/batches/${activeBatch.id}`} className="bg-ink hover:bg-terracotta text-white transition-colors text-[10px] uppercase tracking-widest px-4 py-3 text-center block font-bold w-full shadow-sm">
+                    <Link href={`/admin/batches/${activeBatch.id}`} className="bg-saffron hover:bg-saffron-deep text-white transition-colors text-[10px] uppercase tracking-widest px-4 py-3 text-center block font-bold w-full shadow-sm">
                       Manage Manifest →
                     </Link>
                   </div>

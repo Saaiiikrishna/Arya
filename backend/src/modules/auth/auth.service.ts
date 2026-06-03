@@ -3,11 +3,12 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 import * as bcrypt from 'bcrypt';
-import { randomInt, createHash } from 'crypto';
+import { randomInt, createHash, timingSafeEqual } from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
 import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../../prisma';
 import { EmailService } from '../email/email.service';
+import { NotificationService } from '../notifications/notification.service';
 import { LoginDto, CreateAdminDto } from './dto';
 
 export interface JwtPayload {
@@ -27,6 +28,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly emailService: EmailService,
+    private readonly notifications: NotificationService,
   ) {
     const port = this.configService.get<number>('REDIS_PORT', 6379);
     const password = this.configService.get<string>('REDIS_PASSWORD');
@@ -82,90 +84,97 @@ export class AuthService {
   async googleLogin(token: string) {
     const client = new OAuth2Client(this.configService.get<string>('GOOGLE_CLIENT_ID'));
 
+    // Only the external token verification is wrapped: it throws opaque,
+    // low-level errors that we must not leak. Everything after runs outside
+    // the catch so genuine failures (e.g. disabled account, DB errors) surface
+    // as proper HttpExceptions instead of being masked.
+    let payload;
     try {
       const ticket = await client.verifyIdToken({
         idToken: token,
         audience: this.configService.get<string>('GOOGLE_CLIENT_ID'),
       });
-      const payload = ticket.getPayload();
-      if (!payload || !payload.email) throw new UnauthorizedException('Invalid Google Token');
+      payload = ticket.getPayload();
+    } catch (e) {
+      this.logger.warn(`Google ID token verification failed: ${(e as any)?.message}`);
+      throw new UnauthorizedException('Google Authentication Failed');
+    }
 
-      const email = payload.email;
-      const avatarUrl = payload.picture;
-      let admin = await this.prisma.admin.findUnique({ where: { email } });
+    if (!payload || !payload.email) throw new UnauthorizedException('Invalid Google Token');
+    // Reject unverified Google emails: an unverified address could belong to
+    // someone else, so we must not auto-provision or log in against it.
+    if (payload.email_verified !== true) {
+      throw new UnauthorizedException('Google email is not verified');
+    }
 
-      if (admin) {
-        if (!admin.isActive) throw new UnauthorizedException('Account is disabled');
-        
-        // Update avatar if changed
-        if (avatarUrl && (admin as any).avatarUrl !== avatarUrl) {
-          admin = await this.prisma.admin.update({
-            where: { id: admin.id },
-            data: { avatarUrl } as any,
-          });
-        }
+    const email = payload.email;
+    const avatarUrl = payload.picture;
+    let admin = await this.prisma.admin.findUnique({ where: { email } });
 
-        const jwtPayload: JwtPayload = { sub: (admin as any).id, email: (admin as any).email, role: (admin as any).role };
-        const refreshToken = this.signRefreshToken(jwtPayload);
-        await this.storeRefreshToken((admin as any).id, refreshToken);
-        return {
-          accessToken: this.jwtService.sign(jwtPayload),
-          refreshToken,
-          admin: {
-            id: (admin as any).id,
-            email: (admin as any).email,
-            firstName: (admin as any).firstName,
-            lastName: (admin as any).lastName,
-            role: (admin as any).role,
-            avatarUrl: (admin as any).avatarUrl
-          },
-        };
-      }
+    if (admin) {
+      if (!admin.isActive) throw new UnauthorizedException('Account is disabled');
 
-      // If not admin, check/create Applicant
-      let applicant = await this.prisma.applicant.findUnique({ where: { email } });
-      if (!applicant) {
-        let batch = await this.prisma.batch.findFirst({ where: { status: 'FILLING' } as any, orderBy: { batchNumber: 'asc' } });
-        if (!batch) {
-          const lastBatch = await this.prisma.batch.findFirst({ orderBy: { batchNumber: 'desc' } });
-          batch = await this.prisma.batch.create({ data: { batchNumber: ((lastBatch as any)?.batchNumber ?? 0) + 1 } as any });
-        }
-        applicant = await this.prisma.applicant.create({
-          data: {
-            email,
-            firstName: payload.given_name || 'Founder',
-            lastName: payload.family_name || '',
-            accessToken: uuidv4(),
-            batchId: (batch as any).id,
-            avatarUrl,
-          } as any
-        });
-      } else if (avatarUrl && (applicant as any).avatarUrl !== avatarUrl) {
-        applicant = await this.prisma.applicant.update({
-          where: { id: (applicant as any).id },
+      // Update avatar if changed
+      if (avatarUrl && (admin as any).avatarUrl !== avatarUrl) {
+        admin = await this.prisma.admin.update({
+          where: { id: admin.id },
           data: { avatarUrl } as any,
         });
       }
 
-      const jwtPayload: JwtPayload = { sub: (applicant as any).id, email: (applicant as any).email, role: 'APPLICANT' };
+      const jwtPayload: JwtPayload = { sub: (admin as any).id, email: (admin as any).email, role: (admin as any).role };
       const refreshToken = this.signRefreshToken(jwtPayload);
-      await this.storeRefreshToken((applicant as any).id, refreshToken);
+      await this.storeRefreshToken((admin as any).id, refreshToken);
       return {
         accessToken: this.jwtService.sign(jwtPayload),
         refreshToken,
         admin: {
-          id: (applicant as any).id,
-          email: (applicant as any).email,
-          firstName: (applicant as any).firstName,
-          lastName: (applicant as any).lastName,
-          role: 'APPLICANT',
-          avatarUrl: (applicant as any).avatarUrl
+          id: (admin as any).id,
+          email: (admin as any).email,
+          firstName: (admin as any).firstName,
+          lastName: (admin as any).lastName,
+          role: (admin as any).role,
+          avatarUrl: (admin as any).avatarUrl
         },
       };
-    } catch (e) {
-      console.error('Google Login Error:', e);
-      throw new UnauthorizedException('Google Authentication Failed');
     }
+
+    // If not admin, check/create Applicant
+    let applicant = await this.prisma.applicant.findUnique({ where: { email } });
+    if (!applicant) {
+      const batch = await this.getOrCreateFillingBatch();
+      applicant = await this.prisma.applicant.create({
+        data: {
+          email,
+          firstName: payload.given_name || 'Founder',
+          lastName: payload.family_name || '',
+          accessToken: uuidv4(),
+          batchId: (batch as any).id,
+          avatarUrl,
+        } as any
+      });
+    } else if (avatarUrl && (applicant as any).avatarUrl !== avatarUrl) {
+      applicant = await this.prisma.applicant.update({
+        where: { id: (applicant as any).id },
+        data: { avatarUrl } as any,
+      });
+    }
+
+    const jwtPayload: JwtPayload = { sub: (applicant as any).id, email: (applicant as any).email, role: 'APPLICANT' };
+    const refreshToken = this.signRefreshToken(jwtPayload);
+    await this.storeRefreshToken((applicant as any).id, refreshToken);
+    return {
+      accessToken: this.jwtService.sign(jwtPayload),
+      refreshToken,
+      admin: {
+        id: (applicant as any).id,
+        email: (applicant as any).email,
+        firstName: (applicant as any).firstName,
+        lastName: (applicant as any).lastName,
+        role: 'APPLICANT',
+        avatarUrl: (applicant as any).avatarUrl
+      },
+    };
   }
 
   async refreshToken(token: string) {
@@ -288,6 +297,32 @@ export class AuthService {
 
   // ─── OTP Authentication ────────────────────────
 
+  /**
+   * Find the current FILLING batch or atomically create one. A
+   * transaction-scoped advisory lock serializes concurrent sign-ups so two
+   * requests can't mint duplicate batch numbers (the @unique would otherwise
+   * crash one request with P2002).
+   */
+  private async getOrCreateFillingBatch(): Promise<{ id: string }> {
+    const existing = await this.prisma.batch.findFirst({
+      where: { status: 'FILLING' } as any,
+      orderBy: { batchNumber: 'asc' },
+    });
+    if (existing) return existing as any;
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('aryavartham_batch_create'))`;
+      const inLock = await tx.batch.findFirst({
+        where: { status: 'FILLING' } as any,
+        orderBy: { batchNumber: 'asc' },
+      });
+      if (inLock) return inLock as any;
+      const lastBatch = await tx.batch.findFirst({ orderBy: { batchNumber: 'desc' } });
+      return tx.batch.create({
+        data: { batchNumber: ((lastBatch as any)?.batchNumber ?? 0) + 1 } as any,
+      }) as any;
+    });
+  }
+
   async sendOtp(email: string) {
     if (!email || !email.includes('@')) {
       throw new BadRequestException('Valid email is required');
@@ -306,21 +341,33 @@ export class AuthService {
       await this.emailService.sendEmail({
         to: normalizedEmail,
         subject: 'Your Aryavartham Login Code',
-        htmlBody: `
-          <div style="font-family: Georgia, serif; max-width: 480px; margin: 0 auto; padding: 40px; background: #faf8f5; border: 1px solid #e8e4de;">
-            <h2 style="color: #1a3a2a; margin-bottom: 8px;">Aryavartham</h2>
-            <p style="color: #6b5b4f; font-size: 12px; text-transform: uppercase; letter-spacing: 0.15em;">The Founder's Club</p>
-            <hr style="border: none; border-top: 1px solid #e8e4de; margin: 24px 0;" />
-            <p style="color: #2a2a2a;">Your verification code is:</p>
-            <div style="text-align: center; padding: 24px; margin: 16px 0; background: #1a3a2a; color: #faf8f5;">
-              <span style="font-size: 32px; font-family: monospace; letter-spacing: 8px; font-weight: bold;">${otp}</span>
-            </div>
-            <p style="color: #6b5b4f; font-size: 13px;">This code expires in 5 minutes. Do not share it with anyone.</p>
+        htmlBody: this.emailService.buildBrandedEmail(`
+          <p style="margin:0 0 16px;">Your verification code is:</p>
+          <div style="text-align:center;padding:24px;margin:8px 0 20px;background:#133022;border-top:3px solid #E85D04;">
+            <span style="font-family:'Courier New',monospace;font-size:32px;letter-spacing:8px;font-weight:bold;color:#FEF9F0;">${otp}</span>
           </div>
-        `,
+          <p style="margin:0;color:#6b573b;font-size:13px;">This code expires in 5 minutes. Do not share it with anyone.</p>
+        `),
       });
     } catch (error) {
       this.logger.warn(`Failed to send OTP email to ${normalizedEmail}: ${(error as any)?.message}`);
+    }
+
+    // Also send the OTP over WhatsApp if we can resolve a phone for this email.
+    // Best-effort: notifications.otpWhatsApp already swallows its own errors.
+    try {
+      const applicant = await this.prisma.applicant.findUnique({ where: { email: normalizedEmail } });
+      if (applicant && (applicant as any).phone) {
+        await this.notifications.otpWhatsApp((applicant as any).phone, otp);
+      }
+    } catch (error) {
+      this.logger.warn(`Failed to send WhatsApp OTP to ${normalizedEmail}: ${(error as any)?.message}`);
+    }
+
+    // Expose the OTP only for the dedicated test account so the frontend
+    // test-OTP display can render it; never leak it for real users.
+    if (normalizedEmail === 'test@arya.com') {
+      return { success: true, message: 'OTP sent to your email', otp };
     }
 
     return { success: true, message: 'OTP sent to your email' };
@@ -338,12 +385,27 @@ export class AuthService {
       throw new UnauthorizedException('No OTP found for this email or it has expired. Please request a new one.');
     }
 
-    if (storedOtp !== otp) {
+    // Constant-time comparison + bounded attempts to defeat brute force.
+    const storedBuf = Buffer.from(storedOtp);
+    const givenBuf = Buffer.from(otp ?? '');
+    const matches =
+      storedBuf.length === givenBuf.length && timingSafeEqual(storedBuf, givenBuf);
+    if (!matches) {
+      const attemptsKey = `otp_attempts:${normalizedEmail}`;
+      const attempts = await this.redis.incr(attemptsKey);
+      if (attempts === 1) await this.redis.expire(attemptsKey, 300);
+      if (attempts >= 5) {
+        // Burn the OTP after too many wrong guesses — forces a fresh request.
+        await this.redis.del(`otp:${normalizedEmail}`);
+        await this.redis.del(attemptsKey);
+        throw new UnauthorizedException('Too many incorrect attempts. Please request a new code.');
+      }
       throw new UnauthorizedException('Invalid OTP. Please try again.');
     }
 
-    // OTP is valid - clear it
+    // OTP is valid - clear it and the attempt counter
     await this.redis.del(`otp:${normalizedEmail}`);
+    await this.redis.del(`otp_attempts:${normalizedEmail}`);
 
     // Check if admin
     const admin = await this.prisma.admin.findUnique({ where: { email: normalizedEmail } });
@@ -369,11 +431,7 @@ export class AuthService {
     // Find or create applicant
     let applicant = await this.prisma.applicant.findUnique({ where: { email: normalizedEmail } });
     if (!applicant) {
-      let batch = await this.prisma.batch.findFirst({ where: { status: 'FILLING' } as any, orderBy: { batchNumber: 'asc' } });
-      if (!batch) {
-        const lastBatch = await this.prisma.batch.findFirst({ orderBy: { batchNumber: 'desc' } });
-        batch = await this.prisma.batch.create({ data: { batchNumber: ((lastBatch as any)?.batchNumber ?? 0) + 1 } as any });
-      }
+      const batch = await this.getOrCreateFillingBatch();
       applicant = await this.prisma.applicant.create({
         data: {
           email: normalizedEmail,

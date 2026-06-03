@@ -11,21 +11,64 @@ export default function ElectionCard({ team }: { team: any }) {
   const [pitchContent, setPitchContent] = useState('');
   const [selectedNominee, setSelectedNominee] = useState<string | null>(null);
 
-  // If there's no active election, don't render anything
-  if (!election || election.status === 'COMPLETED') return null;
+  // If there's no election at all, don't render anything.
+  if (!election) return null;
+
+  // Completed election — show the result (winner + completed date) instead of
+  // hiding the card entirely.
+  if (election.status === 'COMPLETED') {
+    const winnerId = election.winnerId || team?.leaderId;
+    const members: any[] = team?.members || [];
+    const winner = members.find((m: any) => m.id === winnerId);
+    const winnerName =
+      winner?.name ||
+      [winner?.firstName, winner?.lastName].filter(Boolean).join(' ').trim() ||
+      election.winnerName ||
+      'Team Leader';
+    const completedDate = election.completedAt
+      ? new Date(election.completedAt).toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        })
+      : null;
+
+    return (
+      <section className="mt-12">
+        <h2 className="font-serif text-2xl font-bold mb-6 flex items-center gap-3">
+          <Vote className="w-6 h-6 text-forest" />
+          Team Election Result
+        </h2>
+        <div className="bg-white border-2 border-forest/20 p-8 relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-1 h-full bg-forest" />
+          <p className="text-sm uppercase tracking-widest text-forest font-medium mb-2">
+            Election Completed
+          </p>
+          <h3 className="font-serif text-xl font-bold mb-3">
+            {winnerName} elected as Team Leader
+          </h3>
+          {completedDate && (
+            <p className="text-ink/60 leading-relaxed">
+              Results finalized on {completedDate}.
+            </p>
+          )}
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="mt-12">
       <h2 className="font-serif text-2xl font-bold mb-6 flex items-center gap-3">
-        <Vote className="w-6 h-6 text-terracotta" />
+        <Vote className="w-6 h-6 text-terracotta-warm" />
         Active Team Election
       </h2>
-      <div className="bg-white border-2 border-terracotta/20 p-8 relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-1 h-full bg-terracotta" />
-        
+      <div className="bg-white border-2 border-terracotta-warm/20 p-8 relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-1 h-full bg-terracotta-warm" />
+
         <div className="flex justify-between items-start mb-6">
           <div>
-            <p className="text-sm uppercase tracking-widest text-terracotta font-medium mb-2">Phase: {election.status}</p>
+            <p className="text-sm uppercase tracking-widest text-saffron-deep font-medium mb-2">Phase: {election.status}</p>
             <h3 className="font-serif text-xl font-bold">
               {election.status === 'NOMINATION' ? 'Nominate Your Leader' : 'Cast Your Vote'}
             </h3>
@@ -40,7 +83,7 @@ export default function ElectionCard({ team }: { team: any }) {
 
         <a 
           href={`/hub/election/${election.id}`}
-          className="bg-terracotta hover:bg-terracotta/90 text-white text-[13px] uppercase tracking-widest py-3 px-6 transition-colors inline-flex items-center gap-2"
+          className="bg-saffron hover:bg-saffron-deep text-parchment text-[13px] uppercase tracking-widest py-3 px-6 transition-colors inline-flex items-center gap-2 shadow-pop"
         >
           Enter Election Portal
           <ArrowRight className="w-4 h-4" />

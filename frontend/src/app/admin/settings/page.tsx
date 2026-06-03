@@ -175,7 +175,7 @@ export default function AdminSettingsPage() {
             onClick={() => { setActiveTab(tab); setShowDetail(false); }}
             className={`px-6 py-3 text-xs uppercase tracking-widest font-semibold transition-colors border-b-2 -mb-px cursor-pointer ${
               activeTab === tab
-                ? 'border-forest text-forest'
+                ? 'border-saffron text-saffron-deep'
                 : 'border-transparent text-ink/40 hover:text-ink/80'
             }`}
           >
@@ -208,7 +208,7 @@ export default function AdminSettingsPage() {
                     disabled={saving}
                     className={`flex-1 p-6 border-2 transition-all cursor-pointer ${
                       logoMode === 'text'
-                        ? 'border-forest bg-forest/5'
+                        ? 'border-saffron bg-saffron/5'
                         : 'border-hairline hover:border-forest/30'
                     }`}
                   >
@@ -218,7 +218,7 @@ export default function AdminSettingsPage() {
                         <span className="text-[10px] font-serif italic text-forest mt-1 leading-none">- The Founder&apos;s Club</span>
                       </div>
                       <span className={`text-xs uppercase tracking-widest font-semibold ${
-                        logoMode === 'text' ? 'text-forest' : 'text-ink/40'
+                        logoMode === 'text' ? 'text-saffron-deep' : 'text-ink/40'
                       }`}>
                         {logoMode === 'text' ? '✓ Active' : 'Text Logo'}
                       </span>
@@ -230,7 +230,7 @@ export default function AdminSettingsPage() {
                     disabled={saving}
                     className={`flex-1 p-6 border-2 transition-all cursor-pointer ${
                       logoMode === 'svg'
-                        ? 'border-forest bg-forest/5'
+                        ? 'border-saffron bg-saffron/5'
                         : 'border-hairline hover:border-forest/30'
                     }`}
                   >
@@ -238,7 +238,7 @@ export default function AdminSettingsPage() {
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src="/logo-full.svg" alt="SVG Logo" className="h-10" />
                       <span className={`text-xs uppercase tracking-widest font-semibold ${
-                        logoMode === 'svg' ? 'text-forest' : 'text-ink/40'
+                        logoMode === 'svg' ? 'text-saffron-deep' : 'text-ink/40'
                       }`}>
                         {logoMode === 'svg' ? '✓ Active' : 'SVG Logo'}
                       </span>
@@ -290,7 +290,7 @@ export default function AdminSettingsPage() {
                   <button
                     onClick={savePricing}
                     disabled={saving}
-                    className="bg-forest text-parchment px-6 py-2 text-xs uppercase tracking-widest font-semibold hover:bg-forest/90 transition-colors disabled:opacity-50"
+                    className="bg-saffron text-parchment px-6 py-2 text-xs uppercase tracking-widest font-semibold hover:bg-saffron-deep transition-colors disabled:opacity-50"
                   >
                     {saving ? 'Saving...' : 'Save Pricing Structure'}
                   </button>
@@ -380,7 +380,7 @@ export default function AdminSettingsPage() {
                 </div>
                 <div className="border border-hairline bg-white p-6">
                   <div className="text-[11px] uppercase tracking-widest text-ink/40 mb-3">Today&apos;s Views</div>
-                  <div className="font-serif text-4xl text-terracotta">{summary.todayViews.toLocaleString()}</div>
+                  <div className="font-serif text-4xl text-terracotta-warm">{summary.todayViews.toLocaleString()}</div>
                 </div>
               </div>
 
@@ -390,7 +390,7 @@ export default function AdminSettingsPage() {
                   <h2 className="font-serif text-2xl font-bold">Top Pages</h2>
                   <button
                     onClick={handleViewDetails}
-                    className="bg-ink hover:bg-terracotta text-white transition-colors text-xs uppercase tracking-widest px-6 py-3 font-semibold cursor-pointer"
+                    className="bg-ink hover:bg-terracotta-warm text-white transition-colors text-xs uppercase tracking-widest px-6 py-3 font-semibold cursor-pointer"
                   >
                     View All Details →
                   </button>
@@ -455,7 +455,7 @@ export default function AdminSettingsPage() {
           <div className="flex items-center justify-between">
             <button
               onClick={() => setShowDetail(false)}
-              className="text-xs uppercase tracking-widest text-forest hover:text-terracotta transition-colors font-semibold cursor-pointer"
+              className="text-xs uppercase tracking-widest text-forest hover:text-terracotta-warm transition-colors font-semibold cursor-pointer"
             >
               ← Back to Summary
             </button>

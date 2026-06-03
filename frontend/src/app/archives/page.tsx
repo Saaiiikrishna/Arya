@@ -22,7 +22,7 @@ export default function ArchivesPage() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'FINALIZED': case 'PRODUCTION': return 'text-forest bg-forest/10 border-forest/20';
-      case 'FILLING': return 'text-terracotta bg-terracotta/10 border-terracotta/20';
+      case 'FILLING': return 'text-marigold bg-marigold/10 border-marigold/20';
       default: return 'text-ink/60 bg-ink/5 border-ink/10';
     }
   };
@@ -85,8 +85,8 @@ export default function ArchivesPage() {
                 {/* Capacity Bar */}
                 <div className="px-8 pb-6">
                   <div className="h-1.5 w-full bg-parchment">
-                    <div 
-                      className="h-full bg-forest transition-all"
+                    <div
+                      className="h-full bg-saffron transition-all"
                       style={{ width: `${Math.min(100, (batch.currentCount / batch.capacity) * 100)}%` }}
                     />
                   </div>

@@ -123,12 +123,12 @@ export default function AdminEquityPage() {
 
   const statusBadge = (status: string) => {
     const map: Record<string, { className: string; icon: any }> = {
-      FORMATION: { className: 'bg-yellow-100 text-yellow-800 border-yellow-200', icon: Building2 },
-      INCORPORATED: { className: 'bg-blue-100 text-blue-800 border-blue-200', icon: Building2 },
-      ACTIVE: { className: 'bg-forest/10 text-forest border-forest/20', icon: Timer },
-      SUSPENDED: { className: 'bg-red-100 text-red-800 border-red-200', icon: AlertTriangle },
-      HANDED_OVER: { className: 'bg-green-100 text-green-800 border-green-200', icon: CheckCircle },
-      DISSOLVED: { className: 'bg-gray-100 text-gray-600 border-gray-200', icon: AlertTriangle },
+      FORMATION: { className: 'bg-marigold/15 text-warning border-marigold/40', icon: Building2 },
+      INCORPORATED: { className: 'bg-forest/10 text-forest border-forest/20', icon: Building2 },
+      ACTIVE: { className: 'bg-saffron/10 text-saffron-deep border-saffron/20', icon: Timer },
+      SUSPENDED: { className: 'bg-terracotta/10 text-terracotta border-terracotta/20', icon: AlertTriangle },
+      HANDED_OVER: { className: 'bg-success/10 text-success border-success/25', icon: CheckCircle },
+      DISSOLVED: { className: 'bg-ink/5 text-ink/50 border-ink/15', icon: AlertTriangle },
     };
     const s = map[status] || map['FORMATION'];
     const Icon = s.icon;
@@ -163,13 +163,9 @@ export default function AdminEquityPage() {
         <button
           onClick={() => {
             setPanel('create');
-            // Load teams for dropdown
-            api.getEquityCompanies().then(() => {});
-            fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/batches`, {
-              headers: { 'Authorization': `Bearer ${document.cookie.match(/token=([^;]*)/)?.[1] || localStorage.getItem('admin_token') || ''}` },
-            })
-              .then(r => r.json())
-              .then(batches => {
+            // Load teams for the dropdown via the authenticated API client.
+            api.getBatches()
+              .then((batches: any) => {
                 const allTeams: any[] = [];
                 if (Array.isArray(batches)) {
                   batches.forEach((b: any) => {
@@ -180,7 +176,7 @@ export default function AdminEquityPage() {
               })
               .catch(() => {});
           }}
-          className="px-6 py-3 bg-forest text-white text-[10px] uppercase tracking-widest font-bold hover:bg-forest/90 transition-colors flex items-center gap-2"
+          className="px-6 py-3 bg-saffron text-parchment text-[10px] uppercase tracking-widest font-bold hover:bg-saffron-deep transition-colors shadow-pop flex items-center gap-2"
         >
           <Plus className="w-4 h-4" /> Register Company
         </button>
@@ -197,7 +193,7 @@ export default function AdminEquityPage() {
         </div>
         <div className="border border-hairline bg-white p-6">
           <div className="flex items-center gap-3 mb-3">
-            <Timer className="w-5 h-5 text-terracotta/60" />
+            <Timer className="w-5 h-5 text-terracotta-warm/60" />
             <span className="text-[10px] uppercase tracking-widest text-ink/40 font-bold">Avg Days Elapsed</span>
           </div>
           <div className="font-serif text-3xl font-bold">{stats?.avgDaysElapsed || 0}<span className="text-lg text-ink/40">/1000</span></div>
@@ -261,7 +257,7 @@ export default function AdminEquityPage() {
                 onClick={() => setFilterStatus(s)}
                 className={`px-4 py-2 text-[10px] uppercase tracking-widest font-bold border transition-colors ${
                   filterStatus === s
-                    ? 'border-forest bg-forest text-white'
+                    ? 'border-saffron bg-saffron text-parchment'
                     : 'border-hairline bg-white text-ink/60 hover:border-forest/30'
                 }`}
               >
@@ -301,7 +297,7 @@ export default function AdminEquityPage() {
                     <div className="flex items-center gap-1">
                       <div className="h-2 flex-1 bg-parchment flex">
                         <div className="h-full bg-forest" style={{ width: `${c.platformEquityPct}%` }}></div>
-                        <div className="h-full bg-terracotta" style={{ width: `${c.foundersEquityPct}%` }}></div>
+                        <div className="h-full bg-terracotta-warm" style={{ width: `${c.foundersEquityPct}%` }}></div>
                       </div>
                     </div>
                     <div className="flex justify-between text-[9px] text-ink/40 mt-1">
@@ -312,9 +308,9 @@ export default function AdminEquityPage() {
                   <div className="col-span-2">
                     {c.timerStartDate ? (
                       <div>
-                        <div className="text-xs font-bold text-forest">Day {c.daysElapsed}/1000</div>
+                        <div className="text-xs font-bold text-saffron-deep">Day {c.daysElapsed}/1000</div>
                         <div className="h-1.5 bg-parchment mt-1">
-                          <div className="h-full bg-forest transition-all" style={{ width: `${Math.min(100, (c.daysElapsed / 1000) * 100)}%` }}></div>
+                          <div className="h-full bg-saffron transition-all" style={{ width: `${Math.min(100, (c.daysElapsed / 1000) * 100)}%` }}></div>
                         </div>
                       </div>
                     ) : (
@@ -369,7 +365,7 @@ export default function AdminEquityPage() {
                       <button
                         onClick={() => startTimer(detail.id)}
                         disabled={actionLoading}
-                        className="px-4 py-2 bg-forest text-white text-[10px] uppercase tracking-widest font-bold hover:bg-forest/90 disabled:opacity-50 flex items-center gap-2"
+                        className="px-4 py-2 bg-saffron text-parchment text-[10px] uppercase tracking-widest font-bold hover:bg-saffron-deep shadow-pop disabled:opacity-50 flex items-center gap-2"
                       >
                         <Play className="w-3 h-3" /> Start Timer
                       </button>
@@ -394,10 +390,10 @@ export default function AdminEquityPage() {
                     <h3 className="font-serif text-xl font-bold flex items-center gap-2">
                       <Clock className="w-5 h-5" /> 1000-Day Timer
                     </h3>
-                    <span className="text-terracotta font-serif text-2xl font-bold">{detail.progressPct}%</span>
+                    <span className="text-saffron font-serif text-2xl font-bold">{detail.progressPct}%</span>
                   </div>
                   <div className="h-3 bg-parchment/10 w-full mb-4">
-                    <div className="h-full bg-gradient-to-r from-terracotta to-forest transition-all" style={{ width: `${detail.progressPct}%` }}></div>
+                    <div className="h-full bg-gradient-to-r from-saffron to-forest transition-all" style={{ width: `${detail.progressPct}%` }}></div>
                   </div>
                   <div className="grid grid-cols-3 gap-4 text-center">
                     <div>
@@ -423,7 +419,7 @@ export default function AdminEquityPage() {
                   <h3 className="font-serif text-lg font-bold mb-4">Current Equity Split</h3>
                   <div className="flex items-center gap-4 mb-6">
                     <div className="w-32 h-32 rounded-full border-8 border-forest relative flex items-center justify-center"
-                         style={{ borderColor: `conic-gradient(#2D5016 ${detail.platformEquityPct * 3.6}deg, #B7410E ${detail.platformEquityPct * 3.6}deg)` }}>
+                         style={{ borderColor: `conic-gradient(#2D5016 ${detail.platformEquityPct * 3.6}deg, #C94A38 ${detail.platformEquityPct * 3.6}deg)` }}>
                       <div className="text-center">
                         <div className="font-serif text-xl font-bold text-forest">{detail.platformEquityPct}%</div>
                         <div className="text-[8px] uppercase tracking-widest text-ink/40">Platform</div>
@@ -435,7 +431,7 @@ export default function AdminEquityPage() {
                         <span className="text-xs">Platform: <strong>{detail.platformEquityPct}%</strong></span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-terracotta"></div>
+                        <div className="w-3 h-3 bg-terracotta-warm"></div>
                         <span className="text-xs">Founders: <strong>{detail.foundersEquityPct}%</strong></span>
                       </div>
                     </div>
@@ -451,7 +447,7 @@ export default function AdminEquityPage() {
                         <div>
                           <span className="font-bold">{h.holderName}</span>
                           <span className={`ml-2 px-1.5 py-0.5 text-[8px] uppercase tracking-widest font-bold border ${
-                            h.holderType === 'PLATFORM' ? 'bg-forest/10 text-forest border-forest/20' : 'bg-terracotta/10 text-terracotta border-terracotta/20'
+                            h.holderType === 'PLATFORM' ? 'bg-forest/10 text-forest border-forest/20' : 'bg-terracotta-warm/10 text-terracotta-warm border-terracotta-warm/20'
                           }`}>{h.holderType}</span>
                         </div>
                         <div className="text-right">
@@ -476,9 +472,9 @@ export default function AdminEquityPage() {
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
                             <span className={`px-2 py-0.5 text-[8px] uppercase tracking-widest font-bold border ${
-                              e.eventType === 'HANDOVER' ? 'bg-green-100 text-green-800 border-green-200' :
-                              e.eventType === 'GRANT' ? 'bg-blue-100 text-blue-800 border-blue-200' :
-                              'bg-gray-100 text-gray-600 border-gray-200'
+                              e.eventType === 'HANDOVER' ? 'bg-success/10 text-success border-success/25' :
+                              e.eventType === 'GRANT' ? 'bg-info/10 text-info border-info/25' :
+                              'bg-ink/5 text-ink/50 border-ink/15'
                             }`}>{e.eventType}</span>
                             {e.dayNumber !== null && <span className="text-[10px] text-ink/40">Day {e.dayNumber}</span>}
                           </div>
@@ -606,7 +602,7 @@ export default function AdminEquityPage() {
                 <button
                   onClick={handleCreate}
                   disabled={actionLoading}
-                  className="px-8 py-3 bg-forest text-white text-[10px] uppercase tracking-widest font-bold hover:bg-forest/90 disabled:opacity-50 transition-colors"
+                  className="px-8 py-3 bg-saffron text-parchment text-[10px] uppercase tracking-widest font-bold hover:bg-saffron-deep shadow-pop disabled:opacity-50 transition-colors"
                 >
                   {actionLoading ? 'Creating...' : 'Create Company'}
                 </button>

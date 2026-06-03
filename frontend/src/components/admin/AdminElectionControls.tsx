@@ -49,7 +49,7 @@ export default function AdminElectionControls({ teamId }: Props) {
   return (
     <div className="mt-4 pt-4 border-t border-hairline">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-[10px] uppercase tracking-widest text-terracotta font-bold">
+        <span className="text-[10px] uppercase tracking-widest text-saffron-deep font-bold">
           🗳 Election: {election.status}
         </span>
         <span className="text-[10px] text-ink/40 uppercase tracking-widest">
@@ -59,7 +59,7 @@ export default function AdminElectionControls({ teamId }: Props) {
       {election.status !== 'COMPLETED' && (
         <button
           onClick={handleAdvance}
-          className="w-full text-[10px] uppercase tracking-widest font-bold border border-terracotta text-terracotta px-3 py-2 hover:bg-terracotta hover:text-white transition-colors mt-2"
+          className="w-full text-[10px] uppercase tracking-widest font-bold border border-saffron text-saffron-deep px-3 py-2 hover:bg-saffron hover:text-white transition-colors mt-2"
         >
           {election.status === 'NOMINATION' ? 'Advance to Voting →' : 'Finalize Results →'}
         </button>

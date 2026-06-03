@@ -5,15 +5,15 @@ import { api } from '@/lib/api';
 import Link from 'next/link';
 
 const STATUS_CONFIG: Record<string, { bg: string; text: string; border: string; label: string }> = {
-  PENDING:   { bg: 'bg-amber-50',      text: 'text-amber-700',    border: 'border-amber-200', label: 'Pending' },
-  ELIGIBLE:  { bg: 'bg-emerald-50',    text: 'text-emerald-700',  border: 'border-emerald-200', label: 'Approved' },
-  INELIGIBLE:{ bg: 'bg-red-50',        text: 'text-red-700',      border: 'border-red-200', label: 'Ineligible' },
-  ACTIVE:    { bg: 'bg-forest/10',     text: 'text-forest',       border: 'border-forest/20', label: 'Active' },
-  REMOVED:   { bg: 'bg-terracotta/10', text: 'text-terracotta',   border: 'border-terracotta/20', label: 'Rejected' },
-  CONSENTED: { bg: 'bg-blue-50',       text: 'text-blue-700',     border: 'border-blue-200', label: 'Consented' },
-  FINALIZED: { bg: 'bg-purple-50',     text: 'text-purple-700',   border: 'border-purple-200', label: 'Finalized' },
-  TRAINING:  { bg: 'bg-indigo-50',     text: 'text-indigo-700',   border: 'border-indigo-200', label: 'Training' },
-  HELD:      { bg: 'bg-slate-100',     text: 'text-slate-600',    border: 'border-slate-300', label: 'On Hold' },
+  PENDING:   { bg: 'bg-marigold/15',        text: 'text-warning',         border: 'border-marigold/40', label: 'Pending' },
+  ELIGIBLE:  { bg: 'bg-forest/10',          text: 'text-forest',          border: 'border-forest/20', label: 'Approved' },
+  INELIGIBLE:{ bg: 'bg-terracotta/10',      text: 'text-terracotta',      border: 'border-terracotta/20', label: 'Ineligible' },
+  ACTIVE:    { bg: 'bg-saffron/10',         text: 'text-saffron-deep',    border: 'border-saffron/20', label: 'Active' },
+  REMOVED:   { bg: 'bg-terracotta/10',      text: 'text-terracotta',      border: 'border-terracotta/20', label: 'Rejected' },
+  CONSENTED: { bg: 'bg-success/10',         text: 'text-success',         border: 'border-success/25', label: 'Consented' },
+  FINALIZED: { bg: 'bg-terracotta-warm/10', text: 'text-terracotta-warm', border: 'border-terracotta-warm/25', label: 'Finalized' },
+  TRAINING:  { bg: 'bg-info/10',            text: 'text-info',            border: 'border-info/25', label: 'Training' },
+  HELD:      { bg: 'bg-ink/5',              text: 'text-ink/50',          border: 'border-ink/15', label: 'On Hold' },
 };
 
 export default function UsersPage() {
@@ -107,7 +107,7 @@ export default function UsersPage() {
           <h1 className="font-serif text-5xl font-bold leading-none">Users & Roster</h1>
         </div>
         <div className="text-left md:text-right">
-          <p className="text-3xl font-serif text-terracotta mb-1">{data.meta.total.toLocaleString()}</p>
+          <p className="text-3xl font-serif text-terracotta-warm mb-1">{data.meta.total.toLocaleString()}</p>
           <p className="text-sm text-ink/40 uppercase tracking-widest">Total Applicants</p>
         </div>
       </header>
@@ -123,7 +123,7 @@ export default function UsersPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <button type="submit" className="bg-ink hover:bg-terracotta text-white px-8 py-3 text-xs uppercase tracking-widest font-semibold transition-colors hidden sm:block">Search</button>
+          <button type="submit" className="bg-ink hover:bg-terracotta-warm text-white px-8 py-3 text-xs uppercase tracking-widest font-semibold transition-colors hidden sm:block">Search</button>
         </form>
         <div className="w-px h-12 bg-hairline hidden md:block"></div>
         <select
@@ -188,7 +188,7 @@ export default function UsersPage() {
                               {/* Approve: set ELIGIBLE */}
                               {user.status !== 'ELIGIBLE' && user.status !== 'REMOVED' && user.status !== 'ACTIVE' && (
                                 <button
-                                  className="text-[10px] uppercase tracking-widest font-bold text-emerald-600 hover:text-emerald-800 transition-colors px-2 py-1 border border-emerald-200 bg-emerald-50 hover:bg-emerald-100"
+                                  className="text-[10px] uppercase tracking-widest font-bold text-forest hover:text-forest-deep transition-colors px-2 py-1 border border-forest/20 bg-forest/10 hover:bg-forest/20"
                                   onClick={() => handleStatusAction(user.id, 'ELIGIBLE', 'Approve', `${user.firstName} ${user.lastName}`)}
                                 >
                                   ✓ Approve
@@ -197,7 +197,7 @@ export default function UsersPage() {
                               {/* Hold: set HELD */}
                               {user.status !== 'HELD' && user.status !== 'REMOVED' && (
                                 <button
-                                  className="text-[10px] uppercase tracking-widest font-bold text-slate-500 hover:text-slate-700 transition-colors px-2 py-1 border border-slate-200 bg-slate-50 hover:bg-slate-100"
+                                  className="text-[10px] uppercase tracking-widest font-bold text-ink/50 hover:text-ink transition-colors px-2 py-1 border border-ink/15 bg-ink/5 hover:bg-ink/10"
                                   onClick={() => handleStatusAction(user.id, 'HELD', 'Hold', `${user.firstName} ${user.lastName}`)}
                                 >
                                   ⏸ Hold
@@ -206,7 +206,7 @@ export default function UsersPage() {
                               {/* Reject: set REMOVED */}
                               {user.status !== 'REMOVED' && (
                                 <button
-                                  className="text-[10px] uppercase tracking-widest font-bold text-terracotta hover:text-red-800 transition-colors px-2 py-1 border border-terracotta/20 bg-terracotta/5 hover:bg-terracotta/10"
+                                  className="text-[10px] uppercase tracking-widest font-bold text-terracotta hover:text-terracotta-warm transition-colors px-2 py-1 border border-terracotta/20 bg-terracotta/5 hover:bg-terracotta/10"
                                   onClick={() => handleRemove(user.id, `${user.firstName} ${user.lastName}`)}
                                 >
                                   ✕ Reject
@@ -223,7 +223,7 @@ export default function UsersPage() {
                               )}
                               {/* Delete completely */}
                               <button
-                                className="text-[10px] uppercase tracking-widest font-bold text-red-700 hover:text-red-900 transition-colors px-2 py-1 border border-red-300 bg-red-100 hover:bg-red-200"
+                                className="text-[10px] uppercase tracking-widest font-bold text-parchment bg-terracotta hover:bg-[#7a0c03] transition-colors px-2 py-1 border border-terracotta"
                                 onClick={() => handleDelete(user.id, `${user.firstName} ${user.lastName}`)}
                               >
                                 ✕ Delete
@@ -327,7 +327,7 @@ export default function UsersPage() {
               const p = page <= 3 ? i + 1 : page - 2 + i;
               if (p > data.meta.totalPages) return null;
               return (
-                <button key={p} className={`px-4 py-2 border border-hairline text-xs uppercase tracking-widest transition-colors font-semibold ${p === page ? 'bg-forest text-white border-forest' : 'bg-white hover:bg-parchment'}`} onClick={() => setPage(p)}>
+                <button key={p} className={`px-4 py-2 border border-hairline text-xs uppercase tracking-widest transition-colors font-semibold ${p === page ? 'bg-saffron text-parchment border-saffron' : 'bg-white hover:bg-parchment'}`} onClick={() => setPage(p)}>
                   {p}
                 </button>
               );

@@ -119,6 +119,57 @@ export class WhatsappService {
     return success;
   }
 
+  // ─── Milestone helpers (centralize Meta template component formatting) ──
+  private body(...texts: (string | number)[]) {
+    return [{ type: 'body', parameters: texts.map((t) => ({ type: 'text', text: String(t ?? '') })) }];
+  }
+
+  /** Best-effort WhatsApp send to a possibly-missing phone; never throws. */
+  private async notify(
+    to: string | null | undefined,
+    templateName: string,
+    components: any[],
+    applicantId?: string,
+    subject?: string,
+  ): Promise<boolean> {
+    if (!to) return false;
+    let ok = false;
+    try {
+      ok = await this.sendMessage({ to, templateName, components });
+    } catch (e) {
+      this.logger.error(`WhatsApp ${templateName} failed: ${(e as any)?.message}`);
+    }
+    if (applicantId) await this.logNotification(applicantId, subject || templateName, `${templateName} → ${to}`, ok);
+    return ok;
+  }
+
+  sendOtpWhatsApp(to: string, otp: string) {
+    return this.notify(to, 'otp_verification', this.body(otp));
+  }
+  sendApplicationReceived(to: string, firstName: string, applicantId?: string) {
+    return this.notify(to, 'application_received', this.body(firstName), applicantId, 'Application Received');
+  }
+  sendInterviewScheduled(to: string, name: string, date: string, time: string, meetLink: string, applicantId?: string) {
+    return this.notify(to, 'interview_scheduled', this.body(name, date, time, meetLink), applicantId, 'Interview Scheduled');
+  }
+  sendInterviewDecision(to: string, selected: boolean, name: string, cohortNumber: string, applicantId?: string) {
+    return selected
+      ? this.notify(to, 'interview_decision_selected', this.body(name, cohortNumber), applicantId, 'Interview Decision')
+      : this.notify(to, 'interview_decision_rejected', this.body(name), applicantId, 'Interview Decision');
+  }
+  sendTeamAssignment(to: string, name: string, teamName: string, mentorName: string, applicantId?: string) {
+    return this.notify(to, 'team_assignment', this.body(name, teamName, mentorName), applicantId, 'Team Assignment');
+  }
+  sendDeadlineReminder(to: string, name: string, deadlineName: string, daysLeft: string, date: string, applicantId?: string) {
+    return this.notify(to, 'deadline_reminder', this.body(name, deadlineName, daysLeft, date), applicantId, 'Deadline Reminder');
+  }
+  sendPlatformAnnouncement(to: string, title: string, message: string, applicantId?: string) {
+    return this.notify(to, 'platform_announcement', this.body(title, message), applicantId, 'Announcement');
+  }
+  sendBatchOpening(to: string, batchNumber: string, applyUrl: string) {
+    return this.notify(to, 'batch_opening', this.body(batchNumber, applyUrl));
+  }
+
   private async logNotification(applicantId: string, subject: string, body: string, success: boolean) {
     try {
       await this.prisma.notification.create({

@@ -192,7 +192,7 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
           <div className="flex items-center gap-4 mt-4">
             <span className={`px-3 py-1 text-[10px] uppercase tracking-widest font-bold border ${
               batch.status === 'PRODUCTION'
-                ? 'bg-forest/10 text-forest border-forest/20'
+                ? 'bg-saffron/10 text-saffron-deep border-saffron/20'
                 : 'bg-parchment text-ink/60 border-ink/20'
             }`}>
               {batch.status.replace(/_/g, ' ')}
@@ -230,7 +230,7 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
           )}
           {teams.length > 0 && ['TEAM_FORMATION', 'PROCESSING'].includes(batch.status) && (
             <button
-              className="bg-terracotta text-white px-6 py-3 text-xs uppercase tracking-widest font-semibold hover:bg-terracotta/90 transition-colors"
+              className="bg-saffron text-parchment px-6 py-3 text-xs uppercase tracking-widest font-semibold hover:bg-saffron-deep transition-colors"
               onClick={() => setShowElectionModal(true)}
               disabled={!!actionLoading}
             >
@@ -245,7 +245,7 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
           </button>
           {batch.status === 'FINALIZED' && (
             <button
-              className="bg-forest hover:opacity-90 text-white px-6 py-3 text-xs uppercase tracking-widest font-semibold transition-opacity"
+              className="bg-saffron hover:bg-saffron-deep text-parchment px-6 py-3 text-xs uppercase tracking-widest font-semibold transition-colors"
               onClick={handleApprove}
               disabled={!!actionLoading}
             >
@@ -254,7 +254,7 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
           )}
           {transition && batch.status !== 'FINALIZED' && (
             <button
-              className="bg-ink hover:bg-terracotta text-white px-6 py-3 text-xs uppercase tracking-widest font-semibold transition-colors"
+              className="bg-ink hover:bg-terracotta-warm text-white px-6 py-3 text-xs uppercase tracking-widest font-semibold transition-colors"
               onClick={handleTransition}
               disabled={!!actionLoading}
             >
@@ -309,7 +309,7 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
                   <span className="font-serif text-lg font-bold">{inst.title}</span>
                   <div className="flex items-center gap-3">
                     {inst.deadline && (
-                      <span className="text-[10px] uppercase tracking-widest text-terracotta font-semibold">
+                      <span className="text-[10px] uppercase tracking-widest text-terracotta-warm font-semibold">
                         ⏰ {new Date(inst.deadline).toLocaleDateString()}
                       </span>
                     )}
@@ -348,9 +348,9 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
           <div className="bg-white border-2 border-ink p-8 shadow-[8px_8px_0px_#1C1B19] w-full max-w-xl animate-fade-in max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-8 pb-4 border-b border-hairline">
               <h2 className="font-serif text-3xl font-bold">Send Instructions</h2>
-              <button className="text-2xl text-ink/40 hover:text-terracotta transition-colors leading-none" onClick={() => setShowInstructionModal(false)}>×</button>
+              <button className="text-2xl text-ink/40 hover:text-terracotta-warm transition-colors leading-none" onClick={() => setShowInstructionModal(false)}>×</button>
             </div>
-            <div className="bg-amber-50 border border-amber-200 p-4 mb-6 text-sm text-amber-800">
+            <div className="bg-saffron-glow/15 border border-saffron/30 p-4 mb-6 text-sm text-ink/70">
               📢 This will be sent to <strong>{batch._count?.applicants || 0} applicant(s)</strong> in Batch #{batch.batchNumber}
             </div>
             <form onSubmit={handleSendInstructions} className="flex flex-col gap-6">
@@ -397,7 +397,7 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
                 <button type="button" className="px-6 py-3 border border-ink text-xs uppercase tracking-widest font-semibold text-ink hover:bg-parchment transition-colors" onClick={() => setShowInstructionModal(false)}>
                   Cancel
                 </button>
-                <button type="submit" className="bg-forest hover:opacity-90 text-white px-8 py-3 text-xs uppercase tracking-widest font-semibold transition-colors">
+                <button type="submit" className="bg-saffron hover:bg-saffron-deep text-parchment px-8 py-3 text-xs uppercase tracking-widest font-semibold transition-colors">
                   Send to All Users
                 </button>
               </div>
@@ -421,7 +421,7 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
             />
             <div className="flex gap-3 justify-end">
               <button onClick={() => setShowCapacityModal(false)} className="px-4 py-2 border border-ink text-xs uppercase tracking-widest font-semibold">Cancel</button>
-              <button onClick={handleIncreaseCapacity} className="px-6 py-2 bg-forest text-white text-xs uppercase tracking-widest font-semibold">Update</button>
+              <button onClick={handleIncreaseCapacity} className="px-6 py-2 bg-saffron text-parchment text-xs uppercase tracking-widest font-semibold hover:bg-saffron-deep transition-colors">Update</button>
             </div>
           </div>
         </div>
@@ -455,7 +455,7 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
               </div>
               <div className="flex gap-3 justify-end mt-4 pt-4 border-t border-hairline">
                 <button type="button" onClick={() => setShowElectionModal(false)} className="px-4 py-2 border border-ink text-xs uppercase tracking-widest font-semibold">Cancel</button>
-                <button type="submit" disabled={actionLoading === 'election'} className="px-6 py-2 bg-terracotta text-white text-xs uppercase tracking-widest font-semibold">
+                <button type="submit" disabled={actionLoading === 'election'} className="px-6 py-2 bg-saffron text-parchment text-xs uppercase tracking-widest font-semibold hover:bg-saffron-deep transition-colors">
                   {actionLoading === 'election' ? 'Starting...' : 'Start All Elections'}
                 </button>
               </div>

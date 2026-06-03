@@ -356,7 +356,7 @@ model Batch {
   status              BatchStatus @default(FILLING)
   capacity            Int         @default(1000)
   currentCount        Int         @default(0) @map("current_count")
-  pledgeAmount        Float       @default(10000.0) @map("pledge_amount")
+  pledgeAmount        Int         @default(1000000) @map("pledge_amount") // integer paise (₹10,000)
   teamMinSize         Int         @default(5) @map("team_min_size")
   teamMaxSize         Int         @default(25) @map("team_max_size")
   teamFormationConfig Json?       @map("team_formation_config") // { weights, diversityVsSimilarity, etc. }
@@ -477,8 +477,8 @@ model Project {
   projectName      String        @map("project_name")
   targetMarket     String        @map("target_market")
   description      String        @db.Text
-  estimatedFunds   Float         @map("estimated_funds")
-  fundedAmount     Float         @default(0) @map("funded_amount")
+  estimatedFunds   Int           @map("estimated_funds")            // integer minor units (cents)
+  fundedAmount     Int           @default(0) @map("funded_amount")  // integer minor units (cents)
   status           ProjectStatus @default(UNDER_DEVELOPMENT)
   createdAt        DateTime      @default(now()) @map("created_at")
   updatedAt        DateTime      @updatedAt @map("updated_at")
@@ -525,7 +525,7 @@ model Milestone {
 model LedgerTransaction {
   id          String                @id @default(uuid()) @db.Uuid
   projectId   String                @map("project_id") @db.Uuid
-  amount      Float
+  amount      Int                   // integer minor units (cents)
   type        LedgerTransactionType
   description String
   date        DateTime              @default(now())
@@ -542,7 +542,7 @@ model Payment {
   razorpayOrderId   String?       @map("razorpay_order_id") @unique
   razorpayPaymentId String?       @map("razorpay_payment_id") @unique
   razorpaySignature String?       @map("razorpay_signature")
-  amount            Float
+  amount            Int           // integer paise
   currency          String        @default("INR")
   status            PaymentStatus @default(CREATED)
   createdAt         DateTime      @default(now()) @map("created_at")
@@ -652,7 +652,7 @@ model Donation {
   id                String        @id @default(uuid()) @db.Uuid
   donorName         String        @map("donor_name")
   donorEmail        String        @map("donor_email")
-  amount            Float
+  amount            Int           // integer paise
   currency          String        @default("INR")
   type              DonationType  @default(ONE_TIME)
   message           String?       @db.Text

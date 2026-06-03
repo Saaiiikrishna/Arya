@@ -126,7 +126,7 @@ export default function InvestorShowcase() {
             <div className="bg-white max-w-lg w-full p-8 relative animate-fade-in" onClick={e => e.stopPropagation()}>
               <button 
                 onClick={() => setSelectedShowcase(null)} 
-                className="absolute top-4 right-6 text-2xl text-ink/40 hover:text-terracotta transition-colors"
+                className="absolute top-4 right-6 text-2xl text-ink/40 hover:text-terracotta-warm transition-colors"
               >
                 ✕
               </button>
@@ -173,7 +173,7 @@ export default function InvestorShowcase() {
                 </div>
 
                 <div className="pt-6 border-t border-hairline mt-2">
-                  <button type="submit" disabled={isSubmitting} className="w-full btn bg-forest hover:bg-forest/90 text-white py-4 font-bold tracking-widest">
+                  <button type="submit" disabled={isSubmitting} className="w-full btn bg-saffron hover:bg-saffron-deep text-parchment py-4 font-bold tracking-widest shadow-pop">
                     {isSubmitting ? 'Sending Request...' : 'SUBMIT REQUEST'}
                   </button>
                 </div>

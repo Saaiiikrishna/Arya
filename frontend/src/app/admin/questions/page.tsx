@@ -83,7 +83,7 @@ export default function QuestionsPage() {
         <div className="text-left md:text-right">
           <button 
             onClick={() => { setEditing(null); setForm({ label: '', helpText: '', type: 'TEXT', isRequired: true, category: '', phaseTag: 'INITIAL', options: '' }); setShowModal(true); }}
-            className="bg-ink hover:bg-terracotta text-white px-8 py-4 text-xs uppercase tracking-widest font-semibold transition-colors shadow-sm"
+            className="bg-ink hover:bg-terracotta-warm text-white px-8 py-4 text-xs uppercase tracking-widest font-semibold transition-colors shadow-sm"
           >
             + Add Question
           </button>
@@ -130,7 +130,7 @@ export default function QuestionsPage() {
                   </td>
                   <td className="px-6 py-5 text-center font-serif text-xl text-ink/40">{q.isRequired ? '✓' : '—'}</td>
                   <td className="px-6 py-5 text-center">
-                    <span className={`px-2 py-1 text-[10px] uppercase tracking-widest font-bold border ${q.isActive ? 'border-forest text-forest bg-forest/5' : 'border-terracotta text-terracotta bg-terracotta/5'}`}>
+                    <span className={`px-2 py-1 text-[10px] uppercase tracking-widest font-bold border ${q.isActive ? 'border-saffron text-saffron-deep bg-saffron/5' : 'border-terracotta text-terracotta bg-terracotta/5'}`}>
                       {q.isActive ? 'Active' : 'Inactive'}
                     </span>
                   </td>
@@ -155,8 +155,8 @@ export default function QuestionsPage() {
           >
             <div className="flex justify-between items-center mb-8 pb-4 border-b border-hairline">
               <h2 className="font-serif text-3xl font-bold">{editing ? 'Modify Blueprint' : 'Inject Protocol Question'}</h2>
-              <button 
-                className="text-2xl text-ink/40 hover:text-terracotta transition-colors leading-none" 
+              <button
+                className="text-2xl text-ink/40 hover:text-terracotta-warm transition-colors leading-none"
                 onClick={() => setShowModal(false)}
               >
                 ×
@@ -254,9 +254,9 @@ export default function QuestionsPage() {
                 >
                   Cancel
                 </button>
-                <button 
-                  type="submit" 
-                  className="bg-forest hover:opacity-90 text-white px-8 py-3 text-xs uppercase tracking-widest font-semibold transition-colors"
+                <button
+                  type="submit"
+                  className="bg-saffron hover:bg-saffron-deep text-parchment px-8 py-3 text-xs uppercase tracking-widest font-semibold transition-colors"
                 >
                   {editing ? 'Commit Modifications' : 'Publish Question'}
                 </button>

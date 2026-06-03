@@ -247,6 +247,13 @@ class ApiClient {
     });
   }
 
+  async submitMyAnswers(answers: { questionId: string; value: any }[]) {
+    return this.request<any>('/applicants/me/answers', {
+      method: 'POST',
+      body: { answers },
+    });
+  }
+
   async giveConsent(accessToken: string, consentDocUrl?: string) {
     return this.request<any>(`/applicants/consent/${accessToken}`, {
       method: 'POST',

@@ -89,14 +89,42 @@ export class AnalyticsService {
 
   // ─── Team Rankings ───────────────────────────────────
 
+  // Bounds for the (unbounded by default) global leaderboard query. Without a
+  // batchId the dashboard would otherwise materialize every team + nested
+  // sprint/milestone/member row across all batches ever created. Scope to the
+  // most-recent batches and cap the number of teams considered/returned.
+  private static readonly RANKINGS_RECENT_BATCHES = 3;
+  private static readonly RANKINGS_TEAM_LIMIT = 100;
+
   async getTeamRankings(batchId?: string) {
-    const where = batchId ? { batchId } : {};
+    let batchFilter: { id: string } | { id: { in: string[] } };
+
+    if (batchId) {
+      batchFilter = { id: batchId };
+    } else {
+      // Scope the global leaderboard to the most-recent batch(es) so the query
+      // does not grow without bound as historical batches accumulate.
+      const recentBatches = await this.prisma.batch.findMany({
+        orderBy: { batchNumber: 'desc' },
+        take: AnalyticsService.RANKINGS_RECENT_BATCHES,
+        select: { id: true },
+      });
+      if (recentBatches.length === 0) return [];
+      batchFilter = { id: { in: recentBatches.map(b => b.id) } };
+    }
 
     const teams = await this.prisma.team.findMany({
-      where,
+      where: { batch: { is: batchFilter } },
+      take: AnalyticsService.RANKINGS_TEAM_LIMIT,
+      orderBy: { createdAt: 'desc' },
       include: {
-        sprints: { include: { milestones: true } },
-        members: { select: { id: true, status: true, lastActiveAt: true } },
+        // Milestone metrics depend on per-milestone dates (on-time / overdue),
+        // so the rows are still needed — but they are now bounded to a capped
+        // set of teams within the recent batch window.
+        sprints: { select: { milestones: true } },
+        // Participation only needs member status, not full member rows. Select
+        // just the status column (members are bounded by team size).
+        members: { select: { status: true } },
         batch: { select: { batchNumber: true } },
       },
     });
@@ -112,9 +140,10 @@ export class AnalyticsService {
       ).length;
 
       // Participation: active members / total members
+      const totalMembers = team.members.length;
       const activeCount = team.members.filter(m => m.status !== 'REMOVED').length;
-      const participation = team.members.length > 0
-        ? Math.round((activeCount / team.members.length) * 100) : 0;
+      const participation = totalMembers > 0
+        ? Math.round((activeCount / totalMembers) * 100) : 0;
 
       // Composite score
       const taskCompletion = total > 0 ? (completed / total) * 30 : 0;

@@ -155,7 +155,7 @@ export default function PledgePage() {
 
               <button 
                 onClick={initiatePayment} 
-                className="w-full bg-forest text-parchment p-4 font-bold uppercase tracking-widest text-sm hover:bg-forest/90 transition-colors disabled:opacity-50"
+                className="w-full bg-saffron text-parchment p-4 font-bold uppercase tracking-widest text-sm shadow-pop hover:bg-saffron-deep transition-colors disabled:opacity-50"
                 disabled={paymentStatus === 'PROCESSING'}
               >
                 {paymentStatus === 'PROCESSING' ? 'Establishing Connection...' : 'Initiate Secure Checkout'}

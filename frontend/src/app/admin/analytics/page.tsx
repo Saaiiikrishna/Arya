@@ -161,11 +161,11 @@ export default function AdminAnalyticsPage() {
                     {/* Medium Risk */}
                     <div>
                       <div className="flex justify-between text-xs mb-1">
-                        <span className="uppercase tracking-widest text-yellow-600 font-bold">Intervention Needed</span>
+                        <span className="uppercase tracking-widest text-warning font-bold">Intervention Needed</span>
                         <span>{riskSummary.yellow} Teams</span>
                       </div>
                       <div className="h-2 w-full bg-parchment">
-                        <div className="h-full bg-yellow-400" style={{width: `${activeTeams > 0 ? (riskSummary.yellow / activeTeams) * 100 : 0}%`}}></div>
+                        <div className="h-full bg-marigold" style={{width: `${activeTeams > 0 ? (riskSummary.yellow / activeTeams) * 100 : 0}%`}}></div>
                       </div>
                     </div>
                     {/* Healthy */}
@@ -199,7 +199,7 @@ export default function AdminAnalyticsPage() {
                 {rankings.map((team, idx) => (
                   <div key={team.teamId} className="flex items-center justify-between p-3 border-b border-parchment/10 last:border-0 hover:bg-parchment/5 transition-colors group">
                     <div className="flex items-center gap-4 cursor-pointer">
-                      <span className={`font-serif text-xl font-bold w-6 text-center ${idx < 3 ? 'text-terracotta' : 'text-parchment/40'}`}>
+                      <span className={`font-serif text-xl font-bold w-6 text-center ${idx < 3 ? 'text-terracotta-warm' : 'text-parchment/40'}`}>
                         {team.rank || idx + 1}
                       </span>
                       <div>
@@ -208,7 +208,7 @@ export default function AdminAnalyticsPage() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="font-serif text-lg text-forest font-bold">{team.score}</div>
+                      <div className="font-serif text-lg text-saffron font-bold">{team.score}</div>
                       <div className="text-[10px] uppercase tracking-widest text-parchment/40">Score</div>
                     </div>
                   </div>

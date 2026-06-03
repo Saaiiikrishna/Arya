@@ -153,7 +153,7 @@ export default function InterviewPage() {
                 href={item.href}
                 className={`group flex items-center gap-3 font-medium text-sm tracking-wide uppercase transition-colors ${item.active ? 'text-ink' : 'text-ink/40 hover:text-ink'}`}
               >
-                <span className={`w-1 h-1 ${item.active ? 'bg-forest' : 'bg-transparent group-hover:bg-ink'}`} />
+                <span className={`w-1 h-1 ${item.active ? 'bg-saffron' : 'bg-transparent group-hover:bg-ink'}`} />
                 <span>{item.label}</span>
               </a>
             ))}
@@ -251,7 +251,7 @@ export default function InterviewPage() {
                 <button
                   onClick={handleVideoSubmit}
                   disabled={submittingVideo}
-                  className="mt-8 bg-forest text-white px-8 py-4 font-bold uppercase tracking-widest text-sm hover:bg-forest/90 transition-colors disabled:opacity-50"
+                  className="mt-8 bg-saffron text-parchment px-8 py-4 font-bold uppercase tracking-widest text-sm hover:bg-saffron-deep transition-colors disabled:opacity-50"
                 >
                   {submittingVideo ? 'Saving…' : 'Submit Video Responses'}
                 </button>
@@ -323,7 +323,7 @@ export default function InterviewPage() {
                     <button
                       onClick={() => !slot.isFull && handleBook(slot.id)}
                       disabled={slot.isFull || !!bookingSlot}
-                      className="flex items-center gap-2 px-6 py-3 bg-forest text-white font-bold uppercase tracking-widest text-[10px] hover:bg-forest/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="flex items-center gap-2 px-6 py-3 bg-saffron text-parchment font-bold uppercase tracking-widest text-[10px] hover:bg-saffron-deep transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       {bookingSlot === slot.id ? 'Booking…' : slot.isFull ? 'Full' : <>Book <ChevronRight className="w-3 h-3" /></>}
                     </button>

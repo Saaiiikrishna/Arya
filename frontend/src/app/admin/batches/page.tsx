@@ -107,7 +107,7 @@ export default function BatchesPage() {
           </button>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-2 bg-forest text-white px-5 py-3 text-xs uppercase tracking-widest font-semibold hover:bg-forest/90 transition-colors"
+            className="flex items-center gap-2 bg-saffron text-parchment px-5 py-3 text-xs uppercase tracking-widest font-semibold hover:bg-saffron-deep transition-colors"
           >
             <Plus className="w-4 h-4" /> Create Batch
           </button>
@@ -125,7 +125,7 @@ export default function BatchesPage() {
               </span>
               <button
                 onClick={() => setAutoEnabled(!autoEnabled)}
-                className={`relative w-12 h-7 rounded-full transition-colors ${autoEnabled ? 'bg-forest' : 'bg-ink/20'}`}
+                className={`relative w-12 h-7 rounded-full transition-colors ${autoEnabled ? 'bg-saffron' : 'bg-ink/20'}`}
               >
                 <span
                   className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow transition-transform ${autoEnabled ? 'left-6' : 'left-1'}`}
@@ -177,7 +177,7 @@ export default function BatchesPage() {
                 <button
                   onClick={handleSaveAutoConfig}
                   disabled={savingAuto}
-                  className="bg-forest text-white px-6 py-3 text-xs uppercase tracking-widest font-semibold hover:bg-forest/90 transition-colors"
+                  className="bg-saffron text-parchment px-6 py-3 text-xs uppercase tracking-widest font-semibold hover:bg-saffron-deep transition-colors"
                 >
                   {savingAuto ? 'Saving...' : 'Save Auto Config'}
                 </button>
@@ -201,7 +201,7 @@ export default function BatchesPage() {
                   <div className="w-16 h-16 bg-ink flex items-center justify-center font-serif text-2xl text-white font-bold shadow-md">
                     #{batch.batchNumber}
                   </div>
-                  <span className={`px-3 py-1 text-[10px] uppercase tracking-widest font-bold border ${batch.status === 'PRODUCTION' ? 'bg-forest/10 text-forest border-forest/20' : 'bg-parchment text-ink/60 border-ink/20'}`}>
+                  <span className={`px-3 py-1 text-[10px] uppercase tracking-widest font-bold border ${batch.status === 'PRODUCTION' ? 'bg-saffron/10 text-saffron-deep border-saffron/20' : 'bg-parchment text-ink/60 border-ink/20'}`}>
                     {batch.status.replace(/_/g, ' ')}
                   </span>
                 </div>
@@ -218,7 +218,7 @@ export default function BatchesPage() {
                   </div>
                   <div className="h-2 bg-parchment w-full shadow-inner border border-hairline">
                     <div
-                      className={`h-full transition-all ${batch.status === 'PRODUCTION' ? 'bg-forest' : 'bg-ink'}`}
+                      className={`h-full transition-all ${batch.status === 'PRODUCTION' ? 'bg-saffron' : 'bg-ink'}`}
                       style={{ width: `${Math.min(100, (batch.currentCount / batch.capacity) * 100)}%` }}
                     />
                   </div>
@@ -245,7 +245,7 @@ export default function BatchesPage() {
             <div className="flex justify-between items-center mb-8 pb-4 border-b border-hairline">
               <h2 className="font-serif text-3xl font-bold">Create Batch</h2>
               <button
-                className="text-2xl text-ink/40 hover:text-terracotta transition-colors leading-none"
+                className="text-2xl text-ink/40 hover:text-terracotta-warm transition-colors leading-none"
                 onClick={() => setShowCreateModal(false)}
               >×</button>
             </div>
@@ -289,7 +289,7 @@ export default function BatchesPage() {
                 <button
                   type="submit"
                   disabled={creating}
-                  className="bg-forest hover:opacity-90 text-white px-8 py-3 text-xs uppercase tracking-widest font-semibold transition-colors"
+                  className="bg-saffron hover:bg-saffron-deep text-parchment px-8 py-3 text-xs uppercase tracking-widest font-semibold transition-colors"
                 >
                   {creating ? 'Creating...' : 'Create'}
                 </button>

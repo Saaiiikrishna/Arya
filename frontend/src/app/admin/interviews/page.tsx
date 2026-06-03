@@ -232,7 +232,7 @@ export default function AdminInterviewsPage() {
                 key={t}
                 onClick={() => setTab(t)}
                 className={`px-8 py-3 text-xs uppercase tracking-widest font-bold transition-colors border-b-2 -mb-px ${
-                  tab === t ? 'border-forest text-forest' : 'border-transparent text-ink/40 hover:text-ink'
+                  tab === t ? 'border-saffron text-saffron-deep' : 'border-transparent text-ink/40 hover:text-terracotta-warm'
                 }`}
               >
                 {t === 'slots' ? (
@@ -284,7 +284,7 @@ export default function AdminInterviewsPage() {
                           </div>
                           <div className="flex items-center gap-3 flex-shrink-0">
                             <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 ${
-                              bookings.length >= slot.capacity ? 'bg-ink/10 text-ink/60' : 'bg-forest/10 text-forest'
+                              bookings.length >= slot.capacity ? 'bg-ink/10 text-ink/60' : 'bg-saffron/10 text-saffron-deep'
                             }`}>
                               {bookings.length >= slot.capacity ? 'Full' : `${slot.capacity - bookings.length} open`}
                             </span>

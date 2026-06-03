@@ -2,7 +2,7 @@ import {
   Controller, Get, Post, Patch, Body, Param, Query, UseGuards, Req,
 } from '@nestjs/common';
 import { EquityService } from './equity.service';
-import { AdminGuard, JwtAuthGuard } from '../auth/guards';
+import { AdminGuard, JwtAuthGuard, SuperAdminGuard } from '../auth/guards';
 
 @Controller()
 export class EquityController {
@@ -71,7 +71,7 @@ export class EquityController {
     return this.equityService.startTimer(id, adminId);
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(SuperAdminGuard)
   @Post('admin/equity/companies/:id/handover')
   executeHandover(
     @Param('id') id: string,

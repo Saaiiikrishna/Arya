@@ -80,7 +80,7 @@ export class VisitorService {
       await Promise.all([
         // Total views in period (approximate using visitor count if precise view not needed, or parsing JSON)
         // Since we want total page views, we can query raw
-        this.prisma.$queryRawUnsafe<{ total: number }[]>(`SELECT COALESCE(SUM(jsonb_array_length(history)), 0)::int as total FROM visitors WHERE last_visit_at >= '${since.toISOString()}'`).then(res => res[0]?.total || 0),
+        this.prisma.$queryRawUnsafe<{ total: number }[]>(`SELECT COALESCE(SUM(jsonb_array_length(history)), 0)::int as total FROM visitors WHERE last_visit_at >= $1`, since.toISOString()).then(res => res[0]?.total || 0),
 
         // Unique sessions (Unique IPs)
         this.prisma.visitor.count({
@@ -88,7 +88,7 @@ export class VisitorService {
         }),
 
         // Today's views
-        this.prisma.$queryRawUnsafe<{ total: number }[]>(`SELECT COALESCE(SUM(jsonb_array_length(history)), 0)::int as total FROM visitors WHERE last_visit_at >= '${new Date(new Date().toISOString().split('T')[0]).toISOString()}'`).then(res => res[0]?.total || 0),
+        this.prisma.$queryRawUnsafe<{ total: number }[]>(`SELECT COALESCE(SUM(jsonb_array_length(history)), 0)::int as total FROM visitors WHERE last_visit_at >= $1`, new Date(new Date().toISOString().split('T')[0]).toISOString()).then(res => res[0]?.total || 0),
 
         // Top pages
         this.prisma.$queryRaw`
@@ -167,34 +167,31 @@ export class VisitorService {
     const limit = Math.min(100, Math.max(1, filters.limit || 50));
     const skip = (page - 1) * limit;
 
-    let searchFilter = '';
-    let startFilter = '';
-    let endFilter = '';
-    let pathFilter = '';
+    // Parameterized to prevent SQL injection via admin-supplied filters.
+    const params: any[] = [];
+    const conds: string[] = [];
 
-    if (filters.search) {
-      const search = `%${filters.search}%`;
-      searchFilter = `AND (
-        ip ILIKE '${search}' OR
-        applicant_email ILIKE '${search}' OR
-        applicant_name ILIKE '${search}' OR
-        city ILIKE '${search}' OR
-        country ILIKE '${search}' OR
-        path ILIKE '${search}'
-      )`;
+    if (filters.path) {
+      params.push(`%${filters.path}%`);
+      conds.push(`history::text ILIKE $${params.length}`);
     }
-
     if (filters.startDate) {
-      startFilter = `AND last_visit_at >= '${new Date(filters.startDate).toISOString()}'`;
+      params.push(new Date(filters.startDate).toISOString());
+      conds.push(`last_visit_at >= $${params.length}`);
     }
     if (filters.endDate) {
-      endFilter = `AND last_visit_at <= '${new Date(filters.endDate).toISOString()}'`;
+      params.push(new Date(filters.endDate).toISOString());
+      conds.push(`last_visit_at <= $${params.length}`);
     }
-    if (filters.path) {
-      pathFilter = `AND history::text ILIKE '%${filters.path}%'`;
+    if (filters.search) {
+      params.push(`%${filters.search}%`);
+      const i = params.length;
+      conds.push(
+        `(ip ILIKE $${i} OR applicant_email ILIKE $${i} OR applicant_name ILIKE $${i} OR city ILIKE $${i} OR country ILIKE $${i} OR path ILIKE $${i})`,
+      );
     }
 
-    const baseWhere = `WHERE 1=1 ${pathFilter} ${startFilter} ${endFilter} ${searchFilter}`;
+    const baseWhere = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
 
     // Count total unique visitors
     const countQuery = `
@@ -230,8 +227,8 @@ export class VisitorService {
     `;
 
     const [totalResult, dataRaw] = await Promise.all([
-      this.prisma.$queryRawUnsafe<{ total: number }[]>(countQuery),
-      this.prisma.$queryRawUnsafe<any[]>(dataQuery),
+      this.prisma.$queryRawUnsafe<{ total: number }[]>(countQuery, ...params),
+      this.prisma.$queryRawUnsafe<any[]>(dataQuery, ...params),
     ]);
 
     const total = totalResult[0]?.total || 0;

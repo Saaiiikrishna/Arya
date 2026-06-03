@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma';
 import { EmailService } from '../email';
+import { NotificationService } from '../notifications/notification.service';
+import { BackfillService } from '../automation/backfill.service';
 import { BatchStatus, ApplicantStatus } from '@prisma/client';
 
 @Injectable()
@@ -10,6 +12,8 @@ export class BatchService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
+    private readonly notifications: NotificationService,
+    private readonly backfill: BackfillService,
   ) {}
 
   // ─── Create Batch (Manual) ─────────────────────────────
@@ -117,12 +121,33 @@ export class BatchService {
 
     if (!fillingBatch) return { triggered: false };
 
-    if (fillingBatch.currentCount >= fillingBatch.capacity) {
+    // Gate on the REAL applicant count, not the cached currentCount (which can
+    // drift), to decide whether the batch is actually full.
+    const realCount = await this.prisma.applicant.count({
+      where: { batchId: fillingBatch.id, status: { not: 'REMOVED' } },
+    });
+
+    if (realCount >= fillingBatch.capacity) {
       // Move to SCREENING
       await this.prisma.batch.update({
         where: { id: fillingBatch.id },
         data: { status: BatchStatus.SCREENING },
       });
+
+      // Notify every applicant in the now-filled batch (best-effort; must not
+      // block the transition or auto-create of the next batch).
+      const filledApplicants = await this.prisma.applicant.findMany({
+        where: { batchId: fillingBatch.id, status: { not: 'REMOVED' } },
+        select: { id: true, email: true, firstName: true, phone: true },
+      });
+      await Promise.allSettled(
+        filledApplicants.map((applicant) =>
+          this.notifications.batchFilled({
+            ...applicant,
+            batchNumber: fillingBatch.batchNumber,
+          }),
+        ),
+      );
 
       // Get auto-batch config
       const capacitySetting = await this.prisma.siteSetting.findUnique({
@@ -245,24 +270,28 @@ export class BatchService {
         })
       : 'No specific deadline';
 
-    for (const applicant of applicants) {
-      await this.emailService.sendTemplatedEmail(
-        applicant.email,
-        additionalQuestionIds.length > 0
-          ? 'screening-questionnaire'
-          : 'additional-instructions',
-        {
-          firstName: applicant.firstName,
-          title,
-          content,
-          explanation: explanation || '',
-          deadline: deadlineFormatted,
-          batchNumber: String(batch.batchNumber),
-          statusUrl: `${process.env.FRONTEND_URL || 'https://aryavartham.com'}/hub`,
-        },
-        applicant.id,
-      );
-    }
+    const statusUrl = `${process.env.FRONTEND_URL || 'https://aryavartham.com'}/hub`;
+    const templateSlug =
+      additionalQuestionIds.length > 0 ? 'screening-questionnaire' : 'additional-instructions';
+    // Dispatch in parallel rather than blocking the request serially per recipient.
+    await Promise.allSettled(
+      applicants.map((applicant) =>
+        this.emailService.sendTemplatedEmail(
+          applicant.email,
+          templateSlug,
+          {
+            firstName: applicant.firstName,
+            title,
+            content,
+            explanation: explanation || '',
+            deadline: deadlineFormatted,
+            batchNumber: String(batch.batchNumber),
+            statusUrl,
+          },
+          applicant.id,
+        ),
+      ),
+    );
 
     this.logger.log(
       `Instructions sent to batch ${batch.batchNumber}: ${title} (${applicants.length} emails)`,
@@ -309,15 +338,26 @@ export class BatchService {
       return { removedCount: 0, message: 'All applicants have responded' };
     }
 
-    // Remove non-responders
-    await this.prisma.applicant.updateMany({
-      where: { id: { in: nonResponders.map((a) => a.id) } },
-      data: { status: ApplicantStatus.REMOVED, removedAt: new Date() },
-    });
+    // Remove non-responders and keep the batch counter accurate in one txn, so
+    // the backfill that re-increments currentCount nets out correctly.
+    await this.prisma.$transaction([
+      this.prisma.applicant.updateMany({
+        where: { id: { in: nonResponders.map((a) => a.id) } },
+        data: { status: ApplicantStatus.REMOVED, removedAt: new Date() },
+      }),
+      this.prisma.batch.update({
+        where: { id: batchId },
+        data: { currentCount: { decrement: nonResponders.length } },
+      }),
+    ]);
 
     this.logger.log(
       `Removed ${nonResponders.length} non-responders from batch ${batchId}`,
     );
+
+    // Top the freed seats back up from the next batch (best-effort, async).
+    void this.backfill.enqueueBackfill(batchId, nonResponders.length);
+
     return {
       removedCount: nonResponders.length,
       removedIds: nonResponders.map((a) => a.id),

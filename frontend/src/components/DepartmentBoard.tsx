@@ -169,14 +169,14 @@ export default function DepartmentBoard({ teamId }: { teamId: string }) {
                   <button
                     onClick={() => handleClaim(department)}
                     disabled={!!claiming}
-                    className="px-4 py-2 bg-forest text-white text-[10px] font-bold uppercase tracking-widest hover:bg-forest/90 transition-colors disabled:opacity-50"
+                    className="px-4 py-2 bg-saffron text-parchment text-[10px] font-bold uppercase tracking-widest hover:bg-saffron-deep transition-colors disabled:opacity-50 shadow-pop"
                   >
                     {isClaiming ? 'Claiming…' : 'Claim'}
                   </button>
                 )}
 
                 {isMine && (
-                  <span className="px-4 py-2 border border-forest text-forest text-[10px] font-bold uppercase tracking-widest">
+                  <span className="px-4 py-2 border border-saffron text-saffron-deep text-[10px] font-bold uppercase tracking-widest">
                     Your Role
                   </span>
                 )}

@@ -75,7 +75,7 @@ export default function HubTeamPage() {
                       {member.firstName} {member.lastName}
                     </h3>
                     {member.id === team.leaderId && (
-                      <Crown className="w-4 h-4 text-amber-500" />
+                      <Crown className="w-4 h-4 text-marigold" />
                     )}
                   </div>
                   <div className="flex flex-wrap gap-3 text-xs text-ink/50">

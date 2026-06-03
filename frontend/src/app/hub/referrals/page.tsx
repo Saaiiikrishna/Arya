@@ -91,7 +91,7 @@ export default function ReferralHubPage() {
                 href={item.href}
                 className={`group flex items-center gap-3 font-medium text-sm tracking-wide uppercase transition-colors ${item.active ? 'text-ink' : 'text-ink/40 hover:text-ink'}`}
               >
-                <span className={`w-1 h-1 ${item.active ? 'bg-forest' : 'bg-transparent group-hover:bg-ink'}`} />
+                <span className={`w-1 h-1 ${item.active ? 'bg-saffron' : 'bg-transparent group-hover:bg-ink'}`} />
                 <span>{item.label}</span>
               </a>
             ))}
@@ -120,7 +120,7 @@ export default function ReferralHubPage() {
               <button 
                 onClick={handleEnableAffiliate}
                 disabled={enabling}
-                className="bg-forest text-white px-10 py-4 font-bold uppercase tracking-widest hover:bg-forest/90 transition-all shadow-lg hover:shadow-forest/20"
+                className="bg-saffron text-parchment px-10 py-4 font-bold uppercase tracking-widest hover:bg-saffron-deep transition-all shadow-lg hover:shadow-saffron/20"
               >
                 {enabling ? 'Activating...' : 'Activate My Referral Link'}
               </button>
@@ -133,11 +133,11 @@ export default function ReferralHubPage() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="bg-white border border-hairline p-6 shadow-sm">
                     <p className="text-[11px] uppercase tracking-widest text-ink/40 font-bold mb-1">Total Referrals</p>
-                    <p className="font-serif text-4xl font-bold text-forest">{data.totalReferrals}</p>
+                    <p className="font-serif text-4xl font-bold text-saffron-deep">{data.totalReferrals}</p>
                   </div>
                   <div className="bg-white border border-hairline p-6 shadow-sm">
                     <p className="text-[11px] uppercase tracking-widest text-ink/40 font-bold mb-1">Badges Earned</p>
-                    <p className="font-serif text-4xl font-bold text-terracotta">{data.badges.length}</p>
+                    <p className="font-serif text-4xl font-bold text-terracotta-warm">{data.badges.length}</p>
                   </div>
                   <div className="bg-white border border-hairline p-6 shadow-sm">
                     <p className="text-[11px] uppercase tracking-widest text-ink/40 font-bold mb-1">Certificates</p>
@@ -180,7 +180,7 @@ export default function ReferralHubPage() {
                     </div>
                     <div className="w-full h-3 bg-parchment rounded-full overflow-hidden border border-hairline">
                       <div 
-                        className="h-full bg-forest transition-all duration-1000 ease-out"
+                        className="h-full bg-saffron transition-all duration-1000 ease-out"
                         style={{ width: `${progress}%` }}
                       ></div>
                     </div>
@@ -235,13 +235,13 @@ export default function ReferralHubPage() {
                 {/* Badges Section */}
                 <section>
                   <h2 className="font-serif text-xl font-bold mb-6 flex items-center gap-3">
-                    <Award className="w-5 h-5 text-terracotta" />
+                    <Award className="w-5 h-5 text-terracotta-warm" />
                     Achievements
                   </h2>
                   <div className="flex flex-col gap-4">
                     {data.badges.map((b: any) => (
-                      <div key={b.id} className="bg-white border border-hairline p-5 flex items-center gap-4 group hover:border-terracotta/50 transition-colors">
-                        <div className="w-12 h-12 bg-parchment rounded-full flex items-center justify-center text-2xl shadow-inner group-hover:bg-terracotta/10 transition-colors">
+                      <div key={b.id} className="bg-white border border-hairline p-5 flex items-center gap-4 group hover:border-terracotta-warm/50 transition-colors">
+                        <div className="w-12 h-12 bg-parchment rounded-full flex items-center justify-center text-2xl shadow-inner group-hover:bg-terracotta-warm/10 transition-colors">
                           {b.icon || '🏅'}
                         </div>
                         <div>
@@ -268,7 +268,7 @@ export default function ReferralHubPage() {
                   </h2>
                   <div className="flex flex-col gap-4">
                     {data.certificates.map((c: any) => (
-                      <div key={c.id} className="bg-white border-2 border-ink p-6 relative group overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                      <div key={c.id} className="bg-white border-2 border-ink p-6 relative group overflow-hidden shadow-pop">
                         <div className="relative z-10">
                           <p className="text-[10px] uppercase tracking-widest text-ink/40 font-bold mb-2">Verified Credential</p>
                           <h4 className="font-serif text-lg font-bold mb-4">{c.title}</h4>

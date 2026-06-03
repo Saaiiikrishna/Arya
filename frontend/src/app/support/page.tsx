@@ -87,12 +87,12 @@ export default function SupportPage() {
                 <div>
                   <span className="block text-xs uppercase tracking-widest text-parchment/60 mb-2">Total Funding Pool</span>
                   <span className="font-serif text-4xl text-forest">
-                    ₹{stats ? (stats.totalDonated / 100).toLocaleString() : '---'}
+                    ₹{stats ? (Number(stats.totalAmount || 0) / 100).toLocaleString() : '---'}
                   </span>
                 </div>
                 <div>
                   <span className="block text-xs uppercase tracking-widest text-parchment/60 mb-2">Network Backers</span>
-                  <span className="font-serif text-4xl text-terracotta">
+                  <span className="font-serif text-4xl text-terracotta-warm">
                     {stats ? stats.uniqueDonors : '---'}
                   </span>
                 </div>
@@ -142,7 +142,7 @@ export default function SupportPage() {
                       <button
                         key={amt} type="button"
                         onClick={() => setForm({ ...form, amount: amt })}
-                        className={`py-3 border ${form.amount === amt ? 'bg-forest text-white border-forest font-bold' : 'border-hairline bg-parchment/30 text-ink/70 hover:border-forest/50'}`}
+                        className={`py-3 border ${form.amount === amt ? 'bg-saffron text-parchment border-saffron font-bold' : 'border-hairline bg-parchment/30 text-ink/70 hover:border-forest/50'}`}
                       >
                         ₹{amt.toLocaleString()}
                       </button>
@@ -194,7 +194,7 @@ export default function SupportPage() {
                 <button
                   type="submit"
                   disabled={paymentStatus === 'PROCESSING'}
-                  className="w-full btn bg-ink text-white hover:bg-forest py-4 font-bold tracking-widest mt-4"
+                  className="w-full btn bg-saffron text-parchment hover:bg-saffron-deep py-4 font-bold tracking-widest mt-4 shadow-pop"
                 >
                   {paymentStatus === 'PROCESSING' ? 'Initializing Checkout...' : 'CONTRIBUTE'}
                 </button>

@@ -52,13 +52,13 @@ export default function HubTrainingPage() {
               <span>Overview</span>
             </Link>
             <Link href="/hub/training" className="group flex items-center gap-3 font-medium text-sm tracking-wide uppercase text-ink transition-colors">
-              <span className="w-1 h-1 bg-forest" />
+              <span className="w-1 h-1 bg-saffron" />
               <span>Training Modules</span>
             </Link>
           </nav>
         </div>
         <div className="border-t border-hairline pt-8 mt-12">
-          <Link href="/" className="mt-6 text-xs uppercase tracking-widest text-ink/40 hover:text-terracotta transition-colors flex items-center gap-2">
+          <Link href="/" className="mt-6 text-xs uppercase tracking-widest text-ink/40 hover:text-terracotta-warm transition-colors flex items-center gap-2">
             <LogOut className="w-4 h-4" />
             Exit Hub
           </Link>
@@ -73,7 +73,7 @@ export default function HubTrainingPage() {
               <h1 className="font-serif text-5xl font-bold leading-none">Curriculum</h1>
             </div>
             <div className="text-right">
-              <p className="text-3xl font-serif text-terracotta mb-1">{pendingCount} <span className="text-ink/40 text-xl">Pending</span></p>
+              <p className="text-3xl font-serif text-saffron-deep mb-1">{pendingCount} <span className="text-ink/40 text-xl">Pending</span></p>
               <p className="text-sm text-ink/40 uppercase tracking-widest">Required Modules</p>
             </div>
           </header>
@@ -149,7 +149,7 @@ export default function HubTrainingPage() {
                         {assignment.requiredBy && (
                           <>
                             <span className="text-ink/20">•</span>
-                            <span className="text-terracotta">Due: {new Date(assignment.requiredBy).toLocaleDateString()}</span>
+                            <span className="text-terracotta-warm">Due: {new Date(assignment.requiredBy).toLocaleDateString()}</span>
                           </>
                         )}
                       </div>

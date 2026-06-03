@@ -1,7 +1,8 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { PrismaModule } from './prisma';
 import { AuthModule } from './modules/auth';
 import { QuestionModule } from './modules/question';
@@ -32,11 +33,49 @@ import { EquityModule } from './modules/equity/equity.module';
 import { WhatsappModule } from './modules/whatsapp/whatsapp.module';
 import { RewardsModule } from './modules/rewards/rewards.module';
 import { InterviewModule } from './modules/interview/interview.module';
+import { NotificationModule } from './modules/notifications/notification.module';
+import { AutomationModule } from './modules/automation/automation.module';
+
+/**
+ * Fail-fast environment validation. Signing secrets must ALWAYS be strong
+ * (a forgeable JWT is critical); webhook/payment/DB secrets are required in
+ * production. In non-production we warn instead of throwing so local dev runs.
+ */
+function validateEnv(config: Record<string, unknown>): Record<string, unknown> {
+  const isProd = config.NODE_ENV === 'production';
+  const problems: string[] = [];
+  const requireStrong = (key: string, min = 32) => {
+    const v = String(config[key] ?? '');
+    if (!v || v.length < min || /change-?me|placeholder|secret-in-production/i.test(v)) {
+      problems.push(`${key} must be a strong value (>= ${min} chars, no placeholder)`);
+    }
+  };
+  const requirePresent = (key: string) => {
+    if (!String(config[key] ?? '').trim()) problems.push(`${key} is required`);
+  };
+
+  requireStrong('JWT_SECRET');
+  requireStrong('JWT_REFRESH_SECRET');
+  if (isProd) {
+    requirePresent('DATABASE_URL');
+    requirePresent('RAZORPAY_KEY_SECRET');
+    requirePresent('RAZORPAY_WEBHOOK_SECRET');
+    requirePresent('WHATSAPP_APP_SECRET');
+  }
+
+  if (problems.length) {
+    const msg = 'Invalid environment configuration:\n  - ' + problems.join('\n  - ');
+    if (isProd) throw new Error(msg);
+    // eslint-disable-next-line no-console
+    console.warn(`\x1b[33m[config] ${msg}\n  (permitted in non-production; set these before deploying)\x1b[0m`);
+  }
+  return config;
+}
 
 @Module({
   imports: [
     // Config
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
 
     // Rate limiting: multi-tier configuration
     ThrottlerModule.forRoot([{
@@ -112,6 +151,12 @@ import { InterviewModule } from './modules/interview/interview.module';
     WhatsappModule,
     RewardsModule,
     InterviewModule,
+    NotificationModule,
+    AutomationModule,
+  ],
+  providers: [
+    // Apply rate limiting globally; per-route @Throttle still tunes the tiers.
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
 export class AppModule {}

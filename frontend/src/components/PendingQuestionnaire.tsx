@@ -9,7 +9,7 @@ interface Props {
   accessToken?: string;
 }
 
-export default function PendingQuestionnaire({ firstName, accessToken }: Props) {
+export default function PendingQuestionnaire({ firstName }: Props) {
   const [pending, setPending] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [answers, setAnswers] = useState<Record<string, any>>({});
@@ -37,7 +37,6 @@ export default function PendingQuestionnaire({ firstName, accessToken }: Props) 
   };
 
   const handleSubmit = async (instructionId: string, questions: any[]) => {
-    if (!accessToken) return;
     const answerArr = questions
       .filter((q) => answers[q.id] !== undefined && answers[q.id] !== '')
       .map((q) => ({
@@ -52,7 +51,7 @@ export default function PendingQuestionnaire({ firstName, accessToken }: Props) 
 
     setSubmitting(true);
     try {
-      await api.submitAdditionalAnswers(accessToken, answerArr);
+      await api.submitMyAnswers(answerArr);
       setSubmitted((prev) => new Set(prev).add(instructionId));
       setPending((prev) => prev.filter((p) => p.instructionId !== instructionId));
     } catch (err: any) {
@@ -69,9 +68,9 @@ export default function PendingQuestionnaire({ firstName, accessToken }: Props) 
       {pending.map((inst) => {
         const timeInfo = inst.deadline ? getTimeRemaining(inst.deadline) : null;
         return (
-          <div key={inst.instructionId} className="border-2 border-amber-400 bg-amber-50/50 p-0 overflow-hidden animate-fade-in">
+          <div key={inst.instructionId} className="border-2 border-saffron/40 bg-saffron-glow/10 p-0 overflow-hidden animate-fade-in">
             {/* Header Bar */}
-            <div className={`px-6 py-4 ${timeInfo?.expired ? 'bg-red-600' : timeInfo?.urgent ? 'bg-amber-600' : 'bg-amber-500'} text-white`}>
+            <div className={`px-6 py-4 ${timeInfo?.expired ? 'bg-terracotta' : timeInfo?.urgent ? 'bg-saffron-deep' : 'bg-saffron'} text-parchment`}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <AlertTriangle className="w-5 h-5" />
@@ -87,7 +86,7 @@ export default function PendingQuestionnaire({ firstName, accessToken }: Props) 
             </div>
 
             {/* Greeting + Explanation */}
-            <div className="px-8 py-6 border-b border-amber-200">
+            <div className="px-8 py-6 border-b border-hairline">
               <h3 className="font-serif text-2xl font-bold text-ink mb-2">{inst.title}</h3>
               <p className="text-sm text-ink/70 leading-relaxed mb-3">
                 Dear {firstName}, please carefully review and complete the following questionnaire.
@@ -184,7 +183,7 @@ export default function PendingQuestionnaire({ firstName, accessToken }: Props) 
                             onClick={() => setAnswers({ ...answers, [q.id]: opt })}
                             className={`px-8 py-3 border text-sm uppercase tracking-widest font-bold transition-colors ${
                               answers[q.id] === opt
-                                ? 'bg-forest text-white border-forest'
+                                ? 'bg-saffron text-parchment border-saffron'
                                 : 'bg-white text-ink/60 border-hairline hover:border-forest'
                             }`}
                           >
@@ -209,7 +208,7 @@ export default function PendingQuestionnaire({ firstName, accessToken }: Props) 
                 <button
                   onClick={() => handleSubmit(inst.instructionId, inst.questions)}
                   disabled={submitting}
-                  className="bg-forest hover:opacity-90 text-white px-8 py-3 text-xs uppercase tracking-widest font-bold transition-opacity disabled:opacity-50"
+                  className="bg-saffron hover:bg-saffron-deep text-parchment px-8 py-3 text-xs uppercase tracking-widest font-bold transition-colors disabled:opacity-50 shadow-pop"
                 >
                   {submitting ? 'Submitting...' : `Submit ${inst.questions.length} Answer(s)`}
                 </button>

@@ -45,12 +45,14 @@ export default function Manifesto({ onApply, batchInfo }: ManifestoProps) {
   const fillPercent = Math.round((filled / total) * 100);
   const batchNum = batchInfo?.batchNumber || 1;
 
+  // Healthy "open" state pops in saffron; urgency states keep their semantic
+  // amber/red warnings; closed states fall back to muted ink.
   let bannerText = `Application Open for Batch #${batchNum}`;
-  let badgeBorder = 'border-forest/20';
-  let dotColor = 'bg-forest';
-  let glowColor = 'rgba(31,60,44,0.4)';  // Forest green tint
+  let badgeBorder = 'border-saffron/30';
+  let dotColor = 'bg-saffron';
+  let glowColor = 'rgba(232,93,4,0.55)';  // Saffron pop
   let bgClass = 'bg-white/90 backdrop-blur-xl';
-  let textColor = 'text-forest';
+  let textColor = 'text-saffron-deep';
   let isClosed = false;
 
   if (batchInfo === null) {
@@ -71,25 +73,25 @@ export default function Manifesto({ onApply, batchInfo }: ManifestoProps) {
     isClosed = true;
   } else if (fillPercent >= 90) {
     bannerText = `Almost Full — Batch #${batchNum}`;
-    badgeBorder = 'border-red-900/30';
-    dotColor = 'bg-red-600';
-    bgClass = 'bg-red-50/95 backdrop-blur-xl';
-    textColor = 'text-red-900';
-    glowColor = 'rgba(220,38,38,0.7)';
+    badgeBorder = 'border-terracotta-warm/40';
+    dotColor = 'bg-terracotta-warm';
+    bgClass = 'bg-white/90 backdrop-blur-xl';
+    textColor = 'text-terracotta';
+    glowColor = 'rgba(201,74,56,0.6)';
   } else if (fillPercent >= 75) {
     bannerText = `Filling Fast — Batch #${batchNum}`;
-    badgeBorder = 'border-amber-900/30';
-    dotColor = 'bg-amber-600';
-    bgClass = 'bg-amber-50/95 backdrop-blur-xl';
-    textColor = 'text-amber-900';
-    glowColor = 'rgba(217,119,6,0.5)';
+    badgeBorder = 'border-marigold/50';
+    dotColor = 'bg-marigold';
+    bgClass = 'bg-white/90 backdrop-blur-xl';
+    textColor = 'text-warning';
+    glowColor = 'rgba(244,163,0,0.6)';
   } else if (fillPercent >= 50) {
     bannerText = `Applications Open for Batch #${batchNum}`;
-    badgeBorder = 'border-emerald-900/30';
-    dotColor = 'bg-emerald-600';
-    bgClass = 'bg-emerald-50/95 backdrop-blur-xl';
-    textColor = 'text-emerald-900';
-    glowColor = 'rgba(5,150,105,0.4)';
+    badgeBorder = 'border-saffron/30';
+    dotColor = 'bg-saffron';
+    bgClass = 'bg-white/90 backdrop-blur-xl';
+    textColor = 'text-saffron-deep';
+    glowColor = 'rgba(232,93,4,0.55)';
   }
 
   return (
@@ -136,22 +138,22 @@ export default function Manifesto({ onApply, batchInfo }: ManifestoProps) {
         </div>
 
         <div className="flex flex-col items-center text-center max-w-4xl mx-auto mt-20 md:mt-12 px-4 relative z-10">
-          <span className="font-sans text-[10px] sm:text-xs uppercase tracking-[0.2em] text-terracotta block mb-6 md:mb-8 font-bold">
+          <span className="font-sans text-[10px] sm:text-xs uppercase tracking-[0.2em] text-terracotta-warm block mb-6 md:mb-8 font-bold">
             Timeline & Philosophy
           </span>
-          <h1 className="text-6xl md:text-7xl lg:text-[7rem] font-serif leading-[0.9] text-forest tracking-tighter mb-4 md:mb-6">
-            Build a Startup in <span className="text-terracotta italic">180 Days.</span>
+          <h1 className="text-6xl md:text-7xl lg:text-[7rem] font-serif-display font-bold leading-[0.9] text-forest tracking-[-0.025em] mb-4 md:mb-6">
+            Build a Startup in <span className="text-saffron italic">180 Days.</span>
           </h1>
           <h2 className="text-2xl md:text-4xl font-serif italic leading-tight text-forest/80 mb-8 max-w-3xl mx-auto">
             Passion is the only prerequisite.
           </h2>
           <p className="text-base md:text-lg lg:text-xl font-sans leading-relaxed text-ink/80 mb-10 max-w-3xl mx-auto">
-            We don&rsquo;t invest in you. <span className="font-bold text-forest underline decoration-terracotta/30">We build with you.</span> &quot;We are not looking for polished pitch decks or three-year financial projections. We are looking for the obsessive, the restless, and the relentlessly curious.&quot;
+            We don&rsquo;t invest in you. <span className="font-bold text-forest underline decoration-saffron/40">We build with you.</span> &quot;We are not looking for polished pitch decks or three-year financial projections. We are looking for the obsessive, the restless, and the relentlessly curious.&quot;
           </p>
           <div className="flex flex-col sm:flex-row gap-4 mb-4 justify-center w-full sm:w-auto">
             <button
               onClick={onApply}
-              className="px-8 py-4 md:px-10 md:py-5 bg-forest text-parchment font-sans text-[10px] uppercase tracking-widest font-bold hover:bg-forest/90 transition-all shadow-[4px_4px_0px_0px_rgba(91,9,2,0.2)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none w-full sm:w-auto"
+              className="px-8 py-4 md:px-10 md:py-5 bg-saffron text-parchment font-sans text-[10px] uppercase tracking-widest font-bold hover:bg-saffron-deep transition-all shadow-pop active:translate-x-[2px] active:translate-y-[2px] active:shadow-none w-full sm:w-auto"
             >
               Apply Now
             </button>
@@ -172,13 +174,13 @@ export default function Manifesto({ onApply, batchInfo }: ManifestoProps) {
         initial={{ opacity: 0, y: 40 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.1 }} transition={{ duration: 0.8 }}
       >
         <div className="max-w-screen-2xl mx-auto">
-          <h2 className="text-4xl md:text-5xl font-serif text-forest mb-20 text-center tracking-tighter">How This <span className="text-terracotta italic">Works</span></h2>
+          <h2 className="text-4xl md:text-5xl font-serif text-forest mb-20 text-center tracking-tighter">How This <span className="text-terracotta-warm italic">Works</span></h2>
 
           {/* Desktop Timeline */}
           <div className="hidden md:block relative pt-12 pb-16">
             <div className="absolute top-[60px] left-0 w-full h-[2px] bg-forest/10" />
             <motion.div
-              className="absolute top-[59px] left-0 h-[4px] bg-gradient-to-r from-terracotta/80 to-terracotta rounded-r-full shadow-[0_0_12px_rgba(201,74,56,0.3)] origin-left"
+              className="absolute top-[59px] left-0 h-[4px] bg-gradient-to-r from-saffron/70 to-saffron rounded-r-full shadow-[0_0_12px_rgba(232,93,4,0.3)] origin-left"
               initial={{ width: "10%" }}
               animate={{ width: `${(activeStep * 20) + 10}%` }}
               transition={{ duration: 0.6, type: "spring", bounce: 0.2 }}
@@ -192,7 +194,7 @@ export default function Manifesto({ onApply, batchInfo }: ManifestoProps) {
                   <div key={i} className="relative pt-12 text-center group cursor-pointer select-none" onClick={() => setActiveStep(i)}>
                     <div className="absolute top-[-6px] left-1/2 -translate-x-1/2 z-10 flex flex-col items-center justify-center">
                       <motion.div
-                        className={`rounded-full shadow-md flex items-center justify-center transition-colors duration-300 ${isActive ? 'w-8 h-8 bg-terracotta border-4 border-white' : (isPassed ? 'w-5 h-5 bg-terracotta border-2 border-white mt-1.5' : 'w-4 h-4 bg-forest/20 mt-2 border-2 border-white')}`}
+                        className={`rounded-full shadow-md flex items-center justify-center transition-colors duration-300 ${isActive ? 'w-8 h-8 bg-saffron border-4 border-white' : (isPassed ? 'w-5 h-5 bg-saffron border-2 border-white mt-1.5' : 'w-4 h-4 bg-forest/20 mt-2 border-2 border-white')}`}
                         whileHover={{ scale: 1.15 }}
                       >
                         {isActive && <div className="w-2 h-2 bg-white rounded-full" />}
@@ -201,7 +203,7 @@ export default function Manifesto({ onApply, batchInfo }: ManifestoProps) {
                     </div>
                     <motion.span
                       className="font-serif text-sm italic block mb-2 transition-colors duration-300"
-                      animate={{ color: isActive ? '#C94A38' : '#8B8B8B' }}
+                      animate={{ color: isActive ? '#E85D04' : '#8B8B8B' }}
                     >{item.step}</motion.span>
                     <motion.h4
                       className="font-serif text-xl mb-2 transition-colors duration-300 truncate px-2"
@@ -224,14 +226,14 @@ export default function Manifesto({ onApply, batchInfo }: ManifestoProps) {
                 <div key={i} className="flex gap-6 relative z-10 cursor-pointer" onClick={() => setActiveStep(i)}>
                   <div className="flex flex-col items-center mt-1">
                     <motion.div
-                      className={`rounded-full border-2 border-white shadow-sm flex items-center justify-center transition-colors duration-300 ${isActive ? 'w-6 h-6 bg-terracotta' : (isPassed ? 'w-5 h-5 bg-terracotta' : 'w-4 h-4 bg-forest/20')} shrink-0`}
+                      className={`rounded-full border-2 border-white shadow-sm flex items-center justify-center transition-colors duration-300 ${isActive ? 'w-6 h-6 bg-saffron' : (isPassed ? 'w-5 h-5 bg-saffron' : 'w-4 h-4 bg-forest/20')} shrink-0`}
                     >
                       {isActive && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
                       {(isPassed && !isActive) && <CheckCircle2 className="w-3 h-3 text-white" strokeWidth={3} />}
                     </motion.div>
                   </div>
                   <div>
-                    <span className={`font-serif text-xs italic block mb-1 transition-colors duration-300 ${isActive ? 'text-terracotta' : 'text-ink/40'}`}>{item.step}</span>
+                    <span className={`font-serif text-xs italic block mb-1 transition-colors duration-300 ${isActive ? 'text-saffron' : 'text-ink/40'}`}>{item.step}</span>
                     <h4 className={`font-serif text-xl mb-1 transition-colors duration-300 ${isActive ? 'text-forest' : 'text-ink/60'}`}>{item.title}</h4>
                   </div>
                 </div>
@@ -277,15 +279,15 @@ export default function Manifesto({ onApply, batchInfo }: ManifestoProps) {
                     <div className="w-full h-[240px] bg-forest/5 border-b border-hairline/20 relative flex items-center justify-center overflow-hidden">
                       {/* Abstract placeholder visual */}
                       <div className="absolute inset-0 bg-gradient-to-tr from-forest/10 to-transparent mix-blend-multiply opacity-50" />
-                      <div className="w-24 h-24 rounded-full border border-terracotta/30 flex items-center justify-center opacity-70">
-                        <span className="font-serif text-terracotta italic text-3xl">{stage.step}</span>
+                      <div className="w-24 h-24 rounded-full border border-saffron/30 flex items-center justify-center opacity-70">
+                        <span className="font-serif text-saffron italic text-3xl">{stage.step}</span>
                       </div>
                     </div>
                     {/* Card Content */}
                     <div className="p-8 md:p-10 flex flex-col flex-1 bg-white">
                       <div className="flex items-center justify-between mb-4">
                         <span className="font-sans text-[10px] uppercase tracking-widest text-ink/40">Phase {stage.step}</span>
-                        <span className="w-8 h-px bg-terracotta/30" />
+                        <span className="w-8 h-px bg-saffron/30" />
                       </div>
                       <h3 className="font-serif text-3xl md:text-4xl text-forest mb-4 leading-tight">{stage.title}</h3>
                       <p className="font-sans text-ink/70 leading-relaxed text-sm md:text-base">
@@ -346,7 +348,7 @@ export default function Manifesto({ onApply, batchInfo }: ManifestoProps) {
       >
         <div className="max-w-5xl mx-auto items-center">
           <div className="space-y-8">
-            <blockquote className="border-l-2 border-terracotta pl-8">
+            <blockquote className="border-l-2 border-terracotta-warm pl-8">
               <p className="font-serif text-4xl text-forest italic leading-snug">
                 &quot;The most dangerous founders aren&apos;t the ones with the best ideas, but the ones with the mindset and execution.&quot;
               </p>
@@ -374,12 +376,12 @@ export default function Manifesto({ onApply, batchInfo }: ManifestoProps) {
               <p className="font-sans text-parchment/60 leading-relaxed text-sm">An immersive six-month timeline to validate, build, and launch.</p>
             </div>
             <div className="space-y-6">
-              <div className="h-[2px] bg-alabaster/30 w-12" />
+              <div className="h-[2px] bg-saffron w-12" />
               <h3 className="font-sans text-[10px] uppercase tracking-[0.3em] opacity-80">Co-Building</h3>
               <p className="font-sans text-parchment/60 leading-relaxed text-sm">We provide the technical and operational muscle to turn hypotheses into reality.</p>
             </div>
             <div className="space-y-6">
-              <div className="h-[2px] bg-alabaster/30 w-12" />
+              <div className="h-[2px] bg-saffron w-12" />
               <h3 className="font-sans text-[10px] uppercase tracking-[0.3em] opacity-80">Zero Fluff</h3>
               <p className="font-sans text-parchment/60 leading-relaxed text-sm">No vanity metrics or networking mixers. Pure, unadulterated execution.</p>
             </div>
@@ -418,7 +420,7 @@ export default function Manifesto({ onApply, batchInfo }: ManifestoProps) {
             />
           </motion.div>
 
-          <div className="w-32 h-[2px] bg-terracotta mx-auto mb-12 opacity-30" />
+          <div className="w-32 h-[2px] bg-terracotta-warm mx-auto mb-12 opacity-30" />
           <p className="text-2xl md:text-3xl font-sans text-ink/80 leading-relaxed mb-6">
             We believe in empowering <span className="editorial-underline italic text-forest">women leaders.</span>
           </p>
@@ -434,12 +436,12 @@ export default function Manifesto({ onApply, batchInfo }: ManifestoProps) {
         initial={{ opacity: 0, y: 40 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.1 }} transition={{ duration: 0.8 }}
       >
         <div className="py-40 flex flex-col items-center text-center">
-          <h2 className="font-serif text-6xl md:text-8xl text-parchment mb-16 max-w-5xl tracking-tighter leading-[0.9]">
+          <h2 className="font-serif-display font-bold text-6xl md:text-8xl text-parchment mb-16 max-w-5xl tracking-[-0.025em] leading-[0.9]">
             Ready to Build Your <span className="text-alabaster italic underline decoration-parchment/20">Startup?</span>
           </h2>
           <button
             onClick={onApply}
-            className="group relative inline-flex items-center justify-center px-16 py-8 bg-parchment text-forest font-sans text-sm uppercase tracking-[0.2em] font-bold hover:bg-parchment/90 transition-all duration-300 shadow-[8px_8px_0px_0px_rgba(91,9,2,0.3)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
+            className="group relative inline-flex items-center justify-center px-16 py-8 bg-parchment text-forest font-sans text-sm uppercase tracking-[0.2em] font-bold hover:bg-parchment/90 transition-all duration-300 shadow-pop-lg active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
           >
             Apply Now
             <ArrowRight className="ml-6 w-5 h-5 group-hover:translate-x-2 transition-transform" />
@@ -451,7 +453,7 @@ export default function Manifesto({ onApply, batchInfo }: ManifestoProps) {
       <div className="fixed bottom-8 right-8 z-40 md:hidden">
         <button
           onClick={onApply}
-          className="bg-forest text-parchment w-16 h-16 flex items-center justify-center shadow-2xl"
+          className="bg-saffron text-parchment w-16 h-16 flex items-center justify-center shadow-2xl"
         >
           <Edit3 className="w-6 h-6" />
         </button>

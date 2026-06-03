@@ -37,7 +37,7 @@ export default function ChatWidget({ teamId, userId, userName }: ChatWidgetProps
     // Only connect if the widget is opened to save connections
     if (!isOpen) return;
 
-    const token = localStorage.getItem('token');
+    const token = api.getToken();
     // Strip /api from the URL to connect to the root namespace
     const baseUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api').replace(/\/api\/?$/, '');
     const newSocket = io(baseUrl, {
@@ -113,7 +113,7 @@ export default function ChatWidget({ teamId, userId, userName }: ChatWidgetProps
         <div>
           <h3 className="font-serif font-bold text-lg leading-tight">Team Comms</h3>
           <p className="text-[10px] uppercase tracking-widest text-parchment/60 flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-forest' : 'bg-terracotta'}`}></span>
+            <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-saffron' : 'bg-terracotta'}`}></span>
             {isConnected ? 'Connected • Secure' : 'Connecting...'}
           </p>
         </div>
@@ -175,7 +175,7 @@ export default function ChatWidget({ teamId, userId, userName }: ChatWidgetProps
           <button 
             type="submit" 
             disabled={!newMessage.trim() || !isConnected}
-            className="bg-ink text-white p-2 hover:bg-forest transition-colors disabled:opacity-50 disabled:hover:bg-ink flex-center w-10 h-10 shrink-0"
+            className="bg-saffron text-parchment p-2 hover:bg-saffron-deep transition-colors disabled:opacity-50 disabled:hover:bg-saffron flex-center w-10 h-10 shrink-0"
           >
             <Send className="w-4 h-4 ml-[-2px]" />
           </button>
