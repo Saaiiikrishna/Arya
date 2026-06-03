@@ -123,10 +123,11 @@ class ApiClient {
       sessionStorage.removeItem('arya_refresh');
       sessionStorage.removeItem('arya_profile');
       localStorage.removeItem('arya_admin');
-      // Avoid redirect loops if we're already on a login page.
+      // Bounce to the right login for the current area, avoiding redirect loops.
       const path = window.location.pathname;
-      if (!path.startsWith('/login') && !path.startsWith('/admin/login')) {
-        window.location.href = '/login';
+      const loginPath = path.startsWith('/investor') ? '/investor/login' : '/login';
+      if (path !== loginPath && !path.startsWith('/login') && !path.startsWith('/admin/login') && path !== '/investor/login') {
+        window.location.href = loginPath;
       }
     }
   }
@@ -438,8 +439,66 @@ class ApiClient {
     return this.request<any[]>('/investors/showcases');
   }
 
-  async requestMeeting(investorId: string, data: { showcaseId: string; date: string; message?: string }) {
-    return this.request<any>(`/investors/${investorId}/meeting-request`, { method: 'POST', body: data });
+  // Meeting request (investor portal): the investor identity is derived from the
+  // JWT server-side — no investorId arg/param. POST /investors/meeting-request.
+  async requestMeeting(data: { showcaseId: string; message?: string }) {
+    return this.request<any>('/investors/meeting-request', { method: 'POST', body: data });
+  }
+
+  // ─── Investor Portal (role INVESTOR) ──────────────────────
+
+  // Investor email+password login → JWT with role INVESTOR (only once approved).
+  async investorLogin(email: string, password: string) {
+    return this.request<any>('/investors/login', { method: 'POST', body: { email, password } });
+  }
+
+  async getInvestorMe() {
+    return this.request<any>('/investors/me');
+  }
+
+  async getInvestorShowcases() {
+    return this.request<any[]>('/investors/showcases');
+  }
+
+  async getMyMeetingRequests() {
+    return this.request<any[]>('/investors/me/meeting-requests');
+  }
+
+  // ─── Investor Admin ───────────────────────────────────────
+
+  async getInvestors(isApproved?: boolean) {
+    const qs = isApproved !== undefined ? `?isApproved=${isApproved}` : '';
+    return this.request<any[]>(`/admin/investors${qs}`);
+  }
+
+  async getInvestorDetail(id: string) {
+    return this.request<any>(`/admin/investors/${id}`);
+  }
+
+  async approveInvestor(id: string) {
+    return this.request<any>(`/admin/investors/${id}/approve`, { method: 'PATCH' });
+  }
+
+  async createShowcase(data: any) {
+    return this.request<any>('/admin/showcases', { method: 'POST', body: data });
+  }
+
+  async updateShowcase(id: string, data: any) {
+    return this.request<any>(`/admin/showcases/${id}`, { method: 'PATCH', body: data });
+  }
+
+  async getMeetingRequests(params: { showcaseId?: string; investorId?: string } = {}) {
+    const qs = new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v !== undefined) as [string, string][],
+    ).toString();
+    return this.request<any[]>(`/admin/meeting-requests${qs ? `?${qs}` : ''}`);
+  }
+
+  async updateMeetingStatus(id: string, status: 'ACCEPTED' | 'DECLINED' | 'COMPLETED', scheduledAt?: string) {
+    return this.request<any>(`/admin/meeting-requests/${id}/status`, {
+      method: 'PATCH',
+      body: { status, scheduledAt },
+    });
   }
 
   // Support / Contributions (Phase 2)
@@ -924,6 +983,169 @@ class ApiClient {
 
   async signAgreementPlatform(agreementId: string) {
     return this.request<any>(`/admin/equity/agreements/${agreementId}/sign-platform`, { method: 'POST' });
+  }
+
+  // Record a manual equity event (transfer / dilution / etc). triggeredBy is
+  // pinned to the JWT server-side — never send it from the client.
+  async recordEquityEvent(data: {
+    companyId: string;
+    eventType: string;
+    fromHolder?: string;
+    toHolder?: string;
+    fromHolderId?: string;
+    toHolderId?: string;
+    percentageAmount: number;
+    description: string;
+    metadata?: any;
+  }) {
+    return this.request<any>('/admin/equity/events', { method: 'POST', body: data });
+  }
+
+  // ─── Notifications (admin) ────────────────────────────────
+
+  async listNotifications(params: {
+    applicantId?: string;
+    status?: string;
+    type?: string;
+    page?: number;
+    limit?: number;
+  } = {}) {
+    const qs = new URLSearchParams(
+      Object.entries(params)
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => [k, String(v)]),
+    ).toString();
+    return this.request<any>(`/admin/notifications${qs ? `?${qs}` : ''}`);
+  }
+
+  async resendNotification(id: string) {
+    return this.request<any>(`/admin/notifications/${id}/resend`, { method: 'POST' });
+  }
+
+  // ─── WhatsApp (admin) ─────────────────────────────────────
+
+  async getWhatsappTemplates() {
+    return this.request<{ templates: any[] }>('/admin/whatsapp/templates');
+  }
+
+  async sendWhatsappMessage(data: {
+    to: string;
+    templateName: string;
+    components?: any[];
+    languageCode?: string;
+  }) {
+    return this.request<any>('/admin/whatsapp/send', { method: 'POST', body: data });
+  }
+
+  // ─── Sprints (admin) ──────────────────────────────────────
+
+  // Read a team's current sprint (admin-readable). Used by the team controls to
+  // know which sprint to complete / add milestones to.
+  async getSprintByTeamId(teamId: string) {
+    return this.request<any>(`/sprints/team/${teamId}`);
+  }
+
+  async createSprint(data: any) {
+    return this.request<any>('/admin/sprints', { method: 'POST', body: data });
+  }
+
+  async createMilestone(sprintId: string, data: any) {
+    return this.request<any>(`/admin/sprints/${sprintId}/milestones`, { method: 'POST', body: data });
+  }
+
+  async createBulkCommonMilestone(data: any) {
+    return this.request<any>('/admin/sprints/milestones/bulk-common', { method: 'POST', body: data });
+  }
+
+  async completeSprint(sprintId: string) {
+    return this.request<any>(`/admin/sprints/${sprintId}/complete`, { method: 'PATCH' });
+  }
+
+  // ─── Documents (admin) ────────────────────────────────────
+
+  // Returns the presigned download URL payload as provided by the endpoint.
+  async downloadDocument(id: string) {
+    return this.request<any>(`/admin/documents/${id}/download`);
+  }
+
+  // ─── Training (admin) ─────────────────────────────────────
+
+  async updateTrainingModule(id: string, data: any) {
+    return this.request<any>(`/admin/training/modules/${id}`, { method: 'PATCH', body: data });
+  }
+
+  async deleteTrainingModule(id: string) {
+    return this.request<any>(`/admin/training/modules/${id}`, { method: 'DELETE' });
+  }
+
+  async getTrainingStats() {
+    return this.request<any>('/admin/training/stats');
+  }
+
+  // Assignments are scoped per module: GET /admin/training/assignments/:moduleId
+  async getTrainingAssignments(moduleId: string) {
+    return this.request<any[]>(`/admin/training/assignments/${moduleId}`);
+  }
+
+  // ─── Donations (admin) ────────────────────────────────────
+
+  async getAdminDonations(params: { page?: number; limit?: number; status?: string } = {}) {
+    const qs = new URLSearchParams(
+      Object.entries(params)
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => [k, String(v)]),
+    ).toString();
+    return this.request<{ data: any[]; meta: any }>(`/admin/support${qs ? `?${qs}` : ''}`);
+  }
+
+  // ─── Chat (admin) ─────────────────────────────────────────
+
+  // Sender identity/name come from the JWT server-side; only content is sent.
+  async sendChatAnnouncement(data: { content: string }) {
+    return this.request<any>('/admin/chat/announcement', { method: 'POST', body: data });
+  }
+
+  // ─── Elections (admin) ────────────────────────────────────
+
+  // Add a custom question to a specific election. POST /admin/elections/:id/questions
+  async createElectionQuestions(electionId: string, data: {
+    label: string;
+    helpText?: string;
+    type?: string;
+    options?: any;
+    isRequired?: boolean;
+    sortOrder?: number;
+  }) {
+    return this.request<any>(`/admin/elections/${electionId}/questions`, { method: 'POST', body: data });
+  }
+
+  // ─── Eligibility (admin) ──────────────────────────────────
+
+  async evaluateApplicant(applicantId: string) {
+    return this.request<any>(`/admin/eligibility/evaluate/${applicantId}`);
+  }
+
+  // ─── Questions (admin) ────────────────────────────────────
+
+  async reorderQuestions(items: { id: string; sortOrder: number }[]) {
+    return this.request<any>('/admin/questions/reorder', { method: 'PUT', body: { items } });
+  }
+
+  // ─── Admin Accounts (SUPER_ADMIN) ─────────────────────────
+
+  async createAdminAccount(data: any) {
+    return this.request<any>('/admin/auth/create', { method: 'POST', body: data });
+  }
+
+  // ─── Settings (single-key helper) ─────────────────────────
+
+  // The backend exposes only a bulk PATCH /admin/settings; this wraps it for a
+  // single key so the consent page can update one setting at a time.
+  async updateSetting(key: string, value: string) {
+    return this.request<{ success: boolean }>('/admin/settings', {
+      method: 'PATCH',
+      body: { [key]: value },
+    });
   }
 }
 

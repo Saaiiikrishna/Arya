@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 import Link from 'next/link';
 import SmartMatchingModal from '@/components/admin/SmartMatchingModal';
 import AdminElectionControls from '@/components/admin/AdminElectionControls';
+import AdminTeamControls from '@/components/admin/AdminTeamControls';
 
 const STATUS_TRANSITIONS: Record<string, { next: string; label: string }> = {
   FILLING: { next: 'SCREENING', label: 'Start Screening' },
@@ -182,6 +183,32 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
     }
   };
 
+  const handleLockTeam = async (teamId: string) => {
+    if (!confirm('Lock this team? All 5 departments must be filled. Locked teams cannot accept or move members.')) return;
+    setActionLoading(`lock-${teamId}`);
+    try {
+      await api.lockTeam(teamId);
+      await loadData();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setActionLoading('');
+    }
+  };
+
+  const handleMoveMember = async (applicantId: string, targetTeamId: string) => {
+    if (!targetTeamId) return;
+    setActionLoading(`move-${applicantId}`);
+    try {
+      await api.moveTeamMember(applicantId, targetTeamId);
+      await loadData();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setActionLoading('');
+    }
+  };
+
   const handleStartBatchElections = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!confirm('This will start a leadership election for ALL teams in this batch. Continue?')) return;
@@ -323,9 +350,16 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
               <div key={team.id} className="border border-hairline bg-white p-6 hover:border-forest transition-colors shadow-sm">
                 <div className="flex items-center justify-between mb-4">
                   <span className="font-serif text-xl font-bold">{team.name}</span>
-                  <span className="px-3 py-1 text-[10px] uppercase tracking-widest font-bold bg-forest/10 text-forest border border-forest/20">
-                    {team._count?.members || team.members?.length || 0} members
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {team.isLocked && (
+                      <span className="px-2 py-1 text-[10px] uppercase tracking-widest font-bold bg-ink/10 text-ink/70 border border-ink/20">
+                        🔒 Locked
+                      </span>
+                    )}
+                    <span className="px-3 py-1 text-[10px] uppercase tracking-widest font-bold bg-forest/10 text-forest border border-forest/20">
+                      {team._count?.members || team.members?.length || 0} members
+                    </span>
+                  </div>
                 </div>
                 {team.trainingStartedAt && (
                   <div className="mb-4 bg-terracotta/10 border border-terracotta/30 px-3 py-2">
@@ -338,14 +372,37 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
                   </div>
                 )}
                 {team.members && team.members.slice(0, 5).map((m: any) => (
-                  <div key={m.id} className="text-sm text-ink/60 py-1 border-b border-hairline/50 last:border-0">
-                    {m.firstName} {m.lastName}
+                  <div key={m.id} className="flex items-center justify-between gap-2 text-sm text-ink/60 py-1 border-b border-hairline/50 last:border-0">
+                    <span className="truncate">{m.firstName} {m.lastName}</span>
+                    {teams.length > 1 && !team.isLocked && (
+                      <select
+                        value=""
+                        disabled={actionLoading === `move-${m.id}`}
+                        onChange={(e) => {
+                          const target = e.target.value;
+                          if (!target) return;
+                          if (confirm(`Move ${m.firstName} ${m.lastName} to ${teams.find((t) => t.id === target)?.name}?`)) {
+                            handleMoveMember(m.id, target);
+                          }
+                        }}
+                        className="text-[10px] uppercase tracking-widest text-forest border border-forest/30 bg-white px-1 py-0.5 focus:outline-none focus:border-forest disabled:opacity-50"
+                        title="Move member to another team"
+                      >
+                        <option value="">{actionLoading === `move-${m.id}` ? 'Moving…' : 'Move →'}</option>
+                        {teams
+                          .filter((t) => t.id !== team.id && !t.isLocked)
+                          .map((t) => (
+                            <option key={t.id} value={t.id}>{t.name}</option>
+                          ))}
+                      </select>
+                    )}
                   </div>
                 ))}
                 {team.members && team.members.length > 5 && (
                   <div className="text-xs text-ink/40 mt-2 uppercase tracking-widest">+{team.members.length - 5} more</div>
                 )}
                 <AdminElectionControls teamId={team.id} />
+                <AdminTeamControls teamId={team.id} onChange={loadData} />
                 <div className="mt-4 pt-4 border-t border-hairline flex flex-wrap gap-2">
                   {team.trainingStartedAt ? (
                     <button
@@ -362,6 +419,15 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
                       className="text-[10px] uppercase tracking-widest font-bold text-terracotta border border-terracotta/30 px-3 py-1.5 hover:bg-terracotta hover:text-white transition-colors disabled:opacity-50"
                     >
                       {actionLoading === `training-${team.id}` ? 'Moving...' : 'Move to Training'}
+                    </button>
+                  )}
+                  {!team.isLocked && (
+                    <button
+                      onClick={() => handleLockTeam(team.id)}
+                      disabled={!!actionLoading}
+                      className="text-[10px] uppercase tracking-widest font-bold text-ink border border-ink/30 px-3 py-1.5 hover:bg-ink hover:text-white transition-colors disabled:opacity-50"
+                    >
+                      {actionLoading === `lock-${team.id}` ? 'Locking...' : '🔒 Lock Team'}
                     </button>
                   )}
                   <button

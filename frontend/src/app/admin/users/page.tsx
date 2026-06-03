@@ -16,6 +16,13 @@ const STATUS_CONFIG: Record<string, { bg: string; text: string; border: string; 
   HELD:      { bg: 'bg-ink/5',              text: 'text-ink/50',          border: 'border-ink/15', label: 'On Hold' },
 };
 
+// DocumentStatus enum (PENDING | UPLOADED | VERIFIED) → badge styling.
+const DOC_STATUS_CONFIG: Record<string, { bg: string; text: string; border: string; label: string }> = {
+  PENDING:  { bg: 'bg-marigold/15', text: 'text-warning', border: 'border-marigold/40', label: 'Pending' },
+  UPLOADED: { bg: 'bg-info/10',     text: 'text-info',    border: 'border-info/25',     label: 'Uploaded' },
+  VERIFIED: { bg: 'bg-success/10',  text: 'text-success', border: 'border-success/25',  label: 'Verified' },
+};
+
 export default function UsersPage() {
   const [data, setData] = useState<{ data: any[]; meta: any }>({ data: [], meta: { total: 0, page: 1, limit: 20, totalPages: 0 } });
   const [loading, setLoading] = useState(true);
@@ -24,6 +31,12 @@ export default function UsersPage() {
   const [page, setPage] = useState(1);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  // Per-applicant documents, keyed by applicant id, loaded lazily on expand.
+  const [docs, setDocs] = useState<Record<string, any[]>>({});
+  const [docsLoading, setDocsLoading] = useState<string | null>(null);
+  const [docsError, setDocsError] = useState<Record<string, string>>({});
+  // Tracks an in-flight per-document action (download/verify), keyed by document id.
+  const [docActionLoading, setDocActionLoading] = useState<string | null>(null);
 
   const loadUsers = async () => {
     setLoading(true);
@@ -83,6 +96,63 @@ export default function UsersPage() {
     } finally {
       setActionLoading(null);
     }
+  };
+
+  const loadDocs = async (applicantId: string) => {
+    setDocsLoading(applicantId);
+    setDocsError((prev) => { const next = { ...prev }; delete next[applicantId]; return next; });
+    try {
+      const result = await api.getApplicantDocuments(applicantId);
+      setDocs((prev) => ({ ...prev, [applicantId]: result }));
+    } catch (err: any) {
+      setDocsError((prev) => ({ ...prev, [applicantId]: err.message || 'Failed to load documents' }));
+    } finally {
+      setDocsLoading(null);
+    }
+  };
+
+  const toggleExpand = (applicantId: string) => {
+    const next = expandedId === applicantId ? null : applicantId;
+    setExpandedId(next);
+    // Lazy-load documents the first time a row is expanded.
+    if (next && docs[next] === undefined) loadDocs(next);
+  };
+
+  const handleDownloadDoc = async (documentId: string) => {
+    setDocActionLoading(documentId);
+    try {
+      const res = await api.downloadDocument(documentId);
+      const url = res?.downloadUrl;
+      if (url) {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      } else {
+        alert('No download URL was returned for this document.');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to generate download link');
+    } finally {
+      setDocActionLoading(null);
+    }
+  };
+
+  const handleVerifyDoc = async (documentId: string, applicantId: string) => {
+    if (!confirm('Mark this document as verified?')) return;
+    setDocActionLoading(documentId);
+    try {
+      await api.verifyDocument(documentId);
+      await loadDocs(applicantId);
+    } catch (err: any) {
+      alert(err.message || 'Failed to verify document');
+    } finally {
+      setDocActionLoading(null);
+    }
+  };
+
+  const formatFileSize = (bytes?: number | null) => {
+    if (bytes == null) return '—';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   const statuses = ['', 'PENDING', 'HELD', 'ELIGIBLE', 'INELIGIBLE', 'ACTIVE', 'REMOVED', 'CONSENTED', 'FINALIZED', 'TRAINING'];
@@ -170,7 +240,7 @@ export default function UsersPage() {
                   <>
                     <tr key={user.id} className={`border-b border-hairline last:border-0 hover:bg-parchment/30 transition-colors ${expandedId === user.id ? 'bg-parchment/40' : ''}`}>
                       <td className="px-6 py-5 font-serif text-lg font-bold">
-                        <button onClick={() => setExpandedId(expandedId === user.id ? null : user.id)} className="text-left hover:text-forest transition-colors">
+                        <button onClick={() => toggleExpand(user.id)} className="text-left hover:text-forest transition-colors">
                           {user.firstName} {user.lastName}
                           <span className="ml-2 text-ink/30 text-sm">{expandedId === user.id ? '▲' : '▼'}</span>
                         </button>
@@ -310,6 +380,70 @@ export default function UsersPage() {
                                 <p className="text-ink/30 italic text-sm">No matching profile yet</p>
                               )}
                             </div>
+                          </div>
+
+                          {/* Documents */}
+                          <div className="border border-hairline bg-white p-5 mt-8">
+                            <h4 className="text-[10px] uppercase tracking-widest text-forest font-bold mb-4 pb-2 border-b border-hairline flex items-center justify-between">
+                              <span>Documents</span>
+                              <button
+                                onClick={() => loadDocs(user.id)}
+                                disabled={docsLoading === user.id}
+                                className="text-[9px] uppercase tracking-widest font-bold text-ink/40 hover:text-forest transition-colors disabled:opacity-40"
+                              >
+                                ↻ Refresh
+                              </button>
+                            </h4>
+
+                            {docsLoading === user.id ? (
+                              <p className="uppercase tracking-widest text-[10px] font-semibold text-ink/50 animate-pulse py-2">Loading documents...</p>
+                            ) : docsError[user.id] ? (
+                              <p className="text-terracotta text-sm py-2">{docsError[user.id]}</p>
+                            ) : (docs[user.id]?.length ?? 0) === 0 ? (
+                              <p className="text-ink/30 italic text-sm py-2">No documents uploaded yet</p>
+                            ) : (
+                              <div className="divide-y divide-hairline">
+                                {docs[user.id].map((doc: any) => {
+                                  const cfg = DOC_STATUS_CONFIG[doc.status] || { bg: 'bg-ink/5', text: 'text-ink/50', border: 'border-ink/15', label: doc.status };
+                                  return (
+                                    <div key={doc.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-3">
+                                      <div className="min-w-0">
+                                        <p className="font-serif text-base font-bold truncate">{doc.fileName}</p>
+                                        <p className="text-[11px] text-ink/40 uppercase tracking-widest mt-0.5">
+                                          {doc.type || 'OTHER'} · {formatFileSize(doc.fileSize)}
+                                          {doc.uploadedAt ? ` · ${new Date(doc.uploadedAt).toLocaleDateString()}` : ''}
+                                        </p>
+                                      </div>
+                                      <div className="flex gap-3 items-center flex-wrap shrink-0">
+                                        <span className={`px-3 py-1 text-[10px] uppercase tracking-widest font-bold border ${cfg.bg} ${cfg.text} ${cfg.border}`}>
+                                          {cfg.label}
+                                        </span>
+                                        {docActionLoading === doc.id ? (
+                                          <span className="text-[10px] uppercase tracking-widest text-ink/40 animate-pulse">Processing...</span>
+                                        ) : (
+                                          <>
+                                            <button
+                                              onClick={() => handleDownloadDoc(doc.id)}
+                                              className="text-[10px] uppercase tracking-widest font-bold text-forest hover:text-forest-deep transition-colors px-2 py-1 border border-forest/20 bg-forest/10 hover:bg-forest/20"
+                                            >
+                                              ↓ Download
+                                            </button>
+                                            {doc.status !== 'VERIFIED' && (
+                                              <button
+                                                onClick={() => handleVerifyDoc(doc.id, user.id)}
+                                                className="text-[10px] uppercase tracking-widest font-bold text-saffron-deep hover:text-saffron transition-colors px-2 py-1 border border-saffron/20 bg-saffron/10 hover:bg-saffron/20"
+                                              >
+                                                ✓ Verify
+                                              </button>
+                                            )}
+                                          </>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                         </td>
                       </tr>

@@ -81,6 +81,39 @@ export class AuthService {
     };
   }
 
+  /** Investor email+password login → JWT with role INVESTOR (must be approved). */
+  async investorLogin(email: string, password: string) {
+    const normalizedEmail = (email || '').trim().toLowerCase();
+    const investor = await this.prisma.investor.findUnique({ where: { email: normalizedEmail } });
+    // Constant-ish failure: same error whether the investor is missing, has no
+    // password set, or the password is wrong — avoids leaking which.
+    if (!investor || !investor.passwordHash) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+    const ok = await bcrypt.compare(password, investor.passwordHash);
+    if (!ok) throw new UnauthorizedException('Invalid credentials');
+    if (!investor.isApproved) {
+      throw new UnauthorizedException('Your investor account is pending approval.');
+    }
+
+    const payload: JwtPayload = { sub: investor.id, email: investor.email, role: 'INVESTOR' };
+    const refreshToken = this.signRefreshToken(payload);
+    await this.storeRefreshToken(investor.id, refreshToken);
+
+    return {
+      accessToken: this.jwtService.sign(payload),
+      refreshToken,
+      investor: {
+        id: investor.id,
+        email: investor.email,
+        firstName: investor.firstName,
+        lastName: investor.lastName,
+        firm: investor.firm,
+        role: 'INVESTOR',
+      },
+    };
+  }
+
   async googleLogin(token: string) {
     const client = new OAuth2Client(this.configService.get<string>('GOOGLE_CLIENT_ID'));
 
@@ -200,6 +233,10 @@ export class AuthService {
       const applicant = await this.prisma.applicant.findUnique({ where: { id: payload.sub } });
       if (!applicant) throw new UnauthorizedException('User not found');
       newPayload = { sub: applicant.id, email: applicant.email, role: 'APPLICANT' };
+    } else if (payload.role === 'INVESTOR') {
+      const investor = await this.prisma.investor.findUnique({ where: { id: payload.sub } });
+      if (!investor || !investor.isApproved) throw new UnauthorizedException('User not found or not approved');
+      newPayload = { sub: investor.id, email: investor.email, role: 'INVESTOR' };
     } else {
       const admin = await this.prisma.admin.findUnique({ where: { id: payload.sub } });
       if (!admin || !admin.isActive) throw new UnauthorizedException('User not found or inactive');
@@ -282,6 +319,16 @@ export class AuthService {
       });
       if (!applicant) throw new UnauthorizedException('Applicant not found');
       return { ...applicant, role: 'APPLICANT' };
+    }
+
+    if (payload.role === 'INVESTOR') {
+      const investor = await this.prisma.investor.findUnique({
+        where: { id: payload.sub },
+      });
+      if (!investor || !investor.isApproved) {
+        throw new UnauthorizedException('Investor not found or not approved');
+      }
+      return { ...investor, role: 'INVESTOR' };
     }
 
     const admin = await this.prisma.admin.findUnique({

@@ -8,7 +8,8 @@ import { useRouter } from 'next/navigation';
 import {
   FileQuestion, Package, Users, ShieldCheck,
   BookOpen, BarChart2, Megaphone, Settings,
-  AlertCircle, CheckCircle2, UserPlus, Scale, Calendar
+  AlertCircle, CheckCircle2, UserPlus, Scale, Calendar, Bell, MessageCircle,
+  Briefcase, Heart
 } from 'lucide-react';
 
 interface Stats {
@@ -212,6 +213,34 @@ export default function DashboardPage() {
                   <span className="font-serif text-lg font-bold group-hover:text-forest transition-colors">Dispatches</span>
                 </div>
                 <span className="text-[10px] uppercase tracking-widest text-ink/60 leading-relaxed mt-auto">Global announcements broadcast</span>
+              </Link>
+              <Link href="/admin/whatsapp" className="border border-hairline p-5 bg-white hover:border-forest hover:shadow-md shadow-sm transition-all group flex flex-col">
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="group-hover:scale-110 transition-transform text-ink/40 group-hover:text-forest"><MessageCircle size={22} strokeWidth={1.5} /></span>
+                  <span className="font-serif text-lg font-bold group-hover:text-forest transition-colors">WhatsApp</span>
+                </div>
+                <span className="text-[10px] uppercase tracking-widest text-ink/60 leading-relaxed mt-auto">Template console & direct sends</span>
+              </Link>
+              <Link href="/admin/notifications" className="border border-hairline p-5 bg-white hover:border-forest hover:shadow-md shadow-sm transition-all group flex flex-col">
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="group-hover:scale-110 transition-transform text-ink/40 group-hover:text-forest"><Bell size={22} strokeWidth={1.5} /></span>
+                  <span className="font-serif text-lg font-bold group-hover:text-forest transition-colors">Notification Log</span>
+                </div>
+                <span className="text-[10px] uppercase tracking-widest text-ink/60 leading-relaxed mt-auto">Email &amp; WhatsApp delivery audit</span>
+              </Link>
+              <Link href="/admin/investors" className="border border-hairline p-5 bg-white hover:border-forest hover:shadow-md shadow-sm transition-all group flex flex-col">
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="group-hover:scale-110 transition-transform text-ink/40 group-hover:text-forest"><Briefcase size={22} strokeWidth={1.5} /></span>
+                  <span className="font-serif text-lg font-bold group-hover:text-forest transition-colors">Investors</span>
+                </div>
+                <span className="text-[10px] uppercase tracking-widest text-ink/60 leading-relaxed mt-auto">Showcases, approvals &amp; meetings</span>
+              </Link>
+              <Link href="/admin/donations" className="border border-hairline p-5 bg-white hover:border-terracotta-warm hover:shadow-md shadow-sm transition-all group flex flex-col border-l-4 border-l-terracotta-warm/30">
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="group-hover:scale-110 transition-transform text-ink/40 group-hover:text-terracotta-warm"><Heart size={22} strokeWidth={1.5} /></span>
+                  <span className="font-serif text-lg font-bold group-hover:text-terracotta-warm transition-colors">Donations</span>
+                </div>
+                <span className="text-[10px] uppercase tracking-widest text-ink/60 leading-relaxed mt-auto">Patronage ledger &amp; payment audit</span>
               </Link>
               <Link href="/admin/settings" className="border border-hairline p-5 bg-white hover:border-forest hover:shadow-md shadow-sm transition-all group flex flex-col xl:col-span-2">
                 <div className="flex items-center gap-3 mb-3">

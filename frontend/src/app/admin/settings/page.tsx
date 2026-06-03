@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { useSettings } from '@/lib/settings';
+import { useAuth } from '@/lib/auth';
 import { useRouter } from 'next/navigation';
 
 interface VisitorSummary {
@@ -41,7 +42,38 @@ interface PageViewRecord {
 export default function AdminSettingsPage() {
   const router = useRouter();
   const { refresh } = useSettings();
+  const { role } = useAuth();
+  const isSuperAdmin = role === 'SUPER_ADMIN';
   const [activeTab, setActiveTab] = useState<'settings' | 'analytics'>('settings');
+
+  // Manage Admins state (SUPER_ADMIN only)
+  const [newAdmin, setNewAdmin] = useState({ email: '', password: '', firstName: '', lastName: '' });
+  const [creatingAdmin, setCreatingAdmin] = useState(false);
+  const [adminError, setAdminError] = useState<string | null>(null);
+  const [adminSuccess, setAdminSuccess] = useState<string | null>(null);
+
+  const createAdmin = async () => {
+    setAdminError(null);
+    setAdminSuccess(null);
+    if (!newAdmin.email || !newAdmin.password || !newAdmin.firstName || !newAdmin.lastName) {
+      setAdminError('All fields are required.');
+      return;
+    }
+    if (newAdmin.password.length < 8) {
+      setAdminError('Password must be at least 8 characters.');
+      return;
+    }
+    setCreatingAdmin(true);
+    try {
+      await api.createAdminAccount(newAdmin);
+      setAdminSuccess(`Admin account created for ${newAdmin.email}.`);
+      setNewAdmin({ email: '', password: '', firstName: '', lastName: '' });
+    } catch (err: any) {
+      setAdminError(err?.message || 'Failed to create admin account.');
+    } finally {
+      setCreatingAdmin(false);
+    }
+  };
 
   // Settings state
   const [settings, setSettings] = useState<Record<string, string>>({});
@@ -352,6 +384,97 @@ export default function AdminSettingsPage() {
                   </div>
                 </div>
               </section>
+
+              {/* Manage Admins — SUPER_ADMIN only */}
+              {isSuperAdmin && (
+                <section className="bg-white border border-hairline p-8">
+                  <div className="flex items-start gap-3 mb-6">
+                    <div>
+                      <h2 className="font-serif text-2xl font-bold mb-2">Manage Admins</h2>
+                      <p className="text-xs uppercase tracking-widest text-ink/50">
+                        Create a new administrator account with full back-office access
+                      </p>
+                    </div>
+                    <span className="ml-auto text-[10px] uppercase tracking-widest text-saffron-deep border border-saffron/40 bg-saffron/5 px-2 py-1 font-semibold">
+                      Super Admin
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl">
+                    <div className="flex flex-col gap-2">
+                      <label className="font-sans text-[10px] uppercase tracking-widest text-forest font-semibold">
+                        First Name
+                      </label>
+                      <input
+                        type="text"
+                        value={newAdmin.firstName}
+                        onChange={(e) => setNewAdmin((prev) => ({ ...prev, firstName: e.target.value }))}
+                        placeholder="Jane"
+                        className="border border-hairline px-4 py-2 text-sm bg-white focus:outline-none focus:border-forest"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <label className="font-sans text-[10px] uppercase tracking-widest text-forest font-semibold">
+                        Last Name
+                      </label>
+                      <input
+                        type="text"
+                        value={newAdmin.lastName}
+                        onChange={(e) => setNewAdmin((prev) => ({ ...prev, lastName: e.target.value }))}
+                        placeholder="Doe"
+                        className="border border-hairline px-4 py-2 text-sm bg-white focus:outline-none focus:border-forest"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <label className="font-sans text-[10px] uppercase tracking-widest text-forest font-semibold">
+                        Email
+                      </label>
+                      <input
+                        type="email"
+                        value={newAdmin.email}
+                        onChange={(e) => setNewAdmin((prev) => ({ ...prev, email: e.target.value }))}
+                        placeholder="admin@aryavartham.com"
+                        autoComplete="off"
+                        className="border border-hairline px-4 py-2 text-sm bg-white focus:outline-none focus:border-forest"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <label className="font-sans text-[10px] uppercase tracking-widest text-forest font-semibold">
+                        Password
+                      </label>
+                      <input
+                        type="password"
+                        value={newAdmin.password}
+                        onChange={(e) => setNewAdmin((prev) => ({ ...prev, password: e.target.value }))}
+                        placeholder="Minimum 8 characters"
+                        autoComplete="new-password"
+                        className="border border-hairline px-4 py-2 text-sm bg-white focus:outline-none focus:border-forest"
+                      />
+                    </div>
+                  </div>
+
+                  {adminError && (
+                    <div className="mt-4 p-3 border border-terracotta/40 bg-terracotta/5 text-xs text-terracotta max-w-2xl">
+                      {adminError}
+                    </div>
+                  )}
+                  {adminSuccess && (
+                    <div className="mt-4 p-3 border border-forest/30 bg-forest/5 text-xs text-forest max-w-2xl">
+                      {adminSuccess}
+                    </div>
+                  )}
+
+                  <div className="mt-6">
+                    <button
+                      onClick={createAdmin}
+                      disabled={creatingAdmin}
+                      className="bg-saffron text-parchment px-6 py-2 text-xs uppercase tracking-widest font-semibold hover:bg-saffron-deep transition-colors disabled:opacity-50 cursor-pointer"
+                    >
+                      {creatingAdmin ? 'Creating...' : 'Create Admin Account'}
+                    </button>
+                  </div>
+                </section>
+              )}
             </>
           )}
         </div>

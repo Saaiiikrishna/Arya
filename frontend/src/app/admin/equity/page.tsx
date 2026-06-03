@@ -5,7 +5,8 @@ import { api } from '@/lib/api';
 import Link from 'next/link';
 import {
   Building2, Clock, ArrowRightLeft, Plus, ChevronRight,
-  Play, HandMetal, AlertTriangle, CheckCircle, Timer, TrendingUp
+  Play, HandMetal, AlertTriangle, CheckCircle, Timer, TrendingUp,
+  FileSignature, Pencil, X, Stamp, FileText
 } from 'lucide-react';
 
 interface CompanyRow {
@@ -57,6 +58,26 @@ export default function AdminEquityPage() {
     registeredAddress: '', gstin: '', panNumber: '', notes: '',
   });
 
+  // Equity agreement form state (company detail panel)
+  const [showAgreementForm, setShowAgreementForm] = useState(false);
+  const [agreementForm, setAgreementForm] = useState({
+    agreementType: 'FOUNDING', title: '', equityPct: '', duration: '', notes: '',
+  });
+  const [signingAgreementId, setSigningAgreementId] = useState<string | null>(null);
+
+  // Record-equity-event form state (company detail panel)
+  const [showEventForm, setShowEventForm] = useState(false);
+  const [eventForm, setEventForm] = useState({
+    eventType: 'TRANSFER', fromHolderId: '', toHolderId: '', percentageAmount: '', description: '',
+  });
+
+  // Company edit form state (company detail panel)
+  const [showEditForm, setShowEditForm] = useState(false);
+  const [editForm, setEditForm] = useState({
+    companyName: '', sector: '', description: '', registrationNumber: '',
+    registeredAddress: '', gstin: '', panNumber: '', notes: '', status: '',
+  });
+
   // Load dashboard
   useEffect(() => {
     Promise.all([
@@ -80,6 +101,10 @@ export default function AdminEquityPage() {
     setSelectedId(id);
     setPanel('detail');
     setLoadingDetail(true);
+    // Reset detail-scoped sub-forms when switching companies.
+    setShowAgreementForm(false);
+    setShowEventForm(false);
+    setShowEditForm(false);
     try {
       const d = await api.getEquityCompanyDetail(id);
       setDetail(d);
@@ -144,6 +169,153 @@ export default function AdminEquityPage() {
       if (selectedId) await openDetail(selectedId);
     } catch (e) { alert('Failed to update holder vesting'); console.error(e); }
     finally { setVestingSavingId(null); }
+  };
+
+  // ─── Equity Agreements ──────────────────────────────────
+  const createAgreement = async () => {
+    if (!selectedId) return;
+    if (!agreementForm.title.trim()) {
+      alert('Agreement title is required');
+      return;
+    }
+    const equityPct = agreementForm.equityPct === '' ? undefined : Number(agreementForm.equityPct);
+    const duration = agreementForm.duration === '' ? undefined : Number(agreementForm.duration);
+    if (equityPct !== undefined && (Number.isNaN(equityPct) || equityPct < 0 || equityPct > 100)) {
+      alert('Equity % must be between 0 and 100');
+      return;
+    }
+    if (duration !== undefined && (Number.isNaN(duration) || duration < 0)) {
+      alert('Duration must be a positive number of days');
+      return;
+    }
+    setActionLoading(true);
+    try {
+      await api.createEquityAgreement({
+        companyId: selectedId,
+        agreementType: agreementForm.agreementType,
+        title: agreementForm.title.trim(),
+        ...(equityPct !== undefined && { equityPct }),
+        ...(duration !== undefined && { duration }),
+        ...(agreementForm.notes.trim() && { notes: agreementForm.notes.trim() }),
+      });
+      setShowAgreementForm(false);
+      setAgreementForm({ agreementType: 'FOUNDING', title: '', equityPct: '', duration: '', notes: '' });
+      await openDetail(selectedId);
+    } catch (e: any) {
+      alert(e?.message || 'Failed to create agreement');
+    } finally { setActionLoading(false); }
+  };
+
+  const signPlatform = async (agreementId: string) => {
+    if (!confirm('Sign this agreement on behalf of the platform? This records your signature.')) return;
+    setSigningAgreementId(agreementId);
+    try {
+      await api.signAgreementPlatform(agreementId);
+      if (selectedId) await openDetail(selectedId);
+    } catch (e: any) {
+      alert(e?.message || 'Failed to sign agreement');
+    } finally { setSigningAgreementId(null); }
+  };
+
+  // ─── Record Equity Event ────────────────────────────────
+  const recordEvent = async () => {
+    if (!selectedId) return;
+    const { eventType, fromHolderId, toHolderId, percentageAmount, description } = eventForm;
+    if (!description.trim()) {
+      alert('A description is required for the audit log');
+      return;
+    }
+    // Per-type required-field validation, mirroring the backend contract.
+    if (eventType === 'TRANSFER' && (!fromHolderId || !toHolderId)) {
+      alert('TRANSFER requires both a source and a target holder');
+      return;
+    }
+    if (eventType === 'TRANSFER' && fromHolderId === toHolderId) {
+      alert('Source and target holders must differ');
+      return;
+    }
+    if (eventType === 'BUYOUT' && !fromHolderId) {
+      alert('BUYOUT requires a source holder');
+      return;
+    }
+    if (eventType === 'DILUTE' && !toHolderId) {
+      alert('DILUTE requires a target holder to receive the freed equity');
+      return;
+    }
+    if (eventType === 'VEST' && !toHolderId) {
+      alert('VEST requires a target holder');
+      return;
+    }
+    // BUYOUT zeroes the source and uses no amount; the others need a positive amount.
+    const amount = Number(percentageAmount);
+    if (eventType !== 'BUYOUT') {
+      if (percentageAmount === '' || Number.isNaN(amount) || amount <= 0) {
+        alert('Enter a positive percentage amount');
+        return;
+      }
+    }
+    setActionLoading(true);
+    try {
+      await api.recordEquityEvent({
+        companyId: selectedId,
+        eventType,
+        ...(fromHolderId && { fromHolderId }),
+        ...(toHolderId && { toHolderId }),
+        // BUYOUT ignores the amount server-side (it zeroes the source holder).
+        percentageAmount: eventType === 'BUYOUT' ? 0 : amount,
+        description: description.trim(),
+      });
+      setShowEventForm(false);
+      setEventForm({ eventType: 'TRANSFER', fromHolderId: '', toHolderId: '', percentageAmount: '', description: '' });
+      await openDetail(selectedId);
+      await refresh();
+    } catch (e: any) {
+      alert(e?.message || 'Failed to record equity event');
+    } finally { setActionLoading(false); }
+  };
+
+  // ─── Company Edit ───────────────────────────────────────
+  const openEditForm = () => {
+    if (!detail) return;
+    setEditForm({
+      companyName: detail.companyName || '',
+      sector: detail.sector || '',
+      description: detail.description || '',
+      registrationNumber: detail.registrationNumber || '',
+      registeredAddress: detail.registeredAddress || '',
+      gstin: detail.gstin || '',
+      panNumber: detail.panNumber || '',
+      notes: detail.notes || '',
+      status: detail.status || '',
+    });
+    setShowEditForm(true);
+  };
+
+  const saveCompanyEdit = async () => {
+    if (!selectedId) return;
+    if (!editForm.companyName.trim()) {
+      alert('Company name is required');
+      return;
+    }
+    setActionLoading(true);
+    try {
+      await api.updateEquityCompany(selectedId, {
+        companyName: editForm.companyName.trim(),
+        sector: editForm.sector,
+        description: editForm.description,
+        registrationNumber: editForm.registrationNumber,
+        registeredAddress: editForm.registeredAddress,
+        gstin: editForm.gstin,
+        panNumber: editForm.panNumber,
+        notes: editForm.notes,
+        ...(editForm.status && { status: editForm.status }),
+      });
+      setShowEditForm(false);
+      await openDetail(selectedId);
+      await refresh();
+    } catch (e: any) {
+      alert(e?.message || 'Failed to update company');
+    } finally { setActionLoading(false); }
   };
 
   const handleCreate = async () => {
@@ -401,7 +573,14 @@ export default function AdminEquityPage() {
                     )}
                     {detail.sector && <div className="mt-1 text-xs text-ink/50">Sector: {detail.sector}</div>}
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap justify-end">
+                    <button
+                      onClick={openEditForm}
+                      disabled={actionLoading}
+                      className="px-4 py-2 border border-hairline text-ink/70 text-[10px] uppercase tracking-widest font-bold hover:border-forest hover:text-forest transition-colors disabled:opacity-50 flex items-center gap-2"
+                    >
+                      <Pencil className="w-3 h-3" /> Edit Company
+                    </button>
                     {detail.status !== 'HANDED_OVER' && detail.status !== 'DISSOLVED' && (
                       <button
                         onClick={() => recomputeVesting(detail.id)}
@@ -432,6 +611,119 @@ export default function AdminEquityPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Edit Company Form */}
+              {showEditForm && (
+                <div className="border border-forest/30 bg-white p-8 animate-fade-in">
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="font-serif text-xl font-bold flex items-center gap-2">
+                      <Pencil className="w-5 h-5 text-forest/60" /> Edit Company Details
+                    </h3>
+                    <button onClick={() => setShowEditForm(false)} className="text-ink/40 hover:text-ink transition-colors">
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                  <div className="space-y-5">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] uppercase tracking-widest text-ink/60 mb-2 font-bold">Company Name *</label>
+                        <input type="text"
+                          className="w-full border border-hairline px-4 py-3 text-sm focus:outline-none focus:border-forest"
+                          value={editForm.companyName}
+                          onChange={e => setEditForm({ ...editForm, companyName: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] uppercase tracking-widest text-ink/60 mb-2 font-bold">Status</label>
+                        <select
+                          className="w-full border border-hairline px-4 py-3 text-sm focus:outline-none focus:border-forest bg-white"
+                          value={editForm.status}
+                          onChange={e => setEditForm({ ...editForm, status: e.target.value })}
+                        >
+                          {['FORMATION', 'INCORPORATED', 'ACTIVE', 'SUSPENDED', 'HANDED_OVER', 'DISSOLVED'].map(s => (
+                            <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] uppercase tracking-widest text-ink/60 mb-2 font-bold">Sector</label>
+                        <input type="text"
+                          className="w-full border border-hairline px-4 py-3 text-sm focus:outline-none focus:border-forest"
+                          value={editForm.sector}
+                          onChange={e => setEditForm({ ...editForm, sector: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] uppercase tracking-widest text-ink/60 mb-2 font-bold">CIN / Reg No.</label>
+                        <input type="text"
+                          className="w-full border border-hairline px-4 py-3 text-sm focus:outline-none focus:border-forest"
+                          value={editForm.registrationNumber}
+                          onChange={e => setEditForm({ ...editForm, registrationNumber: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] uppercase tracking-widest text-ink/60 mb-2 font-bold">GSTIN</label>
+                        <input type="text"
+                          className="w-full border border-hairline px-4 py-3 text-sm focus:outline-none focus:border-forest"
+                          value={editForm.gstin}
+                          onChange={e => setEditForm({ ...editForm, gstin: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] uppercase tracking-widest text-ink/60 mb-2 font-bold">PAN</label>
+                        <input type="text"
+                          className="w-full border border-hairline px-4 py-3 text-sm focus:outline-none focus:border-forest"
+                          value={editForm.panNumber}
+                          onChange={e => setEditForm({ ...editForm, panNumber: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-widest text-ink/60 mb-2 font-bold">Description</label>
+                      <textarea rows={3}
+                        className="w-full border border-hairline px-4 py-3 text-sm focus:outline-none focus:border-forest resize-none"
+                        value={editForm.description}
+                        onChange={e => setEditForm({ ...editForm, description: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-widest text-ink/60 mb-2 font-bold">Registered Address</label>
+                      <textarea rows={2}
+                        className="w-full border border-hairline px-4 py-3 text-sm focus:outline-none focus:border-forest resize-none"
+                        value={editForm.registeredAddress}
+                        onChange={e => setEditForm({ ...editForm, registeredAddress: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-widest text-ink/60 mb-2 font-bold">Admin Notes</label>
+                      <textarea rows={2}
+                        className="w-full border border-hairline px-4 py-3 text-sm focus:outline-none focus:border-forest resize-none"
+                        value={editForm.notes}
+                        onChange={e => setEditForm({ ...editForm, notes: e.target.value })}
+                      />
+                    </div>
+                    <div className="pt-4 border-t border-hairline flex items-center justify-end gap-3">
+                      <button
+                        onClick={() => setShowEditForm(false)}
+                        className="px-6 py-3 border border-hairline text-ink/60 text-[10px] uppercase tracking-widest font-bold hover:border-ink/40 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={saveCompanyEdit}
+                        disabled={actionLoading}
+                        className="px-8 py-3 bg-forest text-parchment text-[10px] uppercase tracking-widest font-bold hover:bg-forest/90 disabled:opacity-50 transition-colors"
+                      >
+                        {actionLoading ? 'Saving…' : 'Save Changes'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Timer Progress */}
               {detail.timerStartDate && (
@@ -534,6 +826,240 @@ export default function AdminEquityPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Equity Agreements */}
+              <div className="border border-hairline bg-white p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-serif text-lg font-bold flex items-center gap-2">
+                    <FileSignature className="w-5 h-5 text-forest/60" /> Equity Agreements
+                  </h3>
+                  <button
+                    onClick={() => setShowAgreementForm(v => !v)}
+                    className="px-4 py-2 border border-forest text-forest text-[10px] uppercase tracking-widest font-bold hover:bg-forest hover:text-parchment transition-colors flex items-center gap-2"
+                  >
+                    {showAgreementForm ? <><X className="w-3 h-3" /> Cancel</> : <><Plus className="w-3 h-3" /> New Agreement</>}
+                  </button>
+                </div>
+
+                {/* New agreement form */}
+                {showAgreementForm && (
+                  <div className="border border-forest/30 bg-alabaster/40 p-5 mb-5 animate-fade-in space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] uppercase tracking-widest text-ink/60 mb-2 font-bold">Type</label>
+                        <select
+                          className="w-full border border-hairline px-4 py-3 text-sm focus:outline-none focus:border-forest bg-white"
+                          value={agreementForm.agreementType}
+                          onChange={e => setAgreementForm({ ...agreementForm, agreementType: e.target.value })}
+                        >
+                          {['FOUNDING', 'VESTING', 'HANDOVER', 'BUYOUT'].map(t => (
+                            <option key={t} value={t}>{t}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] uppercase tracking-widest text-ink/60 mb-2 font-bold">Title *</label>
+                        <input type="text" placeholder="e.g., Founders Vesting Agreement"
+                          className="w-full border border-hairline px-4 py-3 text-sm focus:outline-none focus:border-forest"
+                          value={agreementForm.title}
+                          onChange={e => setAgreementForm({ ...agreementForm, title: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] uppercase tracking-widest text-ink/60 mb-2 font-bold">Equity % (optional)</label>
+                        <input type="number" min={0} max={100} step="0.01" placeholder="e.g., 49"
+                          className="w-full border border-hairline px-4 py-3 text-sm focus:outline-none focus:border-forest"
+                          value={agreementForm.equityPct}
+                          onChange={e => setAgreementForm({ ...agreementForm, equityPct: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] uppercase tracking-widest text-ink/60 mb-2 font-bold">Duration in days (optional)</label>
+                        <input type="number" min={0} step="1" placeholder="e.g., 1000"
+                          className="w-full border border-hairline px-4 py-3 text-sm focus:outline-none focus:border-forest"
+                          value={agreementForm.duration}
+                          onChange={e => setAgreementForm({ ...agreementForm, duration: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-widest text-ink/60 mb-2 font-bold">Notes (optional)</label>
+                      <textarea rows={2}
+                        className="w-full border border-hairline px-4 py-3 text-sm focus:outline-none focus:border-forest resize-none"
+                        value={agreementForm.notes}
+                        onChange={e => setAgreementForm({ ...agreementForm, notes: e.target.value })}
+                      />
+                    </div>
+                    <div className="flex justify-end">
+                      <button
+                        onClick={createAgreement}
+                        disabled={actionLoading}
+                        className="px-6 py-3 bg-saffron text-parchment text-[10px] uppercase tracking-widest font-bold hover:bg-saffron-deep shadow-pop disabled:opacity-50 transition-colors"
+                      >
+                        {actionLoading ? 'Creating…' : 'Create Agreement'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Agreement list */}
+                {(!detail.equityAgreements || detail.equityAgreements.length === 0) ? (
+                  <p className="text-ink/40 text-sm font-serif italic">No agreements drafted yet.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {detail.equityAgreements.map((a: any) => (
+                      <div key={a.id} className="border border-hairline p-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <FileText className="w-4 h-4 text-ink/40" />
+                              <span className="font-bold text-sm">{a.title}</span>
+                              <span className="px-1.5 py-0.5 text-[8px] uppercase tracking-widest font-bold border bg-ink/5 text-ink/50 border-ink/15">{a.agreementType}</span>
+                              <span className={`px-1.5 py-0.5 text-[8px] uppercase tracking-widest font-bold border ${
+                                a.status === 'ACTIVE' ? 'bg-success/10 text-success border-success/25' :
+                                a.status === 'PENDING_SIGNATURE' ? 'bg-marigold/15 text-warning border-marigold/40' :
+                                a.status === 'TERMINATED' || a.status === 'EXPIRED' ? 'bg-terracotta/10 text-terracotta border-terracotta/20' :
+                                'bg-ink/5 text-ink/50 border-ink/15'
+                              }`}>{String(a.status).replace(/_/g, ' ')}</span>
+                            </div>
+                            <div className="flex items-center gap-4 mt-2 text-[10px] text-ink/40">
+                              {a.equityPct != null && <span>{a.equityPct}% equity</span>}
+                              {a.duration != null && <span>{a.duration} days</span>}
+                            </div>
+                            <div className="flex items-center gap-4 mt-2 text-[10px]">
+                              <span className={a.platformSignedAt ? 'text-success' : 'text-ink/40'}>
+                                {a.platformSignedAt
+                                  ? `Platform signed${a.platformSignedBy ? ` by ${a.platformSignedBy}` : ''}`
+                                  : 'Platform not signed'}
+                              </span>
+                              <span className={a.founderSignedAt ? 'text-success' : 'text-ink/40'}>
+                                {a.founderSignedAt ? 'Founder signed' : 'Founder not signed'}
+                              </span>
+                            </div>
+                            {a.notes && <p className="text-xs text-ink/60 mt-2">{a.notes}</p>}
+                          </div>
+                          <div className="shrink-0">
+                            {!a.platformSignedAt && (
+                              <button
+                                onClick={() => signPlatform(a.id)}
+                                disabled={signingAgreementId === a.id}
+                                className="px-3 py-2 bg-forest text-parchment text-[9px] uppercase tracking-widest font-bold hover:bg-forest/90 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                              >
+                                <Stamp className="w-3 h-3" /> {signingAgreementId === a.id ? 'Signing…' : 'Sign (Platform)'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Record Equity Event */}
+              {detail.status !== 'HANDED_OVER' && detail.status !== 'DISSOLVED' && (
+                <div className="border border-hairline bg-white p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-serif text-lg font-bold flex items-center gap-2">
+                      <ArrowRightLeft className="w-5 h-5 text-forest/60" /> Record Equity Event
+                    </h3>
+                    <button
+                      onClick={() => setShowEventForm(v => !v)}
+                      className="px-4 py-2 border border-forest text-forest text-[10px] uppercase tracking-widest font-bold hover:bg-forest hover:text-parchment transition-colors flex items-center gap-2"
+                    >
+                      {showEventForm ? <><X className="w-3 h-3" /> Cancel</> : <><Plus className="w-3 h-3" /> New Event</>}
+                    </button>
+                  </div>
+
+                  {showEventForm && (
+                    <div className="border border-forest/30 bg-alabaster/40 p-5 animate-fade-in space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[10px] uppercase tracking-widest text-ink/60 mb-2 font-bold">Event Type</label>
+                          <select
+                            className="w-full border border-hairline px-4 py-3 text-sm focus:outline-none focus:border-forest bg-white"
+                            value={eventForm.eventType}
+                            onChange={e => setEventForm({ ...eventForm, eventType: e.target.value })}
+                          >
+                            <option value="TRANSFER">TRANSFER — move equity between holders</option>
+                            <option value="BUYOUT">BUYOUT — zero out a holder</option>
+                            <option value="DILUTE">DILUTE — free equity to a target</option>
+                            <option value="VEST">VEST — raise a holder's vested %</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] uppercase tracking-widest text-ink/60 mb-2 font-bold">
+                            {eventForm.eventType === 'BUYOUT' ? 'Amount (auto — full stake)' : '% Amount *'}
+                          </label>
+                          <input type="number" min={0} max={100} step="0.01" placeholder="e.g., 5"
+                            disabled={eventForm.eventType === 'BUYOUT'}
+                            className="w-full border border-hairline px-4 py-3 text-sm focus:outline-none focus:border-forest disabled:bg-ink/5 disabled:text-ink/40"
+                            value={eventForm.eventType === 'BUYOUT' ? '' : eventForm.percentageAmount}
+                            onChange={e => setEventForm({ ...eventForm, percentageAmount: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[10px] uppercase tracking-widest text-ink/60 mb-2 font-bold">
+                            From Holder {(eventForm.eventType === 'TRANSFER' || eventForm.eventType === 'BUYOUT') && '*'}
+                          </label>
+                          <select
+                            disabled={eventForm.eventType === 'DILUTE' || eventForm.eventType === 'VEST'}
+                            className="w-full border border-hairline px-4 py-3 text-sm focus:outline-none focus:border-forest bg-white disabled:bg-ink/5 disabled:text-ink/40"
+                            value={eventForm.fromHolderId}
+                            onChange={e => setEventForm({ ...eventForm, fromHolderId: e.target.value })}
+                          >
+                            <option value="">Select source…</option>
+                            {detail.equityHolders?.filter((h: any) => h.isActive).map((h: any) => (
+                              <option key={h.id} value={h.id}>{h.holderName} ({h.equityPct}%)</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] uppercase tracking-widest text-ink/60 mb-2 font-bold">
+                            To Holder {(eventForm.eventType === 'TRANSFER' || eventForm.eventType === 'DILUTE' || eventForm.eventType === 'VEST') && '*'}
+                            {eventForm.eventType === 'BUYOUT' && ' (optional)'}
+                          </label>
+                          <select
+                            className="w-full border border-hairline px-4 py-3 text-sm focus:outline-none focus:border-forest bg-white"
+                            value={eventForm.toHolderId}
+                            onChange={e => setEventForm({ ...eventForm, toHolderId: e.target.value })}
+                          >
+                            <option value="">{eventForm.eventType === 'BUYOUT' ? 'Distribute to remaining holders' : 'Select target…'}</option>
+                            {detail.equityHolders?.filter((h: any) => h.isActive).map((h: any) => (
+                              <option key={h.id} value={h.id}>{h.holderName} ({h.equityPct}%)</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] uppercase tracking-widest text-ink/60 mb-2 font-bold">Description * (audit log)</label>
+                        <textarea rows={2}
+                          className="w-full border border-hairline px-4 py-3 text-sm focus:outline-none focus:border-forest resize-none"
+                          placeholder="Reason / context for this equity event…"
+                          value={eventForm.description}
+                          onChange={e => setEventForm({ ...eventForm, description: e.target.value })}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <p className="text-[10px] text-ink/40 max-w-md">
+                          The cap table is mutated server-side and must still sum to exactly 100%. This action is logged.
+                        </p>
+                        <button
+                          onClick={recordEvent}
+                          disabled={actionLoading}
+                          className="px-6 py-3 bg-saffron text-parchment text-[10px] uppercase tracking-widest font-bold hover:bg-saffron-deep shadow-pop disabled:opacity-50 transition-colors"
+                        >
+                          {actionLoading ? 'Recording…' : 'Record Event'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Event Timeline */}
               <div className="border border-hairline bg-white p-6">

@@ -19,28 +19,12 @@ export default function InvestorShowcase() {
       .finally(() => setLoading(false));
   }, []);
 
-  const handleRequestMeeting = async (e: React.FormEvent) => {
+  const handleRequestMeeting = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!meetingForm.investorId) {
-      alert("Please provide your Investor ID (received upon registration approval).");
-      return;
-    }
-    
-    setIsSubmitting(true);
-    try {
-      await api.requestMeeting(meetingForm.investorId, {
-        showcaseId: selectedShowcase.id,
-        date: meetingForm.date,
-        message: meetingForm.message
-      });
-      alert("Meeting requested successfully. The founder will reach out to confirm.");
-      setSelectedShowcase(null);
-      setMeetingForm({ investorId: meetingForm.investorId, date: '', message: '' });
-    } catch (err: any) {
-      alert(err.message || "Failed to request meeting. Please check your Investor ID.");
-    } finally {
-      setIsSubmitting(false);
-    }
+    // Meeting requests are now made from the authenticated investor portal
+    // (the investor's identity comes from their login, not a typed-in ID).
+    // Send them there to sign in and request as themselves.
+    window.location.href = '/investor/login';
   };
 
   return (

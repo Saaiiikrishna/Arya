@@ -9,6 +9,7 @@ const QUESTION_TYPES = ['TEXT', 'TEXTAREA', 'NUMBER', 'SELECT', 'MULTISELECT', '
 export default function QuestionsPage() {
   const [questions, setQuestions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [reordering, setReordering] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [form, setForm] = useState<any>({
@@ -21,6 +22,29 @@ export default function QuestionsPage() {
   };
 
   useEffect(() => { loadQuestions(); }, []);
+
+  const handleMove = async (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= questions.length || reordering) return;
+
+    // Swap positions locally for an optimistic update.
+    const next = [...questions];
+    [next[index], next[target]] = [next[target], next[index]];
+    setQuestions(next);
+
+    // Recompute a clean, gap-free sortOrder from the new positions.
+    const items = next.map((q, i) => ({ id: q.id, sortOrder: i }));
+    setReordering(true);
+    try {
+      await api.reorderQuestions(items);
+      loadQuestions();
+    } catch (err: any) {
+      alert(err.message);
+      loadQuestions(); // revert to the server's truth on failure
+    } finally {
+      setReordering(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,6 +103,13 @@ export default function QuestionsPage() {
             ← Command Center
           </Link>
           <h1 className="font-serif text-5xl font-bold leading-none">Questionnaire Blueprint</h1>
+          <p className="text-xs uppercase tracking-widest text-ink/40 mt-3 flex items-center gap-2">
+            {reordering ? (
+              <span className="text-forest">Persisting new sequence…</span>
+            ) : (
+              <span>Use the order controls to set applicant sequence</span>
+            )}
+          </p>
         </div>
         <div className="text-left md:text-right">
           <button 
@@ -102,6 +133,7 @@ export default function QuestionsPage() {
             <thead className="bg-parchment/80 border-b border-hairline">
               <tr>
                 <th className="px-6 py-5 text-xs font-bold uppercase tracking-widest text-ink/60 w-16">No.</th>
+                <th className="px-6 py-5 text-xs font-bold uppercase tracking-widest text-ink/60 text-center w-24">Order</th>
                 <th className="px-6 py-5 text-xs font-bold uppercase tracking-widest text-ink/60">Label Fragment</th>
                 <th className="px-6 py-5 text-xs font-bold uppercase tracking-widest text-ink/60">Input Type</th>
                 <th className="px-6 py-5 text-xs font-bold uppercase tracking-widest text-ink/60">Application Phase</th>
@@ -114,6 +146,28 @@ export default function QuestionsPage() {
               {questions.map((q, i) => (
                 <tr key={q.id} className="border-b border-hairline last:border-0 hover:bg-parchment/30 transition-colors">
                   <td className="px-6 py-5 font-serif text-xl font-bold text-ink/40">{i + 1}</td>
+                  <td className="px-6 py-5">
+                    <div className="flex flex-col items-center gap-1">
+                      <button
+                        type="button"
+                        aria-label="Move up"
+                        disabled={i === 0 || reordering}
+                        onClick={() => handleMove(i, -1)}
+                        className="w-7 h-7 flex items-center justify-center border border-ink/20 text-ink/60 hover:bg-forest hover:text-white hover:border-forest transition-colors disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-ink/60 disabled:hover:border-ink/20"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Move down"
+                        disabled={i === questions.length - 1 || reordering}
+                        onClick={() => handleMove(i, 1)}
+                        className="w-7 h-7 flex items-center justify-center border border-ink/20 text-ink/60 hover:bg-forest hover:text-white hover:border-forest transition-colors disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-ink/60 disabled:hover:border-ink/20"
+                      >
+                        ↓
+                      </button>
+                    </div>
+                  </td>
                   <td className="px-6 py-5">
                     <div className="font-serif text-xl font-bold">{q.label}</div>
                     {q.helpText && <div className="text-[11px] uppercase tracking-widest text-ink/40 mt-1">{q.helpText}</div>}

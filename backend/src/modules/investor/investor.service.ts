@@ -131,6 +131,15 @@ export class InvestorService {
     });
   }
 
+  /** Meeting requests made by a specific (authenticated) investor. */
+  async getMyMeetingRequests(investorId: string) {
+    return this.prisma.meetingRequest.findMany({
+      where: { investorId },
+      include: { showcase: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   async updateMeetingStatus(id: string, status: 'ACCEPTED' | 'DECLINED' | 'COMPLETED', scheduledAt?: Date) {
     return this.prisma.meetingRequest.update({
       where: { id },
