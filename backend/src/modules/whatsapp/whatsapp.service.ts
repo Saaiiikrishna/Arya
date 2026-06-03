@@ -185,37 +185,22 @@ export class WhatsappService {
   }
 
   /**
-   * Returns true only when a known applicant matches this phone (on
-   * digits-only normalization of either `phone` or `whatsappPhone`) AND that
-   * applicant has whatsappVerified=false (i.e. opted out via STOP).
-   *
-   * Mirrors WhatsappController.optOutByPhone matching: a cheap substring
-   * filter narrows candidates, then an exact normalized-digits comparison
-   * confirms the match. Unknown numbers return false so they still send.
-   * Best-effort: any lookup error is swallowed and treated as "not opted out"
-   * so a transient DB issue never silently drops legitimate messages.
+   * True if this phone has opted out via STOP. Normalizes to digits-only and
+   * does an indexed primary-key lookup against the WhatsappOptOut table.
+   * Unknown numbers return false so they still send. Best-effort: any lookup
+   * error is swallowed and treated as "not opted out" so a transient DB issue
+   * never silently drops legitimate messages.
    */
   private async isOptedOut(normalizedPhone: string): Promise<boolean> {
     try {
       const normalized = (normalizedPhone ?? '').replace(/\D/g, '');
       if (!normalized) return false;
 
-      const candidates = await this.prisma.applicant.findMany({
-        where: {
-          OR: [
-            { phone: { contains: normalized } },
-            { whatsappPhone: { contains: normalized } },
-          ],
-        },
-        select: { phone: true, whatsappPhone: true, whatsappOptOut: true },
+      const row = await this.prisma.whatsappOptOut.findUnique({
+        where: { phone: normalized },
+        select: { phone: true },
       });
-
-      return candidates.some((a) => {
-        const phoneDigits = (a.phone ?? '').replace(/\D/g, '');
-        const waDigits = (a.whatsappPhone ?? '').replace(/\D/g, '');
-        const matches = phoneDigits === normalized || waDigits === normalized;
-        return matches && a.whatsappOptOut === true;
-      });
+      return !!row;
     } catch (err) {
       this.logger.error(
         `Opt-out lookup failed for ${normalizedPhone}; allowing send`,

@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma';
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -29,15 +29,12 @@ const ALLOWED_MIME_TYPES: Readonly<Record<string, readonly string[]>> = {
 };
 
 /**
- * Intended max upload size (25 MiB). NOTE: this cannot be enforced on a
- * presigned PUT URL — getSignedUrl signs ContentLength as an EXACT required
- * value, so signing the max here would force every client to send exactly that
- * many bytes and break real uploads. A true size cap requires a presigned POST
- * with a `content-length-range` policy condition (separate SDK), or a bucket
- * policy. Documented here so it isn't silently dropped.
+ * Maximum allowed upload size (25 MiB). A presigned PUT can't pre-enforce a max
+ * (signing ContentLength forces an EXACT length), so we enforce it AUTHORITATIVELY
+ * at confirm time: HeadObject reads the real stored size and an oversized object
+ * is purged + rejected (the client-reported size is treated as advisory only).
  */
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
-void MAX_UPLOAD_BYTES;
 
 @Injectable()
 export class DocumentService {
@@ -94,24 +91,45 @@ export class DocumentService {
   }
 
   async confirmUpload(documentId: string, applicantId: string, fileSize?: number) {
-    if (fileSize !== undefined) {
-      if (!Number.isInteger(fileSize) || fileSize < 0) {
-        throw new BadRequestException('Invalid file size');
-      }
-      if (fileSize > MAX_UPLOAD_BYTES) {
-        throw new BadRequestException(
-          `File exceeds the maximum allowed size of ${MAX_UPLOAD_BYTES} bytes`,
-        );
-      }
+    if (fileSize !== undefined && (!Number.isInteger(fileSize) || fileSize < 0)) {
+      throw new BadRequestException('Invalid file size');
     }
 
     const doc = await this.prisma.document.findUnique({ where: { id: documentId } });
     if (!doc) throw new NotFoundException('Document not found');
     if (doc.applicantId !== applicantId) throw new NotFoundException('Document not found');
 
+    // Authoritative size: read the actually-stored object size from S3. The
+    // client-supplied fileSize is spoofable, so it's only a fallback when the
+    // HeadObject can't be performed (e.g. no real S3 in local dev).
+    let actualSize: number | undefined = fileSize;
+    try {
+      const head = await this.s3.send(
+        new HeadObjectCommand({ Bucket: this.bucket, Key: doc.fileUrl }),
+      );
+      if (typeof head.ContentLength === 'number') actualSize = head.ContentLength;
+    } catch (e) {
+      this.logger.warn(
+        `HeadObject failed for ${doc.fileUrl}; using client-reported size: ${(e as any)?.message}`,
+      );
+    }
+
+    if (typeof actualSize === 'number' && actualSize > MAX_UPLOAD_BYTES) {
+      // Oversized — purge the object so it can never be used, and fail the confirm.
+      try {
+        await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: doc.fileUrl }));
+      } catch {
+        /* best-effort cleanup */
+      }
+      await this.prisma.document.delete({ where: { id: documentId } }).catch(() => undefined);
+      throw new BadRequestException(
+        `File exceeds the maximum allowed size of ${MAX_UPLOAD_BYTES} bytes`,
+      );
+    }
+
     return this.prisma.document.update({
       where: { id: documentId },
-      data: { status: 'UPLOADED', fileSize },
+      data: { status: 'UPLOADED', fileSize: actualSize },
     });
   }
 

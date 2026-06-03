@@ -347,55 +347,25 @@ export class WhatsappController {
   }
 
   /**
-   * Mark the applicant matching the given WhatsApp number as opted out by
-   * setting whatsappOptOut=true, so the platform stops messaging them. This is
-   * deliberately separate from whatsappVerified (a verification gate) — reusing
-   * that flag would also suppress sends to not-yet-verified users.
-   *
-   * Meta delivers `from` as bare digits (e.g. "919876543210") while stored
-   * phone numbers may carry "+", spaces, or leading zeros. We therefore match
-   * on normalized digits rather than relying on exact string equality.
-   * Best-effort: failures are logged and never propagated to the webhook flow.
+   * Record a STOP opt-out keyed by normalized (digits-only) phone in the
+   * dedicated WhatsappOptOut table, so the platform stops messaging that number.
+   * Meta delivers `from` as bare digits (e.g. "919876543210"); we store the same
+   * normalized form the send path looks up, so the match is an exact PK lookup
+   * and even numbers with no applicant record are honored. Best-effort: failures
+   * are logged and never propagated to the webhook flow.
    */
   private async optOutByPhone(from: string): Promise<void> {
     try {
       const normalized = (from ?? '').replace(/\D/g, '');
       if (!normalized) return;
 
-      // Narrow candidates with a cheap substring filter on either stored
-      // number, then confirm an exact match on digits-only normalization.
-      // Opt-out applies regardless of verification status.
-      const candidates = await this.prisma.applicant.findMany({
-        where: {
-          OR: [
-            { phone: { contains: normalized } },
-            { whatsappPhone: { contains: normalized } },
-          ],
-        },
-        select: { id: true, phone: true, whatsappPhone: true },
+      await this.prisma.whatsappOptOut.upsert({
+        where: { phone: normalized },
+        create: { phone: normalized },
+        update: {},
       });
 
-      const matches = candidates.filter((a) => {
-        const phoneDigits = (a.phone ?? '').replace(/\D/g, '');
-        const waDigits = (a.whatsappPhone ?? '').replace(/\D/g, '');
-        return phoneDigits === normalized || waDigits === normalized;
-      });
-
-      if (matches.length === 0) {
-        this.logger.warn(
-          `STOP opt-out: no applicant found for ${from}`,
-        );
-        return;
-      }
-
-      await this.prisma.applicant.updateMany({
-        where: { id: { in: matches.map((a) => a.id) } },
-        data: { whatsappOptOut: true },
-      });
-
-      this.logger.log(
-        `STOP opt-out: marked ${matches.length} applicant(s) whatsappOptOut=true for ${from}`,
-      );
+      this.logger.log(`STOP opt-out recorded for ${normalized}`);
     } catch (err) {
       this.logger.error(`Failed to process STOP opt-out for ${from}`, err);
     }

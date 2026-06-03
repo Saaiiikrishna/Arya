@@ -283,10 +283,9 @@ model Applicant {
   scarTissue     String?         @db.Text @map("scar_tissue")
   whatsappPhone  String?         @map("whatsapp_phone")
   whatsappVerified Boolean       @default(false) @map("whatsapp_verified")
-  // Distinct from whatsappVerified: set when the user replies STOP. Verification
-  // status must NOT be reused as an opt-out flag (it would suppress sends to
-  // not-yet-verified users such as new signups).
-  whatsappOptOut Boolean         @default(false) @map("whatsapp_opt_out")
+  // STOP opt-out is tracked in the dedicated WhatsappOptOut table (keyed by
+  // normalized phone) — not a per-applicant flag — so the send-path check is an
+  // indexed PK lookup and also covers numbers with no applicant row.
   whatsappPresenceChecked Boolean @default(false) @map("whatsapp_presence_checked")
   department     DepartmentRole? @map("department")
   isAvailable    Boolean         @default(true) @map("is_available")
@@ -612,6 +611,16 @@ model Investor {
   meetingRequests MeetingRequest[]
 
   @@map("investors")
+}
+
+/// WhatsApp STOP opt-out list, keyed by normalized (digits-only) phone so the
+/// send-path check is an indexed primary-key lookup (no LIKE scan) and applies
+/// even to numbers that have no applicant record.
+model WhatsappOptOut {
+  phone     String   @id // normalized digits-only phone number
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("whatsapp_opt_outs")
 }
 
 model StartupShowcase {
