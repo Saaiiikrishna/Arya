@@ -48,7 +48,7 @@ export default function InvestorRegistration() {
             </Link>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="bg-white border border-hairline p-8 shadow-sm">
+          <form onSubmit={handleSubmit} className="bg-white border border-hairline p-8">
             {error && (
               <div className="bg-terracotta/10 text-terracotta border border-terracotta/20 p-4 mb-6 text-sm font-semibold">
                 {error}
@@ -104,7 +104,7 @@ export default function InvestorRegistration() {
               </div>
 
               <div className="pt-4 border-t border-hairline border-dashed">
-                <button type="submit" disabled={loading} className="w-full btn bg-ink text-white hover:bg-forest py-4 font-bold tracking-widest">
+                <button type="submit" disabled={loading} className="w-full btn bg-saffron text-parchment hover:bg-saffron-deep py-4 font-bold tracking-widest">
                   {loading ? 'Submitting...' : 'REQUEST ACCESS'}
                 </button>
               </div>

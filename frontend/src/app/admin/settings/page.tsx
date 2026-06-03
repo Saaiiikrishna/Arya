@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { useSettings } from '@/lib/settings';
+import { useAuth } from '@/lib/auth';
 import { useRouter } from 'next/navigation';
 
 interface VisitorSummary {
@@ -41,7 +42,38 @@ interface PageViewRecord {
 export default function AdminSettingsPage() {
   const router = useRouter();
   const { refresh } = useSettings();
+  const { role } = useAuth();
+  const isSuperAdmin = role === 'SUPER_ADMIN';
   const [activeTab, setActiveTab] = useState<'settings' | 'analytics'>('settings');
+
+  // Manage Admins state (SUPER_ADMIN only)
+  const [newAdmin, setNewAdmin] = useState({ email: '', password: '', firstName: '', lastName: '' });
+  const [creatingAdmin, setCreatingAdmin] = useState(false);
+  const [adminError, setAdminError] = useState<string | null>(null);
+  const [adminSuccess, setAdminSuccess] = useState<string | null>(null);
+
+  const createAdmin = async () => {
+    setAdminError(null);
+    setAdminSuccess(null);
+    if (!newAdmin.email || !newAdmin.password || !newAdmin.firstName || !newAdmin.lastName) {
+      setAdminError('All fields are required.');
+      return;
+    }
+    if (newAdmin.password.length < 8) {
+      setAdminError('Password must be at least 8 characters.');
+      return;
+    }
+    setCreatingAdmin(true);
+    try {
+      await api.createAdminAccount(newAdmin);
+      setAdminSuccess(`Admin account created for ${newAdmin.email}.`);
+      setNewAdmin({ email: '', password: '', firstName: '', lastName: '' });
+    } catch (err: any) {
+      setAdminError(err?.message || 'Failed to create admin account.');
+    } finally {
+      setCreatingAdmin(false);
+    }
+  };
 
   // Settings state
   const [settings, setSettings] = useState<Record<string, string>>({});
@@ -175,7 +207,7 @@ export default function AdminSettingsPage() {
             onClick={() => { setActiveTab(tab); setShowDetail(false); }}
             className={`px-6 py-3 text-xs uppercase tracking-widest font-semibold transition-colors border-b-2 -mb-px cursor-pointer ${
               activeTab === tab
-                ? 'border-forest text-forest'
+                ? 'border-saffron text-saffron-deep'
                 : 'border-transparent text-ink/40 hover:text-ink/80'
             }`}
           >
@@ -208,7 +240,7 @@ export default function AdminSettingsPage() {
                     disabled={saving}
                     className={`flex-1 p-6 border-2 transition-all cursor-pointer ${
                       logoMode === 'text'
-                        ? 'border-forest bg-forest/5'
+                        ? 'border-saffron bg-saffron/5'
                         : 'border-hairline hover:border-forest/30'
                     }`}
                   >
@@ -218,7 +250,7 @@ export default function AdminSettingsPage() {
                         <span className="text-[10px] font-serif italic text-forest mt-1 leading-none">- The Founder&apos;s Club</span>
                       </div>
                       <span className={`text-xs uppercase tracking-widest font-semibold ${
-                        logoMode === 'text' ? 'text-forest' : 'text-ink/40'
+                        logoMode === 'text' ? 'text-saffron-deep' : 'text-ink/40'
                       }`}>
                         {logoMode === 'text' ? '✓ Active' : 'Text Logo'}
                       </span>
@@ -230,7 +262,7 @@ export default function AdminSettingsPage() {
                     disabled={saving}
                     className={`flex-1 p-6 border-2 transition-all cursor-pointer ${
                       logoMode === 'svg'
-                        ? 'border-forest bg-forest/5'
+                        ? 'border-saffron bg-saffron/5'
                         : 'border-hairline hover:border-forest/30'
                     }`}
                   >
@@ -238,7 +270,7 @@ export default function AdminSettingsPage() {
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src="/logo-full.svg" alt="SVG Logo" className="h-10" />
                       <span className={`text-xs uppercase tracking-widest font-semibold ${
-                        logoMode === 'svg' ? 'text-forest' : 'text-ink/40'
+                        logoMode === 'svg' ? 'text-saffron-deep' : 'text-ink/40'
                       }`}>
                         {logoMode === 'svg' ? '✓ Active' : 'SVG Logo'}
                       </span>
@@ -290,7 +322,7 @@ export default function AdminSettingsPage() {
                   <button
                     onClick={savePricing}
                     disabled={saving}
-                    className="bg-forest text-parchment px-6 py-2 text-xs uppercase tracking-widest font-semibold hover:bg-forest/90 transition-colors disabled:opacity-50"
+                    className="bg-saffron text-parchment px-6 py-2 text-xs uppercase tracking-widest font-semibold hover:bg-saffron-deep transition-colors disabled:opacity-50"
                   >
                     {saving ? 'Saving...' : 'Save Pricing Structure'}
                   </button>
@@ -352,6 +384,97 @@ export default function AdminSettingsPage() {
                   </div>
                 </div>
               </section>
+
+              {/* Manage Admins — SUPER_ADMIN only */}
+              {isSuperAdmin && (
+                <section className="bg-white border border-hairline p-8">
+                  <div className="flex items-start gap-3 mb-6">
+                    <div>
+                      <h2 className="font-serif text-2xl font-bold mb-2">Manage Admins</h2>
+                      <p className="text-xs uppercase tracking-widest text-ink/50">
+                        Create a new administrator account with full back-office access
+                      </p>
+                    </div>
+                    <span className="ml-auto text-[10px] uppercase tracking-widest text-saffron-deep border border-saffron/40 bg-saffron/5 px-2 py-1 font-semibold">
+                      Super Admin
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl">
+                    <div className="flex flex-col gap-2">
+                      <label className="font-sans text-[10px] uppercase tracking-widest text-forest font-semibold">
+                        First Name
+                      </label>
+                      <input
+                        type="text"
+                        value={newAdmin.firstName}
+                        onChange={(e) => setNewAdmin((prev) => ({ ...prev, firstName: e.target.value }))}
+                        placeholder="Jane"
+                        className="border border-hairline px-4 py-2 text-sm bg-white focus:outline-none focus:border-forest"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <label className="font-sans text-[10px] uppercase tracking-widest text-forest font-semibold">
+                        Last Name
+                      </label>
+                      <input
+                        type="text"
+                        value={newAdmin.lastName}
+                        onChange={(e) => setNewAdmin((prev) => ({ ...prev, lastName: e.target.value }))}
+                        placeholder="Doe"
+                        className="border border-hairline px-4 py-2 text-sm bg-white focus:outline-none focus:border-forest"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <label className="font-sans text-[10px] uppercase tracking-widest text-forest font-semibold">
+                        Email
+                      </label>
+                      <input
+                        type="email"
+                        value={newAdmin.email}
+                        onChange={(e) => setNewAdmin((prev) => ({ ...prev, email: e.target.value }))}
+                        placeholder="admin@aryavartham.com"
+                        autoComplete="off"
+                        className="border border-hairline px-4 py-2 text-sm bg-white focus:outline-none focus:border-forest"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <label className="font-sans text-[10px] uppercase tracking-widest text-forest font-semibold">
+                        Password
+                      </label>
+                      <input
+                        type="password"
+                        value={newAdmin.password}
+                        onChange={(e) => setNewAdmin((prev) => ({ ...prev, password: e.target.value }))}
+                        placeholder="Minimum 8 characters"
+                        autoComplete="new-password"
+                        className="border border-hairline px-4 py-2 text-sm bg-white focus:outline-none focus:border-forest"
+                      />
+                    </div>
+                  </div>
+
+                  {adminError && (
+                    <div className="mt-4 p-3 border border-terracotta/40 bg-terracotta/5 text-xs text-terracotta max-w-2xl">
+                      {adminError}
+                    </div>
+                  )}
+                  {adminSuccess && (
+                    <div className="mt-4 p-3 border border-forest/30 bg-forest/5 text-xs text-forest max-w-2xl">
+                      {adminSuccess}
+                    </div>
+                  )}
+
+                  <div className="mt-6">
+                    <button
+                      onClick={createAdmin}
+                      disabled={creatingAdmin}
+                      className="bg-saffron text-parchment px-6 py-2 text-xs uppercase tracking-widest font-semibold hover:bg-saffron-deep transition-colors disabled:opacity-50 cursor-pointer"
+                    >
+                      {creatingAdmin ? 'Creating...' : 'Create Admin Account'}
+                    </button>
+                  </div>
+                </section>
+              )}
             </>
           )}
         </div>
@@ -380,7 +503,7 @@ export default function AdminSettingsPage() {
                 </div>
                 <div className="border border-hairline bg-white p-6">
                   <div className="text-[11px] uppercase tracking-widest text-ink/40 mb-3">Today&apos;s Views</div>
-                  <div className="font-serif text-4xl text-terracotta">{summary.todayViews.toLocaleString()}</div>
+                  <div className="font-serif text-4xl text-terracotta-warm">{summary.todayViews.toLocaleString()}</div>
                 </div>
               </div>
 
@@ -390,7 +513,7 @@ export default function AdminSettingsPage() {
                   <h2 className="font-serif text-2xl font-bold">Top Pages</h2>
                   <button
                     onClick={handleViewDetails}
-                    className="bg-ink hover:bg-terracotta text-white transition-colors text-xs uppercase tracking-widest px-6 py-3 font-semibold cursor-pointer"
+                    className="bg-ink hover:bg-terracotta-warm text-white transition-colors text-xs uppercase tracking-widest px-6 py-3 font-semibold cursor-pointer"
                   >
                     View All Details →
                   </button>
@@ -455,7 +578,7 @@ export default function AdminSettingsPage() {
           <div className="flex items-center justify-between">
             <button
               onClick={() => setShowDetail(false)}
-              className="text-xs uppercase tracking-widest text-forest hover:text-terracotta transition-colors font-semibold cursor-pointer"
+              className="text-xs uppercase tracking-widest text-forest hover:text-terracotta-warm transition-colors font-semibold cursor-pointer"
             >
               ← Back to Summary
             </button>
@@ -503,7 +626,7 @@ export default function AdminSettingsPage() {
                           <td className="px-4 py-4">
                             <div className="font-serif text-sm text-ink mb-1">{pv.applicantName || pv.applicantEmail || 'Anonymous'}</div>
                             <div className="font-mono text-[10px] text-ink/40 flex items-center gap-2">
-                              <span className="bg-alabaster border border-hairline px-1.5 py-0.5 rounded">{pv.ip || 'Unknown IP'}</span>
+                              <span className="bg-alabaster border border-hairline px-1.5 py-0.5">{pv.ip || 'Unknown IP'}</span>
                             </div>
                           </td>
                           <td className="px-4 py-4 whitespace-nowrap text-xs text-ink/60">
@@ -544,7 +667,7 @@ export default function AdminSettingsPage() {
                                 {pv.aggregatedPaths?.map((p, idx) => (
                                   <div key={idx} className="flex justify-between items-center py-2 border-b border-forest/10 last:border-0 hover:bg-forest/5 px-2 -mx-2 transition-colors">
                                     <span className="font-mono text-xs text-ink/70 truncate mr-4" title={p.path}>{p.path}</span>
-                                    <span className="font-mono text-[10px] bg-forest/10 px-2 py-0.5 rounded-sm text-forest font-bold flex-shrink-0">
+                                    <span className="font-mono text-[10px] bg-forest/10 px-2 py-0.5 text-forest font-bold flex-shrink-0">
                                       {p.count} ×
                                     </span>
                                   </div>

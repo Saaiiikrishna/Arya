@@ -37,6 +37,20 @@ export default function Election({ id }: { id: string }) {
 
         setElection(electionData);
         setNominees(nomineesData);
+
+        // Reflect a vote already cast in a prior session. The server payload
+        // surfaces the caller's existing vote either on the election object
+        // (myVote / votedNomineeId) or as a per-nominee flag in the nominees
+        // list (votedByMe / isMyVote). Initialize the voting UI from it so a
+        // returning voter sees their cast ballot.
+        const existingVote =
+          electionData?.myVote?.nomineeId ??
+          electionData?.myVote ??
+          electionData?.votedNomineeId ??
+          (Array.isArray(nomineesData)
+            ? nomineesData.find((n: any) => n?.votedByMe || n?.isMyVote)?.nomineeId
+            : undefined);
+        if (existingVote) setVotedId(existingVote);
       } catch (err) {
         console.error(err);
       } finally {
@@ -126,16 +140,16 @@ export default function Election({ id }: { id: string }) {
       {/* Header */}
       <div className="mb-12">
         <h1 className="text-4xl md:text-5xl font-serif font-black mb-4 flex items-center gap-4">
-          <Vote className="w-10 h-10 text-terracotta" />
+          <Vote className="w-10 h-10 text-terracotta-warm" />
           Team Leader Election
         </h1>
         {election.instructions && (
-          <div className="bg-amber-50 border border-amber-200 p-4 mb-4 text-sm text-amber-900 leading-relaxed">
+          <div className="bg-saffron-glow/15 border border-saffron/30 p-4 mb-4 text-sm text-ink/70 leading-relaxed">
             📋 {election.instructions}
           </div>
         )}
         {deadlineStr && (
-          <p className="flex items-center gap-2 text-sm text-terracotta font-semibold">
+          <p className="flex items-center gap-2 text-sm text-saffron-deep font-semibold">
             <Clock className="w-4 h-4" /> Deadline: {deadlineStr}
           </p>
         )}
@@ -144,14 +158,14 @@ export default function Election({ id }: { id: string }) {
       {/* Phase Indicator */}
       <div className="flex gap-4 mb-12">
         {['NOMINATION', 'VOTING', 'COMPLETED'].map((p, i) => (
-          <div key={p} className={`flex-1 relative border-t-2 pt-4 ${p === phase ? 'border-terracotta' : i < ['NOMINATION', 'VOTING', 'COMPLETED'].indexOf(phase) ? 'border-forest' : 'border-hairline'}`}>
-            <p className={`text-[11px] uppercase tracking-widest font-bold ${p === phase ? 'text-terracotta' : i < ['NOMINATION', 'VOTING', 'COMPLETED'].indexOf(phase) ? 'text-forest' : 'text-ink/40'}`}>
+          <div key={p} className={`flex-1 relative border-t-2 pt-4 ${p === phase ? 'border-saffron' : i < ['NOMINATION', 'VOTING', 'COMPLETED'].indexOf(phase) ? 'border-forest' : 'border-hairline'}`}>
+            <p className={`text-[11px] uppercase tracking-widest font-bold ${p === phase ? 'text-saffron-deep' : i < ['NOMINATION', 'VOTING', 'COMPLETED'].indexOf(phase) ? 'text-forest' : 'text-ink/40'}`}>
               Phase 0{i + 1}
             </p>
             <p className={`font-serif text-lg ${p === phase ? 'text-ink' : 'text-ink/40'}`}>
               {p.replace(/_/g, ' ')}
             </p>
-            {p === phase && <div className="absolute -top-[11px] left-0 w-2 h-2 rounded-full bg-terracotta" />}
+            {p === phase && <div className="absolute -top-[11px] left-0 w-2 h-2 rounded-full bg-saffron" />}
           </div>
         ))}
       </div>
@@ -169,7 +183,7 @@ export default function Election({ id }: { id: string }) {
                 {team.members.map((member: any) => {
                   const isNominated = nominees.some((n) => n.nomineeId === member.id);
                   return (
-                    <div key={member.id} className="flex justify-between items-center p-4 border border-hairline hover:border-terracotta/30 transition-colors">
+                    <div key={member.id} className="flex justify-between items-center p-4 border border-hairline hover:border-saffron/30 transition-colors">
                       <div>
                         <p className="font-bold font-serif">{member.firstName} {member.lastName}</p>
                         <p className="text-xs text-ink/60 uppercase tracking-widest">{member.role || 'Member'}</p>
@@ -180,7 +194,7 @@ export default function Election({ id }: { id: string }) {
                         className={`text-[11px] uppercase tracking-widest font-bold px-4 py-2 transition-colors ${
                           isNominated
                             ? 'bg-forest/10 text-forest'
-                            : 'bg-white border border-terracotta text-terracotta hover:bg-terracotta hover:text-white'
+                            : 'bg-white border border-saffron text-saffron-deep hover:bg-saffron hover:text-parchment'
                         }`}
                       >
                         {isNominated ? 'Nominated' : 'Nominate'}
@@ -192,7 +206,7 @@ export default function Election({ id }: { id: string }) {
 
               {/* Self-Nomination Prompt */}
               {!myNomination && selfNomStep === 'ask' && (
-                <div className="mt-8 bg-sage/10 border border-sage/30 p-6">
+                <div className="mt-8 bg-forest/5 border border-forest/15 p-6">
                   <div className="flex items-center gap-3 mb-4">
                     <Hand className="w-5 h-5 text-forest" />
                     <h4 className="font-serif text-lg font-bold">Want to lead?</h4>
@@ -209,7 +223,7 @@ export default function Election({ id }: { id: string }) {
                           setShowSelfNomPrompt(true);
                         }
                       }}
-                      className="bg-forest text-white px-6 py-2 text-[11px] uppercase tracking-widest font-bold hover:bg-forest/90 transition-colors"
+                      className="bg-saffron text-parchment px-6 py-2 text-[11px] uppercase tracking-widest font-bold hover:bg-saffron-deep transition-colors"
                     >
                       Yes, I want to lead
                     </button>
@@ -260,7 +274,7 @@ export default function Election({ id }: { id: string }) {
                     <button
                       onClick={handleSelfNominate}
                       disabled={isSubmitting}
-                      className="bg-forest text-white px-6 py-2 text-[11px] uppercase tracking-widest font-bold hover:bg-forest/90"
+                      className="bg-saffron text-parchment px-6 py-2 text-[11px] uppercase tracking-widest font-bold hover:bg-saffron-deep"
                     >
                       {isSubmitting ? 'Submitting...' : 'Submit Self-Nomination'}
                     </button>
@@ -294,7 +308,7 @@ export default function Election({ id }: { id: string }) {
                     <button
                       onClick={handleSelfNominate}
                       disabled={isSubmitting}
-                      className="bg-forest text-white px-6 py-2 text-[11px] uppercase tracking-widest font-bold"
+                      className="bg-saffron text-parchment px-6 py-2 text-[11px] uppercase tracking-widest font-bold hover:bg-saffron-deep"
                     >
                       {isSubmitting ? 'Submitting...' : 'Confirm Self-Nomination'}
                     </button>
@@ -330,7 +344,7 @@ export default function Election({ id }: { id: string }) {
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="bg-forest text-white px-6 py-3 text-[13px] uppercase tracking-widest font-bold hover:bg-forest/90 transition-colors"
+                    className="bg-saffron text-parchment px-6 py-3 text-[13px] uppercase tracking-widest font-bold hover:bg-saffron-deep transition-colors"
                   >
                     {isSubmitting ? 'Saving...' : 'Update Pitch'}
                   </button>
@@ -344,7 +358,7 @@ export default function Election({ id }: { id: string }) {
       {/* ═══════════ VOTING PHASE ═══════════ */}
       {phase === 'VOTING' && (
         <section className="space-y-8">
-          <div className="bg-terracotta text-white p-6">
+          <div className="bg-saffron text-parchment p-6">
             <h2 className="text-xl font-serif font-bold mb-2">Voting is Open</h2>
             <p className="text-sm opacity-90">Review pitches and answers from the nominees below and cast your single ballot.</p>
           </div>
@@ -361,7 +375,7 @@ export default function Election({ id }: { id: string }) {
                       </div>
                       <div>
                         <h3 className="text-xl font-serif font-bold">{member?.firstName} {member?.lastName}</h3>
-                        <p className="text-[10px] uppercase tracking-widest text-terracotta">
+                        <p className="text-[10px] uppercase tracking-widest text-terracotta-warm">
                           {nominee.isSelfNomination ? '🙋 Self-Nominated' : 'Nominated'}
                         </p>
                       </div>
@@ -401,8 +415,8 @@ export default function Election({ id }: { id: string }) {
                       votedId === nominee.nomineeId
                         ? 'bg-forest border-forest text-white'
                         : votedId !== null
-                        ? 'bg-gray-100 border-gray-100 text-gray-400 cursor-not-allowed'
-                        : 'bg-transparent border-terracotta text-terracotta hover:bg-terracotta hover:text-white'
+                        ? 'bg-ink/5 border-ink/10 text-ink/30 cursor-not-allowed'
+                        : 'bg-transparent border-saffron text-saffron-deep hover:bg-saffron hover:text-parchment'
                     }`}
                   >
                     {votedId === nominee.nomineeId ? '✓ Voted' : votedId !== null ? 'Vote Cast' : 'Cast Vote'}

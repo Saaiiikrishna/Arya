@@ -1,10 +1,12 @@
-import { Injectable, ConflictException, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException, BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma';
 import { ApplyDto, SubmitAdditionalAnswersDto } from './dto';
 import { v4 as uuidv4 } from 'uuid';
 import { ApplicantStatus, PhaseTag } from '@prisma/client';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { BadgeService } from '../rewards/badge.service';
+import { NotificationService } from '../notifications/notification.service';
+import { BackfillService } from '../automation/backfill.service';
 
 // Simple XSS sanitization — strip HTML tags from user input
 function sanitizeText(input: string | null | undefined): string | null {
@@ -20,6 +22,8 @@ export class ApplicantService {
     private readonly prisma: PrismaService,
     private readonly whatsappService: WhatsappService,
     private readonly badgeService: BadgeService,
+    private readonly notifications: NotificationService,
+    private readonly backfill: BackfillService,
   ) { }
 
   async apply(dto: ApplyDto) {
@@ -31,57 +35,60 @@ export class ApplicantService {
       throw new ConflictException('An application with this email already exists');
     }
 
-    // Find the current filling batch or create one
+    // Find the current filling batch, or atomically create one.
     let batch = await this.prisma.batch.findFirst({
       where: { status: 'FILLING' },
       orderBy: { batchNumber: 'asc' },
     });
 
     if (!batch) {
-      const autoBatchSetting = await this.prisma.siteSetting.findUnique({
-        where: { key: 'auto_batch_enabled' },
-      });
-      const isAutoEnabled = autoBatchSetting?.value === 'true';
+      // Serialize creation across concurrent sign-ups with a transaction-scoped
+      // advisory lock so two requests can't mint duplicate batch numbers.
+      batch = await this.prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('aryavartham_batch_create'))`;
 
-      if (!isAutoEnabled) {
-        throw new BadRequestException('Admissions are temporarily closed. No open batches available.');
-      }
-
-      const capacitySetting = await this.prisma.siteSetting.findUnique({
-        where: { key: 'auto_batch_capacity' },
-      });
-      const nicknameSetting = await this.prisma.siteSetting.findUnique({
-        where: { key: 'auto_batch_nicknames' },
-      });
-      const namingSetting = await this.prisma.siteSetting.findUnique({
-        where: { key: 'auto_batch_naming_sequence' },
-      });
-
-      const capacity = capacitySetting ? parseInt(capacitySetting.value, 10) || 1000 : 1000;
-      const nicknames: string[] = nicknameSetting ? JSON.parse(nicknameSetting.value) : [];
-      const namingSequence = namingSetting?.value || 'Batch';
-      
-      const lastBatch = await this.prisma.batch.findFirst({
-        orderBy: { batchNumber: 'desc' },
-      });
-      
-      const nextBatchNumber = (lastBatch?.batchNumber ?? 0) + 1;
-      const nickname = nicknames.length > 0 ? nicknames.shift() : undefined;
-
-      if (nicknameSetting && nicknames.length >= 0) {
-        await this.prisma.siteSetting.update({
-          where: { key: 'auto_batch_nicknames' },
-          data: { value: JSON.stringify(nicknames) },
+        // Re-check inside the lock — another request may have just created it.
+        const existing = await tx.batch.findFirst({
+          where: { status: 'FILLING' },
+          orderBy: { batchNumber: 'asc' },
         });
-      }
+        if (existing) return existing;
 
-      batch = await this.prisma.batch.create({
-        data: { 
-          batchNumber: nextBatchNumber,
-          name: `${namingSequence} ${nextBatchNumber}`,
-          nickname: nickname || null,
-          capacity,
-        },
+        const autoBatchSetting = await tx.siteSetting.findUnique({
+          where: { key: 'auto_batch_enabled' },
+        });
+        if (autoBatchSetting?.value !== 'true') {
+          throw new BadRequestException('Admissions are temporarily closed. No open batches available.');
+        }
+
+        const nicknameSetting = await tx.siteSetting.findUnique({ where: { key: 'auto_batch_nicknames' } });
+        const namingSetting = await tx.siteSetting.findUnique({ where: { key: 'auto_batch_naming_sequence' } });
+
+        // Fixed cohort rule: auto-created batches are ALWAYS exactly 100 seats,
+        // regardless of any auto_batch_capacity setting.
+        const capacity = 100;
+        const nicknames: string[] = nicknameSetting ? JSON.parse(nicknameSetting.value) : [];
+        const namingSequence = namingSetting?.value || 'Batch';
+
+        const lastBatch = await tx.batch.findFirst({ orderBy: { batchNumber: 'desc' } });
+        const nextBatchNumber = (lastBatch?.batchNumber ?? 0) + 1;
+        const nickname = nicknames.length > 0 ? nicknames.shift() : undefined;
+
+        if (nicknameSetting) {
+          await tx.siteSetting.update({
+            where: { key: 'auto_batch_nicknames' },
+            data: { value: JSON.stringify(nicknames) },
+          });
+        }
+
+        return tx.batch.create({
+          data: {
+            batchNumber: nextBatchNumber,
+            name: `${namingSequence} ${nextBatchNumber}`,
+            nickname: nickname || null,
+            capacity,
+          },
+        });
       });
     }
 
@@ -122,6 +129,21 @@ export class ApplicantService {
     });
 
     this.logger.log(`New applicant registered: ${dto.email} in batch ${batch.batchNumber}`);
+
+    // Drive the orphaned capacity pipeline: now that currentCount was bumped, ask
+    // the worker to check whether this batch is full and should auto-transition
+    // FILLING->SCREENING. Best-effort; never blocks the response.
+    void this.backfill.enqueueCapacityCheck(batch.id);
+
+    // Fire-and-forget milestone notification (email + WhatsApp); never blocks the response.
+    this.notifications.applicationReceived({
+      id: applicant.id,
+      email: applicant.email,
+      firstName: applicant.firstName,
+      phone: applicant.phone,
+      accessToken: applicant.accessToken,
+      batchNumber: batch.batchNumber,
+    });
 
     return {
       id: applicant.id,
@@ -165,6 +187,24 @@ export class ApplicantService {
     return { success: true };
   }
 
+  /** Authenticated variant — applicant identity from the JWT, not an accessToken. */
+  async submitMyAdditionalAnswers(applicantId: string, dto: SubmitAdditionalAnswersDto) {
+    const applicant = await this.prisma.applicant.findUnique({ where: { id: applicantId } });
+    if (!applicant) throw new NotFoundException('Applicant not found');
+
+    await this.prisma.answer.createMany({
+      data: dto.answers.map((a) => ({
+        applicantId: applicant.id,
+        questionId: a.questionId,
+        value: a.value,
+        phaseTag: PhaseTag.ADDITIONAL,
+      })),
+      skipDuplicates: true,
+    });
+
+    return { success: true };
+  }
+
   async submitDossier(applicantId: string, data: any) {
     // Check if applicantId is a valid UUID to avoid Prisma crash
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -174,6 +214,7 @@ export class ApplicantService {
 
     const applicant = await this.prisma.applicant.findUnique({
       where: { id: applicantId },
+      include: { batch: { select: { status: true } } },
     });
 
     if (!applicant) {
@@ -182,6 +223,11 @@ export class ApplicantService {
 
     if (applicant.status !== ApplicantStatus.PENDING) {
       throw new BadRequestException('Application corresponds to a finalized dossier and cannot be edited');
+    }
+
+    // Reject edits once the batch has closed admissions.
+    if (applicant.batch && applicant.batch.status !== 'FILLING') {
+      throw new BadRequestException('This batch is no longer accepting applications');
     }
 
     // Safe parseInt that returns null instead of NaN
@@ -217,8 +263,8 @@ export class ApplicantService {
         ...(sScarTissue && { scarTissue: sScarTissue }),
         // Step 5: Agreement
         ...(data.agreementAccepted !== undefined && { agreementAccepted: data.agreementAccepted }),
-        // WhatsApp verification
-        ...(data.whatsappVerified !== undefined && { whatsappVerified: data.whatsappVerified }),
+        // WhatsApp verification is set server-side by the verification flow,
+        // never trusted from the client dossier payload.
         // Referral: set referrer if provided and not already set
         ...(data.referrerId && !applicant.referredById && { referredById: data.referrerId }),
       },
@@ -232,8 +278,16 @@ export class ApplicantService {
       );
     }
 
-    // Send WhatsApp welcome when opt-in is first confirmed
-    if (data.whatsappVerified && !applicant.whatsappVerified && updated.whatsappPhone) {
+    // Send WhatsApp welcome only on a genuine SERVER-SIDE verification — never on
+    // the client-supplied data.whatsappVerified (a client could otherwise fire the
+    // welcome without ever verifying). The dossier payload deliberately does not
+    // write whatsappVerified (see the update above), so applicant.whatsappVerified
+    // (pre-update) and updated.whatsappVerified both reflect only the persisted
+    // state set by the real verification flow. We fire exactly once — on the
+    // transition from not-verified to verified as observed in the persisted state.
+    // Best-effort, kept outside any critical transaction.
+    const newlyVerifiedServerSide = !applicant.whatsappVerified && updated.whatsappVerified;
+    if (newlyVerifiedServerSide && updated.whatsappPhone) {
       this.whatsappService.sendApplicationReceived(updated.whatsappPhone, updated.firstName, applicantId).catch((e: any) =>
         this.logger.error(`WhatsApp welcome failed for ${applicantId}`, e)
       );
@@ -297,6 +351,7 @@ export class ApplicantService {
       where: { id: applicantId },
       include: {
         batch: { select: { id: true, batchNumber: true, status: true } },
+        payments: { select: { status: true } },
         team: {
           include: {
             members: {
@@ -331,6 +386,14 @@ export class ApplicantService {
     });
 
     if (!applicant) throw new NotFoundException('Applicant not found');
+
+    // Gate: the Hub is only for members who have completed their pledge/consent.
+    // A PENDING/ELIGIBLE (unpaid) applicant must not see member content.
+    const HUB_STATUSES = ['CONSENTED', 'ACTIVE', 'FINALIZED', 'TRAINING'];
+    const hasPaid = (applicant as any).payments?.some((p: any) => p.status === 'CAPTURED');
+    if (!hasPaid && !HUB_STATUSES.includes(applicant.status)) {
+      throw new ForbiddenException('Complete your pledge to access the Hub.');
+    }
 
     const team = applicant.team;
     const project = team?.project || null;
@@ -386,7 +449,9 @@ export class ApplicantService {
         phone: applicant.phone,
         status: applicant.status,
         avatarUrl: applicant.avatarUrl,
+        batchId: applicant.batchId,
       },
+      batchId: applicant.batchId,
       batch: applicant.batch ? {
         id: applicant.batch.id,
         batchNumber: applicant.batch.batchNumber,
@@ -411,6 +476,9 @@ export class ApplicantService {
           isLeader: team.leaderId === m.id,
         })),
         leaderId: team.leaderId,
+        // TRAINING pause context for the Hub banner.
+        trainingReason: team.trainingReason || null,
+        trainingStartedAt: team.trainingStartedAt || null,
         isLocked: (team as any).isLocked ?? false,
         activeElection: team.elections?.[0] || null,
         pendingRequests: team.requests || [],
@@ -492,7 +560,7 @@ export class ApplicantService {
   }
 
   // ─── Member Profile (public for Hub) ──────────────
-  async getMemberProfile(memberId: string) {
+  async getMemberProfile(memberId: string, requesterId: string, requesterRole?: string) {
     const member = await this.prisma.applicant.findUnique({
       where: { id: memberId },
       include: {
@@ -504,6 +572,19 @@ export class ApplicantService {
       },
     });
     if (!member) throw new NotFoundException('Member not found');
+
+    // Authorization: admins may view anyone; everyone else may only view
+    // members of their own (non-null) team. Prevents PII enumeration.
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'MODERATOR'].includes(requesterRole || '');
+    if (!isAdmin) {
+      const requester = await this.prisma.applicant.findUnique({
+        where: { id: requesterId },
+        select: { teamId: true },
+      });
+      if (!requester?.teamId || requester.teamId !== member.teamId) {
+        throw new ForbiddenException('You can only view profiles of your own team members');
+      }
+    }
     return member;
   }
 
@@ -532,7 +613,11 @@ export class ApplicantService {
     status?: ApplicantStatus;
     batchId?: string;
   }) {
-    const { page = 1, limit = 20, search, status, batchId } = params;
+    const { page = 1, search, status, batchId } = params;
+    // Cap the client-supplied page size so a hostile/large `limit` can't force an
+    // unbounded Prisma `take` and exhaust the DB/server.
+    const MAX_LIMIT = 100;
+    const limit = Math.min(Math.max(params.limit ?? 20, 1), MAX_LIMIT);
     const skip = (page - 1) * limit;
 
     const where: any = {};
@@ -604,10 +689,24 @@ export class ApplicantService {
     });
     if (!applicant) throw new NotFoundException('Applicant not found');
 
-    await this.prisma.$transaction(async (tx) => {
-      // Mark as removed
-      await tx.applicant.update({
+    // The "is this a genuine NEW transition into REMOVED" decision must be made
+    // INSIDE the transaction and tied to a single successful state change, or two
+    // concurrent removals can both observe a non-removed status and each
+    // decrement currentCount/memberCount. We compare-and-swap with a guarded
+    // updateMany (WHERE status != REMOVED) and only adjust counters when that
+    // update affected exactly one row — i.e. this caller is the one that won.
+    const { isNewlyRemoved } = await this.prisma.$transaction(async (tx) => {
+      // Re-read the team membership inside the txn so the captured previousTeamId
+      // reflects committed state, not a stale pre-transaction snapshot.
+      const current = await tx.applicant.findUnique({
         where: { id },
+        select: { teamId: true },
+      });
+      const previousTeamId = current?.teamId ?? null;
+
+      // Atomic compare-and-swap: flip to REMOVED only if not already REMOVED.
+      const transition = await tx.applicant.updateMany({
+        where: { id, status: { not: ApplicantStatus.REMOVED } },
         data: {
           status: ApplicantStatus.REMOVED,
           teamId: null,
@@ -615,14 +714,36 @@ export class ApplicantService {
         },
       });
 
-      // Decrement batch count
-      if (applicant.batchId) {
-        await tx.batch.update({
-          where: { id: applicant.batchId },
-          data: { currentCount: { decrement: 1 } },
-        });
+      const newlyRemoved = transition.count === 1;
+
+      if (newlyRemoved) {
+        // Decrement batch count — only on the winning transition.
+        if (applicant.batchId) {
+          await tx.batch.update({
+            where: { id: applicant.batchId },
+            data: { currentCount: { decrement: 1 } },
+          });
+        }
+
+        // Decrement the team's member count if they were on a team.
+        if (previousTeamId) {
+          await tx.team.update({
+            where: { id: previousTeamId },
+            data: { memberCount: { decrement: 1 } },
+          });
+        }
       }
+
+      return { isNewlyRemoved: newlyRemoved };
     });
+
+    // If the applicant left a batch that has already closed filling, top the gap
+    // back up from the next batch. During FILLING a freed slot is just taken by
+    // normal sign-ups, so no cascade is needed. Best-effort, post-commit, and only
+    // on the winning transition so we never enqueue a backfill twice.
+    if (isNewlyRemoved && applicant.batchId && applicant.batch && applicant.batch.status !== 'FILLING') {
+      void this.backfill.enqueueBackfill(applicant.batchId, 1);
+    }
 
     return {
       removedApplicantId: id,
@@ -642,6 +763,15 @@ export class ApplicantService {
         await tx.batch.update({
           where: { id: applicant.batchId },
           data: { currentCount: { decrement: 1 } },
+        });
+      }
+
+      // If the applicant is still on a team, decrement that team's member count.
+      // (A REMOVED applicant has already had teamId cleared, so they won't be here.)
+      if (applicant.teamId) {
+        await tx.team.update({
+          where: { id: applicant.teamId },
+          data: { memberCount: { decrement: 1 } },
         });
       }
 
@@ -725,6 +855,7 @@ export class ApplicantService {
   async updateApplicantStatus(id: string, status: ApplicantStatus) {
     const applicant = await this.prisma.applicant.findUnique({
       where: { id },
+      include: { batch: { select: { status: true } } },
     });
     if (!applicant) throw new NotFoundException('Applicant not found');
 
@@ -735,24 +866,57 @@ export class ApplicantService {
       throw new BadRequestException(`Invalid status: ${status}`);
     }
 
-    const updated = await this.prisma.applicant.update({
-      where: { id },
-      data: {
-        status,
-        ...(status === ApplicantStatus.REMOVED && { removedAt: new Date(), teamId: null }),
-        ...(status === ('HELD' as ApplicantStatus) && { movedAt: new Date() }),
-      },
+    // Status change and the batch counter adjustment it causes must commit
+    // atomically so currentCount can't drift if one write fails. The decrement
+    // only happens on a genuine NEW transition INTO REMOVED — and that "is this
+    // new?" decision must be made INSIDE the transaction, tied to a single
+    // successful state change, or two concurrent removals can each decrement
+    // currentCount. We compare-and-swap with a guarded updateMany and only
+    // decrement when that update affected exactly one row (this caller won).
+    const { updated, isNewlyRemoved } = await this.prisma.$transaction(async (tx) => {
+      if (status === ApplicantStatus.REMOVED) {
+        // Atomic compare-and-swap: flip to REMOVED only if not already REMOVED.
+        const transition = await tx.applicant.updateMany({
+          where: { id, status: { not: ApplicantStatus.REMOVED } },
+          data: { status, removedAt: new Date(), teamId: null },
+        });
+
+        const newlyRemoved = transition.count === 1;
+
+        // Decrement batch count only on the winning transition.
+        if (newlyRemoved && applicant.batchId) {
+          await tx.batch.update({
+            where: { id: applicant.batchId },
+            data: { currentCount: { decrement: 1 } },
+          });
+        }
+
+        // Re-read to preserve the existing response shape (full applicant record).
+        const result = await tx.applicant.findUniqueOrThrow({ where: { id } });
+        return { updated: result, isNewlyRemoved: newlyRemoved };
+      }
+
+      // Non-REMOVED transitions don't touch the batch counter.
+      const result = await tx.applicant.update({
+        where: { id },
+        data: {
+          status,
+          ...(status === ('HELD' as ApplicantStatus) && { movedAt: new Date() }),
+        },
+      });
+      return { updated: result, isNewlyRemoved: false };
     });
 
-    // If removing, decrement batch count
-    if (status === ApplicantStatus.REMOVED && applicant.batchId) {
-      await this.prisma.batch.update({
-        where: { id: applicant.batchId },
-        data: { currentCount: { decrement: 1 } },
-      });
+    this.logger.log(`Applicant ${id} status changed to ${status}`);
+
+    // If an applicant left a batch that has already closed filling, top the gap
+    // back up from the next batch. During FILLING a freed slot is just taken by
+    // normal sign-ups, so no cascade is needed. Best-effort, post-commit, and only
+    // on the winning transition so we never enqueue a backfill twice.
+    if (isNewlyRemoved && applicant.batchId && applicant.batch && applicant.batch.status !== 'FILLING') {
+      void this.backfill.enqueueBackfill(applicant.batchId, 1);
     }
 
-    this.logger.log(`Applicant ${id} status changed to ${status}`);
     return updated;
   }
 }

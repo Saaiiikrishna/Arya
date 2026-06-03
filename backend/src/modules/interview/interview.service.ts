@@ -5,8 +5,16 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma';
-import { EmailService } from '../email/email.service';
-import { InterviewDecision } from '@prisma/client';
+import { NotificationService } from '../notifications/notification.service';
+import { BackfillService } from '../automation/backfill.service';
+import { BookingStatus, InterviewDecision } from '@prisma/client';
+
+// Statuses that occupy a seat in a slot. COMPLETED / NO_SHOW / CANCELLED
+// bookings no longer consume capacity and must be excluded from availability.
+const ACTIVE_BOOKING_STATUSES: BookingStatus[] = [
+  BookingStatus.PENDING,
+  BookingStatus.CONFIRMED,
+];
 
 @Injectable()
 export class InterviewService {
@@ -14,7 +22,8 @@ export class InterviewService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly emailService: EmailService,
+    private readonly notifications: NotificationService,
+    private readonly backfill: BackfillService,
   ) {}
 
   // ─── Admin: Slot management ───────────────────────────────
@@ -77,9 +86,16 @@ export class InterviewService {
     const booking = await this.prisma.interviewBooking.findUnique({ where: { id: bookingId } });
     if (!booking) throw new NotFoundException('Booking not found');
 
-    const [updated] = await this.prisma.$transaction([
-      this.prisma.interviewBooking.update({
-        where: { id: bookingId },
+    // Idempotency / race guard. Two admins can both read an undecided booking,
+    // both pass a plain status check, and apply conflicting terminal decisions
+    // plus duplicate backfill. To make this safe we perform an atomic
+    // compare-and-set inside the transaction: conditionally update the booking
+    // ONLY while it is still undecided (decision IS NULL), then check the
+    // affected-row count. Exactly one concurrent call can flip NULL -> decision,
+    // so only the winner runs the applicant status change + backfill enqueue.
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.interviewBooking.updateMany({
+        where: { id: bookingId, decision: null },
         data: {
           status: 'COMPLETED',
           decision,
@@ -88,36 +104,67 @@ export class InterviewService {
           decidedAt: new Date(),
           decidedById: adminId,
         },
-      }),
-      ...(decision === 'SELECTED'
-        ? [this.prisma.applicant.update({ where: { id: booking.applicantId }, data: { status: 'ELIGIBLE' } })]
-        : decision === 'REJECTED'
-        ? [this.prisma.applicant.update({ where: { id: booking.applicantId }, data: { status: 'REMOVED' } })]
-        : []),
-    ]);
+      });
+
+      // We lost the CAS (a concurrent call already recorded a decision) — or a
+      // decision was recorded between our initial read and this update.
+      if (count === 0) {
+        throw new BadRequestException(
+          'A decision has already been recorded for this booking.',
+        );
+      }
+
+      if (decision === 'SELECTED') {
+        await tx.applicant.update({
+          where: { id: booking.applicantId },
+          data: { status: 'ELIGIBLE' },
+        });
+      } else if (decision === 'REJECTED') {
+        await tx.applicant.update({
+          where: { id: booking.applicantId },
+          data: { status: 'REMOVED' },
+        });
+      }
+
+      // Return the freshly-updated booking to preserve the previous response
+      // shape (the committed booking row). The CAS above guarantees the row
+      // exists, so this re-read is always non-null.
+      const row = await tx.interviewBooking.findUnique({ where: { id: bookingId } });
+      if (!row) throw new NotFoundException('Booking not found');
+      return row;
+    });
 
     this.logger.log(`Interview decision ${decision} recorded for booking ${bookingId}`);
 
-    // Send decision email (fire-and-forget)
-    setImmediate(async () => {
-      try {
-        const applicant = await this.prisma.applicant.findUnique({
-          where: { id: booking.applicantId },
-          select: { id: true, email: true, firstName: true },
-        });
-        if (!applicant) return;
-
-        const slug = decision === 'SELECTED' ? 'interview-selected' : 'interview-rejected';
-        await this.emailService.sendTemplatedEmail(
-          applicant.email,
-          slug,
-          { firstName: applicant.firstName },
-          applicant.id,
+    // Notify the applicant of the interview outcome (best-effort, post-commit).
+    // Only reached when THIS call won the compare-and-set above; a loser throws
+    // before this point, so notifications/backfill never fire twice.
+    if (decision === 'SELECTED' || decision === 'REJECTED') {
+      const applicant = await this.prisma.applicant.findUnique({
+        where: { id: booking.applicantId },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          phone: true,
+          batchId: true,
+          batch: { select: { batchNumber: true } },
+        },
+      });
+      if (applicant) {
+        const cohortNumber = applicant.batch?.batchNumber ?? '';
+        void this.notifications.interviewDecision(
+          { id: applicant.id, email: applicant.email, firstName: applicant.firstName, phone: applicant.phone },
+          decision === 'SELECTED',
+          cohortNumber,
         );
-      } catch (e: any) {
-        this.logger.error(`Post-decision email failed for booking ${bookingId}: ${e?.message}`);
+        // A rejected interviewee leaves a closed (interview-stage) batch — pull a
+        // replacement from the next batch to keep the cohort full. Best-effort.
+        if (decision === 'REJECTED' && applicant.batchId) {
+          void this.backfill.enqueueBackfill(applicant.batchId, 1);
+        }
       }
-    });
+    }
 
     return updated;
   }
@@ -128,13 +175,19 @@ export class InterviewService {
     const now = new Date();
     const slots = await this.prisma.interviewSlot.findMany({
       where: { batchId, startTime: { gt: now } },
-      include: { _count: { select: { bookings: true } } },
+      include: {
+        _count: {
+          select: {
+            bookings: { where: { status: { in: ACTIVE_BOOKING_STATUSES } } },
+          },
+        },
+      },
       orderBy: { startTime: 'asc' },
     });
 
     return slots.map((slot) => ({
       ...slot,
-      availableSeats: slot.capacity - slot._count.bookings,
+      availableSeats: Math.max(0, slot.capacity - slot._count.bookings),
       isFull: slot._count.bookings >= slot.capacity,
     }));
   }
@@ -147,26 +200,44 @@ export class InterviewService {
   }
 
   async bookSlot(applicantId: string, slotId: string) {
-    return this.prisma.$transaction(
+    const booking = await this.prisma.$transaction(
       async (tx) => {
         const existing = await tx.interviewBooking.findUnique({ where: { applicantId } });
+        // applicantId is @unique, so at most one booking row can exist. An
+        // active booking blocks re-booking; a finished/cancelled one must be
+        // removed first to free the unique slot for a new booking.
         if (existing) {
-          throw new BadRequestException('You already have an interview booking. Cancel it first to choose another slot.');
+          if (
+            existing.status === BookingStatus.PENDING ||
+            existing.status === BookingStatus.CONFIRMED
+          ) {
+            throw new BadRequestException(
+              'You already have an interview booking. Cancel it first to choose another slot.',
+            );
+          }
+          throw new BadRequestException(
+            'You already have a finished interview booking and cannot book another slot.',
+          );
         }
 
-        const [slot, applicant] = await Promise.all([
-          tx.interviewSlot.findUnique({
-            where: { id: slotId },
-            include: { _count: { select: { bookings: true } } },
-          }),
-          tx.applicant.findUnique({ where: { id: applicantId }, select: { batchId: true } }),
-        ]);
-
-        if (!slot) throw new NotFoundException('Slot not found');
+        const applicant = await tx.applicant.findUnique({
+          where: { id: applicantId },
+          select: { batchId: true },
+        });
         if (!applicant) throw new NotFoundException('Applicant not found');
+
+        const slot = await tx.interviewSlot.findUnique({ where: { id: slotId } });
+        if (!slot) throw new NotFoundException('Slot not found');
         if (applicant.batchId !== slot.batchId) throw new BadRequestException('Slot belongs to a different batch');
         if (new Date() >= slot.startTime) throw new BadRequestException('This slot has already passed');
-        if (slot._count.bookings >= slot.capacity) throw new BadRequestException('This slot is fully booked');
+
+        // Count only seat-occupying bookings so capacity is computed correctly.
+        const activeBookings = await tx.interviewBooking.count({
+          where: { slotId, status: { in: ACTIVE_BOOKING_STATUSES } },
+        });
+        if (activeBookings >= slot.capacity) {
+          throw new BadRequestException('This slot is fully booked');
+        }
 
         return tx.interviewBooking.create({
           data: { slotId, applicantId, status: 'CONFIRMED' },
@@ -175,6 +246,29 @@ export class InterviewService {
       },
       { isolationLevel: 'Serializable' },
     );
+
+    // Notify the applicant that their interview is scheduled (best-effort,
+    // post-commit so it never blocks/aborts the Serializable transaction).
+    const applicant = await this.prisma.applicant.findUnique({
+      where: { id: applicantId },
+      select: { id: true, email: true, firstName: true, phone: true },
+    });
+    if (applicant) {
+      const start = booking.slot.startTime;
+      const dateStr = start.toLocaleDateString();
+      const timeStr = start.toLocaleTimeString();
+      // InterviewSlot has no meeting-link field, so none is available yet. Pass a
+      // human-readable fallback instead of an empty string to avoid a broken
+      // join link / empty anchor in the notification template.
+      void this.notifications.interviewScheduled(
+        applicant,
+        dateStr,
+        timeStr,
+        'To be shared closer to the date',
+      );
+    }
+
+    return booking;
   }
 
   async cancelBooking(applicantId: string) {
@@ -216,6 +310,9 @@ export class InterviewService {
       select: { batchId: true },
     });
     if (!applicant) throw new NotFoundException('Applicant not found');
+    if (!applicant.batchId) {
+      throw new BadRequestException('Applicant is not assigned to a batch');
+    }
 
     if (!applicant.batchId) throw new BadRequestException('Applicant is not assigned to a batch');
     return this.prisma.videoSubmission.upsert({

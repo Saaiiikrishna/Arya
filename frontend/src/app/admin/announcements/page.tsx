@@ -94,7 +94,7 @@ export default function AnnouncementsPage() {
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
-          className="flex items-center gap-2 bg-forest text-white px-5 py-3 text-xs uppercase tracking-widest font-semibold hover:bg-forest/90 transition-colors"
+          className="flex items-center gap-2 bg-saffron text-parchment px-5 py-3 text-xs uppercase tracking-widest font-semibold hover:bg-saffron-deep transition-colors"
         >
           <Plus className="w-4 h-4" /> New Announcement
         </button>
@@ -110,19 +110,19 @@ export default function AnnouncementsPage() {
           {announcements.map((ann) => (
             <div
               key={ann.id}
-              className={`bg-white border p-6 hover:shadow-sm transition-shadow ${ann.isActive ? 'border-hairline' : 'border-ink/10 opacity-60'}`}
+              className={`bg-white border p-6 ${ann.isActive ? 'border-hairline' : 'border-ink/10 opacity-60'}`}
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
                     <h3 className="font-serif text-xl font-bold">{ann.title}</h3>
                     {ann.isActive ? (
-                      <span className="text-[10px] uppercase tracking-widest font-bold text-forest bg-forest/10 px-2 py-0.5 border border-forest/20">Active</span>
+                      <span className="text-[10px] uppercase tracking-widest font-bold text-saffron-deep bg-saffron/10 px-2 py-0.5 border border-saffron/20">Active</span>
                     ) : (
                       <span className="text-[10px] uppercase tracking-widest font-bold text-ink/40 bg-ink/5 px-2 py-0.5 border border-ink/10">Inactive</span>
                     )}
                     {ann.batchId && (
-                      <span className="text-[10px] uppercase tracking-widest font-bold text-terracotta bg-terracotta/10 px-2 py-0.5 border border-terracotta/20">
+                      <span className="text-[10px] uppercase tracking-widest font-bold text-terracotta-warm bg-terracotta-warm/10 px-2 py-0.5 border border-terracotta-warm/20">
                         Batch-specific
                       </span>
                     )}
@@ -131,7 +131,7 @@ export default function AnnouncementsPage() {
                   <div className="flex items-center gap-4 text-[10px] uppercase tracking-widest text-ink/40 font-semibold">
                     <span>Created {new Date(ann.createdAt).toLocaleDateString()}</span>
                     {ann.deadline && (
-                      <span className="text-terracotta">⏰ Deadline: {new Date(ann.deadline).toLocaleDateString()}</span>
+                      <span className="text-terracotta-warm">⏰ Deadline: {new Date(ann.deadline).toLocaleDateString()}</span>
                     )}
                   </div>
                 </div>
@@ -161,7 +161,7 @@ export default function AnnouncementsPage() {
           <div className="bg-white border-2 border-ink p-8 shadow-[8px_8px_0px_#1C1B19] w-full max-w-lg animate-fade-in" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-8 pb-4 border-b border-hairline">
               <h2 className="font-serif text-3xl font-bold">New Announcement</h2>
-              <button className="text-2xl text-ink/40 hover:text-terracotta transition-colors leading-none" onClick={() => setShowCreateModal(false)}>×</button>
+              <button className="text-2xl text-ink/40 hover:text-terracotta-warm transition-colors leading-none" onClick={() => setShowCreateModal(false)}>×</button>
             </div>
             <form onSubmit={handleCreate} className="flex flex-col gap-6">
               <div>
@@ -220,7 +220,7 @@ export default function AnnouncementsPage() {
               </label>
               <div className="flex gap-4 mt-2 pt-6 border-t border-hairline justify-end">
                 <button type="button" onClick={() => setShowCreateModal(false)} className="px-6 py-3 border border-ink text-xs uppercase tracking-widest font-semibold">Cancel</button>
-                <button type="submit" disabled={creating} className="bg-forest hover:opacity-90 text-white px-8 py-3 text-xs uppercase tracking-widest font-semibold">
+                <button type="submit" disabled={creating} className="bg-saffron hover:bg-saffron-deep text-parchment px-8 py-3 text-xs uppercase tracking-widest font-semibold">
                   {creating ? 'Publishing...' : 'Publish'}
                 </button>
               </div>

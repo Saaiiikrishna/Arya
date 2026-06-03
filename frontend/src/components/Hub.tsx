@@ -34,6 +34,12 @@ export default function Hub() {
       .then(data => setHubData(data))
       .catch(err => {
         console.error('Failed to fetch hub data:', err);
+        // Backend gates the hub on a completed pledge/consent — route the user
+        // to finish payment instead of showing an empty hub shell.
+        const msg = String(err?.message || '').toLowerCase();
+        if (msg.includes('pledge') || msg.includes('payment') || msg.includes('forbidden')) {
+          router.push('/pledge');
+        }
       })
       .finally(() => setLoading(false));
   }, [isAuthenticated, authLoading, router]);
@@ -59,14 +65,25 @@ export default function Hub() {
 
   const firstName = applicant?.firstName || user?.firstName || 'Founder';
 
+  // The hub payload wraps the sprint in an envelope: sprint.status is the
+  // synthetic lifecycle state ('AWAITING_TEAM' | 'IDEATION' | 'ACTIVE') while
+  // sprint.phase carries the real SprintStatus enum (ON_TRACK | DELAYED |
+  // TRAINING | COMPLETED). A sprint is "in progress" only when the envelope is
+  // ACTIVE *and* the phase is still running — TRAINING is paused and COMPLETED
+  // is done, so neither should render the live milestone timeline.
+  const sprintInProgress =
+    !!sprint &&
+    sprint.status === 'ACTIVE' &&
+    (sprint.phase === 'ON_TRACK' || sprint.phase === 'DELAYED');
+
   // Sprint display logic
   const renderSprintHeader = () => {
     if (!sprint) return null;
-    
-    if (sprint.status === 'ACTIVE') {
+
+    if (sprintInProgress) {
       return (
         <div className="text-right">
-          <p className="text-3xl font-serif text-terracotta mb-1">
+          <p className="text-3xl font-serif text-saffron-deep mb-1">
             Day {sprint.currentDay} <span className="text-ink/40 text-xl">of {sprint.totalDays}</span>
           </p>
           <p className="text-sm text-ink/40 uppercase tracking-widest">{sprint.phase === 'ON_TRACK' ? 'On Track' : sprint.phase}</p>
@@ -84,14 +101,14 @@ export default function Hub() {
   };
 
   return (
-    <div className="min-h-screen flex text-ink selection:bg-forest/20 selection:text-forest">
+    <div className="min-h-screen flex flex-col lg:flex-row text-ink selection:bg-forest/20 selection:text-forest">
       {/* Sidebar Navigation */}
-      <aside className="w-[250px] border-r border-hairline flex-shrink-0 h-screen sticky top-0 flex flex-col justify-between py-12 px-8 bg-parchment">
+      <aside className="w-full lg:w-[250px] border-b lg:border-b-0 lg:border-r border-hairline flex-shrink-0 lg:h-screen lg:sticky lg:top-0 flex flex-col justify-between py-8 lg:py-12 px-6 lg:px-8 bg-parchment">
         <div>
-          <div className="mb-16">
+          <div className="mb-8 lg:mb-16">
             <span className="font-serif text-2xl font-bold tracking-tight">The Founder's<br />Club.</span>
           </div>
-          <nav className="flex flex-col gap-6">
+          <nav className="flex flex-row flex-wrap lg:flex-col gap-x-5 gap-y-3 lg:gap-6">
             {[
               { label: 'Overview', active: true, href: '/hub' },
               { label: 'Team Roster', active: false, href: '/hub/team' },
@@ -106,13 +123,13 @@ export default function Hub() {
                 className={`group flex items-center gap-3 font-medium text-sm tracking-wide uppercase transition-colors ${item.active ? 'text-ink' : 'text-ink/40 hover:text-ink'
                   }`}
               >
-                <span className={`w-1 h-1 ${item.active ? 'bg-forest' : 'bg-transparent group-hover:bg-ink'}`} />
+                <span className={`w-1 h-1 ${item.active ? 'bg-saffron' : 'bg-transparent group-hover:bg-ink'}`} />
                 <span>{item.label}</span>
               </a>
             ))}
           </nav>
         </div>
-        <div className="border-t border-hairline pt-8 mt-12">
+        <div className="border-t border-hairline pt-6 lg:pt-8 mt-6 lg:mt-12">
           <p className="text-xs uppercase tracking-widest text-ink/40 mb-2">
             {batch ? `Cohort #${batch.batchNumber}` : 'Cohort'}
           </p>
@@ -121,7 +138,7 @@ export default function Hub() {
           </p>
           <button
             onClick={handleLogout}
-            className="mt-6 text-xs uppercase tracking-widest text-ink/40 hover:text-terracotta transition-colors flex items-center gap-2"
+            className="mt-6 text-xs uppercase tracking-widest text-ink/40 hover:text-terracotta-warm transition-colors flex items-center gap-2"
           >
             <LogOut className="w-4 h-4" />
             Sign Out
@@ -130,18 +147,52 @@ export default function Hub() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 px-16 py-12 overflow-y-auto">
+      <main className="flex-1 px-5 sm:px-8 lg:px-16 py-8 lg:py-12 overflow-y-auto">
         <div className="max-w-[960px] mx-auto">
           {/* Header Section */}
-          <header className="border-b border-hairline pb-8 mb-12 flex justify-between items-end">
+          <header className="border-b border-hairline pb-8 mb-12 flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-end">
             <div>
               <p className="text-sm uppercase tracking-widest text-forest font-medium mb-3">
                 {firstName}&apos;s Command Center
               </p>
-              <h1 className="font-serif text-5xl font-bold leading-none">Founder&apos;s Club</h1>
+              <h1 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-bold leading-none">Founder&apos;s Club</h1>
             </div>
             {renderSprintHeader()}
           </header>
+
+          {/* Pledge confirmed — paid member awaiting team formation */}
+          {applicant?.status === 'CONSENTED' && !team && (
+            <div className="mb-8 bg-forest/5 border border-forest/20 p-5 flex items-start gap-3 animate-fade-in">
+              <Check className="w-5 h-5 text-forest flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-serif text-lg font-bold text-forest mb-1">Pledge Confirmed</p>
+                <p className="text-sm text-ink/60 leading-relaxed">
+                  Your seat is secured. You are now awaiting team formation — you will be assigned to a team once the admissions committee finalizes batch rosters.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Training pause — team paused between the two 90-day sprints to regroup */}
+          {applicant?.status === 'TRAINING' && (
+            <div className="mb-8 bg-saffron-glow/15 border border-marigold/40 border-l-4 border-l-saffron p-5 flex items-start gap-3 animate-fade-in">
+              <Award className="w-5 h-5 text-saffron-deep flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-serif text-lg font-bold text-saffron-deep mb-1">You&apos;re in a Training Pause</p>
+                <p className="text-sm text-ink/70 leading-relaxed">
+                  Your team has been placed in a training pause between sprints — a chance to regroup,
+                  sharpen the idea, and come back stronger for the next 90-day sprint. This is not a setback;
+                  it&apos;s dedicated time to build the foundations that make the next sprint count.
+                </p>
+                {team?.trainingReason && (
+                  <p className="text-sm text-ink/60 leading-relaxed mt-3">
+                    <span className="text-[12px] uppercase tracking-widest text-saffron-deep/80 font-bold">Focus for this pause:&nbsp;</span>
+                    {team.trainingReason}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Announcements Section */}
           <AnnouncementsSection batchId={applicant?.batchId} />
@@ -171,7 +222,7 @@ export default function Hub() {
                       </div>
                       <div>
                         <p className="text-[13px] uppercase tracking-widest text-ink/40 mb-1">Initial Capital</p>
-                        <p className="font-medium font-serif text-lg">${project.estimatedFunds?.toLocaleString()} USD</p>
+                        <p className="font-medium font-serif text-lg">${((project.estimatedFunds || 0) / 100).toLocaleString()} USD</p>
                       </div>
                     </div>
                   </div>
@@ -206,16 +257,16 @@ export default function Hub() {
                   <>
                     <div className="border-t border-hairline">
                       {team.members.map((member: any) => (
-                        <div key={member.id} className="flex items-center justify-between py-4 px-4 border-b border-hairline cursor-pointer group hover:bg-white hover:border-l-2 hover:border-l-terracotta transition-all">
+                        <div key={member.id} className="flex items-center justify-between py-4 px-4 border-b border-hairline cursor-pointer group hover:bg-white hover:border-l-2 hover:border-l-terracotta-warm transition-all">
                           <div className="flex items-center gap-4">
                             <div className="w-10 h-10 bg-forest/10 flex items-center justify-center border border-forest/20">
                               <span className="font-serif font-bold text-forest">{member.initial}</span>
                             </div>
                             <div>
-                              <p className="font-medium text-lg font-serif group-hover:text-terracotta transition-colors flex items-center gap-2">
+                              <p className="font-medium text-lg font-serif group-hover:text-terracotta-warm transition-colors flex items-center gap-2">
                                 {member.name}
                                 {member.isLeader && (
-                                  <span className="text-[10px] uppercase tracking-widest bg-forest/10 text-forest px-2 py-0.5 rounded-sm">
+                                  <span className="text-[10px] uppercase tracking-widest bg-forest/10 text-forest px-2 py-0.5">
                                     Leader
                                   </span>
                                 )}
@@ -230,7 +281,11 @@ export default function Hub() {
                         </div>
                       ))}
                     </div>
-                    <button className="mt-6 text-[13px] uppercase tracking-widest font-medium text-forest hover:text-terracotta transition-colors flex items-center gap-2">
+                    <button
+                      disabled
+                      title="Coming soon"
+                      className="mt-6 text-[13px] uppercase tracking-widest font-medium text-ink/40 cursor-not-allowed flex items-center gap-2"
+                    >
                       <Plus className="w-4 h-4" />
                       Request Additional Talent
                     </button>
@@ -272,25 +327,29 @@ export default function Hub() {
                   90-Day Sprint
                 </h2>
                 <div className="bg-white border border-hairline p-6 relative">
-                  {sprint?.status === 'ACTIVE' && sprint.milestones && sprint.milestones.length > 0 ? (
+                  {sprintInProgress && sprint.milestones && sprint.milestones.length > 0 ? (
                     <>
                       <div className="absolute left-[39px] top-6 bottom-6 w-[2px] bg-ink/10">
-                        <div className="w-full bg-forest" style={{ height: `${(sprint.milestones.filter((m: any) => m.isCompleted).length / sprint.milestones.length) * 100}%` }} />
+                        <div className="w-full bg-saffron" style={{ height: `${(sprint.milestones.filter((m: any) => m.isCompleted).length / sprint.milestones.length) * 100}%` }} />
                       </div>
                       <div className="flex flex-col gap-8 relative z-10">
                         {sprint.milestones.map((m: any) => (
                           <div key={m.id} className="flex gap-6 items-start">
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 ${m.isCompleted ? 'bg-forest' : 'bg-parchment border-2 border-forest relative'}`}>
-                              {m.isCompleted ? <Check className="w-4 h-4 text-white" /> : <div className="w-3 h-3 bg-forest rounded-full animate-pulse" />}
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 ${m.isCompleted ? 'bg-saffron' : 'bg-parchment border-2 border-saffron relative'}`}>
+                              {m.isCompleted ? <Check className="w-4 h-4 text-white" /> : <div className="w-3 h-3 bg-saffron rounded-full animate-pulse" />}
                             </div>
-                            <div className={m.isCompleted ? "" : "bg-white border border-hairline p-4 shadow-sm w-full border-l-[3px] border-l-forest"}>
-                              <p className={`text-[13px] uppercase tracking-widest font-bold mb-1 ${m.isCompleted ? 'text-forest' : 'text-terracotta'}`}>
+                            <div className={m.isCompleted ? "" : "bg-white border border-hairline p-4 w-full border-l-[3px] border-l-saffron"}>
+                              <p className={`text-[13px] uppercase tracking-widest font-bold mb-1 ${m.isCompleted ? 'text-forest' : 'text-saffron-deep'}`}>
                                 Deadline: {new Date(m.deadline).toLocaleDateString()}
                               </p>
                               <p className="font-serif text-lg font-bold mb-2">{m.title}</p>
                               <p className={`text-sm mb-3 ${m.isCompleted ? 'text-ink/40' : 'text-ink'}`}>{m.description}</p>
                               {!m.isCompleted && (
-                                <button className="bg-forest hover:bg-forest/90 text-white text-[13px] uppercase tracking-widest py-2 px-4 transition-colors w-full">
+                                <button
+                                  disabled
+                                  title="Coming soon"
+                                  className="bg-ink/10 text-ink/40 text-[13px] uppercase tracking-widest py-2 px-4 w-full cursor-not-allowed"
+                                >
                                   Mark Document Complete
                                 </button>
                               )}
@@ -324,27 +383,31 @@ export default function Hub() {
                       <p className="text-[13px] uppercase tracking-widest text-ink/40 mb-2">Capital Deployed</p>
                       <div className="flex items-end gap-3">
                         <p className="font-serif text-4xl font-bold text-white">
-                          ${project.fundedAmount?.toLocaleString() || '0'}
+                          ${((project.fundedAmount || 0) / 100).toLocaleString()}
                         </p>
                         <p className="text-sm text-ink/40 mb-1 pb-1">
-                          / ${project.estimatedFunds?.toLocaleString() || '0'} Allocated
+                          / ${((project.estimatedFunds || 0) / 100).toLocaleString()} Allocated
                         </p>
                       </div>
                     </div>
                     <div className="w-full h-1 bg-ink/30 relative">
                       <div
-                        className="absolute top-0 left-0 h-full bg-forest"
+                        className="absolute top-0 left-0 h-full bg-saffron"
                         style={{ width: `${project.estimatedFunds > 0 ? (project.fundedAmount / project.estimatedFunds) * 100 : 0}%` }}
                       />
                     </div>
                     <div className="flex justify-between items-center pt-4 border-t border-ink/30">
                       <p className="text-sm text-ink/40">
-                        {sprint?.status === 'ACTIVE' ? `Day ${sprint.currentDay} of ${sprint.totalDays}` : 'Sprint not started'}
+                        {sprintInProgress ? 'Sprint in progress' : 'Sprint not started'}
                       </p>
-                      <a href="#" className="text-[13px] uppercase tracking-widest text-forest hover:text-white transition-colors flex items-center gap-1">
+                      <button
+                        disabled
+                        title="Coming soon"
+                        className="text-[13px] uppercase tracking-widest text-ink/40 cursor-not-allowed flex items-center gap-1"
+                      >
                         View Ledger
                         <ArrowRight className="w-4 h-4" />
-                      </a>
+                      </button>
                     </div>
                   </div>
                 </section>
@@ -380,16 +443,16 @@ function AnnouncementsSection({ batchId }: { batchId?: string }) {
   return (
     <div className="mb-8 space-y-3">
       {announcements.map((a: any) => (
-        <div key={a.id} className="bg-amber-50 border border-amber-200 p-5 animate-fade-in">
+        <div key={a.id} className="bg-saffron-glow/15 border border-saffron/30 p-5 animate-fade-in">
           <div className="flex items-center justify-between mb-2">
-            <h3 className="font-serif text-lg font-bold text-amber-900">📢 {a.title}</h3>
+            <h3 className="font-serif text-lg font-bold text-ink">📢 {a.title}</h3>
             {a.deadline && (
-              <span className="text-[10px] uppercase tracking-widest text-amber-700 font-bold">
+              <span className="text-[10px] uppercase tracking-widest text-saffron-deep font-bold">
                 ⏰ {new Date(a.deadline).toLocaleDateString()}
               </span>
             )}
           </div>
-          <p className="text-sm text-amber-800 leading-relaxed">{a.content}</p>
+          <p className="text-sm text-ink/70 leading-relaxed">{a.content}</p>
         </div>
       ))}
     </div>

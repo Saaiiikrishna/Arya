@@ -1,18 +1,29 @@
 import {
-  Controller, Get, Post, Patch, Param, Body, UseGuards, Query,
+  Controller, Get, Post, Patch, Param, Body, UseGuards, Query, Req,
 } from '@nestjs/common';
 import { InvestorService } from './investor.service';
+import { AuthService } from '../auth/auth.service';
 import { JwtAuthGuard, AdminGuard, InvestorGuard } from '../auth/guards';
+import { CreateInvestorDto } from './dto/create-investor.dto';
 
 @Controller('api')
 export class InvestorController {
-  constructor(private readonly investorService: InvestorService) {}
+  constructor(
+    private readonly investorService: InvestorService,
+    private readonly authService: AuthService,
+  ) {}
 
   // ─── Public ────────────────────────────────────────
 
   @Post('investors/register')
-  async register(@Body() data: any) {
+  async register(@Body() data: CreateInvestorDto) {
     return this.investorService.register(data);
+  }
+
+  // Investor email+password login → JWT with role INVESTOR (issued only once approved).
+  @Post('investors/login')
+  async login(@Body('email') email: string, @Body('password') password: string) {
+    return this.authService.investorLogin(email, password);
   }
 
   @Get('investors/showcases')
@@ -25,25 +36,40 @@ export class InvestorController {
     return this.investorService.getShowcaseById(id);
   }
 
-  // ─── Investor Authenticated ────────────────────────
+  // ─── Investor Authenticated (role INVESTOR) ─────────
 
   @UseGuards(InvestorGuard)
-  @Get('investors/:id')
-  async getInvestor(@Param('id') id: string) {
-    return this.investorService.findById(id);
+  @Get('investors/me')
+  async me(@Req() req: any) {
+    return this.investorService.findById(req.user.id || req.user.sub);
   }
 
+  // Meeting request: the investor identity comes from the JWT, never a path
+  // param — an investor can only request meetings as themselves.
   @UseGuards(InvestorGuard)
-  @Post('investors/:investorId/meeting-request')
+  @Post('investors/meeting-request')
   async requestMeeting(
-    @Param('investorId') investorId: string,
+    @Req() req: any,
     @Body('showcaseId') showcaseId: string,
     @Body('message') message?: string,
   ) {
-    return this.investorService.requestMeeting(investorId, showcaseId, message);
+    return this.investorService.requestMeeting(req.user.id || req.user.sub, showcaseId, message);
+  }
+
+  @UseGuards(InvestorGuard)
+  @Get('investors/me/meeting-requests')
+  async myMeetingRequests(@Req() req: any) {
+    return this.investorService.getMyMeetingRequests(req.user.id || req.user.sub);
   }
 
   // ─── Admin ─────────────────────────────────────────
+
+  // Admin-only: exposes full investor record (PII). Do not relax.
+  @UseGuards(AdminGuard)
+  @Get('admin/investors/:id')
+  async getInvestor(@Param('id') id: string) {
+    return this.investorService.findById(id);
+  }
 
   @UseGuards(AdminGuard)
   @Get('admin/investors')

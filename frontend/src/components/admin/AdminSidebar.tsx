@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { useSettings } from '@/lib/settings';
-import styles from './AdminSidebar.module.css';
+import styles from '../AdminSidebar.module.css';
 
 const navItems = [
   { href: '/admin/dashboard', label: 'Dashboard', icon: '📊' },
@@ -13,6 +13,10 @@ const navItems = [
   { href: '/admin/batches', label: 'Batches', icon: '📦' },
   { href: '/admin/users', label: 'Users', icon: '👥' },
   { href: '/admin/consent', label: 'Consent', icon: '📝' },
+  { href: '/admin/whatsapp', label: 'WhatsApp', icon: '💬' },
+  { href: '/admin/notifications', label: 'Notifications', icon: '🔔' },
+  { href: '/admin/investors', label: 'Investors', icon: '💼' },
+  { href: '/admin/donations', label: 'Donations', icon: '❤️' },
   { href: '/admin/settings', label: 'Settings', icon: '⚙️' },
 ];
 
@@ -63,8 +67,8 @@ export default function AdminSidebar() {
             <span className={styles.adminRole}>{user?.role || 'Administrator'}</span>
           </div>
         </div>
-        <button 
-          className="w-full flex items-center justify-center gap-3 py-2 border border-terracotta/20 text-terracotta hover:bg-terracotta/10 transition-colors cursor-pointer group rounded"
+        <button
+          className="w-full flex items-center justify-center gap-3 py-2 border border-terracotta/20 text-terracotta hover:bg-terracotta/10 transition-colors cursor-pointer group"
           onClick={() => {
             logout();
             router.push('/admin/login');

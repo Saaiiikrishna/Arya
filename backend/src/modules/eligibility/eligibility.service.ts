@@ -1,12 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma';
 import { CriteriaOperator } from '@prisma/client';
+import { NotificationService } from '../notifications/notification.service';
 
 @Injectable()
 export class EligibilityService {
   private readonly logger = new Logger(EligibilityService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationService,
+  ) {}
 
   async createCriteria(data: {
     questionId: string;
@@ -92,21 +96,35 @@ export class EligibilityService {
       case 'NEQ':
         return val !== expected;
       case 'GT':
-        return Number(val) > Number(expected);
       case 'LT':
-        return Number(val) < Number(expected);
       case 'GTE':
-        return Number(val) >= Number(expected);
-      case 'LTE':
-        return Number(val) <= Number(expected);
+      case 'LTE': {
+        // Guard numeric operators: a non-numeric answer or expected value must
+        // fail deterministically rather than silently coercing to NaN (NaN
+        // comparisons are always false, which can flip NOT_* semantics elsewhere).
+        const a = Number(val);
+        const e = Number(expected);
+        if (Number.isNaN(a) || Number.isNaN(e)) return false;
+        if (operator === 'GT') return a > e;
+        if (operator === 'LT') return a < e;
+        if (operator === 'GTE') return a >= e;
+        return a <= e;
+      }
       case 'IN':
+        // Misconfigured (non-array) expected value fails safe: nothing matches.
         return Array.isArray(expected) ? expected.includes(val) : false;
       case 'NOT_IN':
-        return Array.isArray(expected) ? !expected.includes(val) : true;
+        // Misconfigured (non-array) expected value fails safe: treat as not-passed.
+        return Array.isArray(expected) ? !expected.includes(val) : false;
       case 'CONTAINS':
-        return typeof val === 'string' ? val.includes(String(expected)) : false;
+        // Both operands must be strings; a non-scalar/array expected value fails safe.
+        return typeof val === 'string' && (typeof expected === 'string' || typeof expected === 'number')
+          ? val.includes(String(expected))
+          : false;
       case 'NOT_CONTAINS':
-        return typeof val === 'string' ? !val.includes(String(expected)) : true;
+        return typeof val === 'string' && (typeof expected === 'string' || typeof expected === 'number')
+          ? !val.includes(String(expected))
+          : false;
       default:
         return false;
     }
@@ -118,22 +136,81 @@ export class EligibilityService {
   async screenBatch(batchId: string) {
     const applicants = await this.prisma.applicant.findMany({
       where: { batchId, status: 'PENDING' },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        phone: true,
+        accessToken: true,
+        batch: { select: { batchNumber: true } },
+      },
     });
-
-    let eligibleCount = 0;
-    let ineligibleCount = 0;
-
-    for (const applicant of applicants) {
-      const { eligible } = await this.evaluateApplicant(applicant.id);
-      await this.prisma.applicant.update({
-        where: { id: applicant.id },
-        data: { status: eligible ? 'ELIGIBLE' : 'INELIGIBLE' },
-      });
-      if (eligible) eligibleCount++;
-      else ineligibleCount++;
+    if (applicants.length === 0) {
+      return { eligibleCount: 0, ineligibleCount: 0, total: 0 };
     }
 
-    this.logger.log(`Batch screening: ${eligibleCount} eligible, ${ineligibleCount} ineligible`);
-    return { eligibleCount, ineligibleCount, total: applicants.length };
+    // Fetch criteria once and all answers for the batch in a single query each,
+    // then evaluate in memory — avoids the previous 3×N per-applicant round-trips.
+    const criteria = await this.prisma.eligibilityCriteria.findMany({
+      where: { isActive: true },
+    });
+    const applicantIds = applicants.map((a) => a.id);
+    const allAnswers = await this.prisma.answer.findMany({
+      where: { applicantId: { in: applicantIds } },
+      select: { applicantId: true, questionId: true, value: true },
+    });
+
+    const answersByApplicant = new Map<string, Map<string, any>>();
+    for (const ans of allAnswers) {
+      let m = answersByApplicant.get(ans.applicantId);
+      if (!m) {
+        m = new Map();
+        answersByApplicant.set(ans.applicantId, m);
+      }
+      m.set(ans.questionId, ans.value);
+    }
+
+    const eligibleIds: string[] = [];
+    const ineligibleIds: string[] = [];
+    for (const applicant of applicants) {
+      const answerMap = answersByApplicant.get(applicant.id) ?? new Map();
+      const eligible = criteria.every((c) =>
+        this.evaluateCriterion(answerMap.get(c.questionId), c.operator, c.value),
+      );
+      (eligible ? eligibleIds : ineligibleIds).push(applicant.id);
+    }
+
+    // Two bulk updates inside one transaction instead of N updates.
+    await this.prisma.$transaction([
+      ...(eligibleIds.length
+        ? [this.prisma.applicant.updateMany({ where: { id: { in: eligibleIds } }, data: { status: 'ELIGIBLE' } })]
+        : []),
+      ...(ineligibleIds.length
+        ? [this.prisma.applicant.updateMany({ where: { id: { in: ineligibleIds } }, data: { status: 'INELIGIBLE' } })]
+        : []),
+    ]);
+
+    // After the status updates commit, notify each applicant of their result.
+    // Best-effort and non-blocking: NotificationService swallows its own errors,
+    // and Promise.allSettled ensures one failed send never aborts the rest.
+    const eligibleIdSet = new Set(eligibleIds);
+    await Promise.allSettled(
+      applicants.map((a) =>
+        this.notifications.eligibilityDecision(
+          {
+            id: a.id,
+            email: a.email,
+            firstName: a.firstName,
+            phone: a.phone,
+            accessToken: a.accessToken,
+            batchNumber: a.batch?.batchNumber ?? null,
+          },
+          eligibleIdSet.has(a.id),
+        ),
+      ),
+    );
+
+    this.logger.log(`Batch screening: ${eligibleIds.length} eligible, ${ineligibleIds.length} ineligible`);
+    return { eligibleCount: eligibleIds.length, ineligibleCount: ineligibleIds.length, total: applicants.length };
   }
 }

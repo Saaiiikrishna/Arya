@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 import Link from 'next/link';
 import SmartMatchingModal from '@/components/admin/SmartMatchingModal';
 import AdminElectionControls from '@/components/admin/AdminElectionControls';
+import AdminTeamControls from '@/components/admin/AdminTeamControls';
 
 const STATUS_TRANSITIONS: Record<string, { next: string; label: string }> = {
   FILLING: { next: 'SCREENING', label: 'Start Screening' },
@@ -138,6 +139,76 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
     }
   };
 
+  const handleMoveTeamToTraining = async (teamId: string) => {
+    const reason = prompt('Reason for moving this team to Training (required):');
+    if (reason === null) return;
+    const trimmed = reason.trim();
+    if (!trimmed) {
+      alert('A reason is required to move a team to Training.');
+      return;
+    }
+    setActionLoading(`training-${teamId}`);
+    try {
+      await api.moveTeamToTraining(teamId, trimmed);
+      await loadData();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setActionLoading('');
+    }
+  };
+
+  const handleReactivateTeam = async (teamId: string) => {
+    setActionLoading(`reactivate-${teamId}`);
+    try {
+      await api.reactivateTeam(teamId);
+      await loadData();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setActionLoading('');
+    }
+  };
+
+  const handleRemoveTeam = async (teamId: string) => {
+    if (!confirm('Remove this team? This cannot be undone.')) return;
+    setActionLoading(`remove-team-${teamId}`);
+    try {
+      await api.removeTeam(teamId);
+      await loadData();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setActionLoading('');
+    }
+  };
+
+  const handleLockTeam = async (teamId: string) => {
+    if (!confirm('Lock this team? All 5 departments must be filled. Locked teams cannot accept or move members.')) return;
+    setActionLoading(`lock-${teamId}`);
+    try {
+      await api.lockTeam(teamId);
+      await loadData();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setActionLoading('');
+    }
+  };
+
+  const handleMoveMember = async (applicantId: string, targetTeamId: string) => {
+    if (!targetTeamId) return;
+    setActionLoading(`move-${applicantId}`);
+    try {
+      await api.moveTeamMember(applicantId, targetTeamId);
+      await loadData();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setActionLoading('');
+    }
+  };
+
   const handleStartBatchElections = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!confirm('This will start a leadership election for ALL teams in this batch. Continue?')) return;
@@ -192,7 +263,7 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
           <div className="flex items-center gap-4 mt-4">
             <span className={`px-3 py-1 text-[10px] uppercase tracking-widest font-bold border ${
               batch.status === 'PRODUCTION'
-                ? 'bg-forest/10 text-forest border-forest/20'
+                ? 'bg-saffron/10 text-saffron-deep border-saffron/20'
                 : 'bg-parchment text-ink/60 border-ink/20'
             }`}>
               {batch.status.replace(/_/g, ' ')}
@@ -230,7 +301,7 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
           )}
           {teams.length > 0 && ['TEAM_FORMATION', 'PROCESSING'].includes(batch.status) && (
             <button
-              className="bg-terracotta text-white px-6 py-3 text-xs uppercase tracking-widest font-semibold hover:bg-terracotta/90 transition-colors"
+              className="bg-saffron text-parchment px-6 py-3 text-xs uppercase tracking-widest font-semibold hover:bg-saffron-deep transition-colors"
               onClick={() => setShowElectionModal(true)}
               disabled={!!actionLoading}
             >
@@ -245,7 +316,7 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
           </button>
           {batch.status === 'FINALIZED' && (
             <button
-              className="bg-forest hover:opacity-90 text-white px-6 py-3 text-xs uppercase tracking-widest font-semibold transition-opacity"
+              className="bg-saffron hover:bg-saffron-deep text-parchment px-6 py-3 text-xs uppercase tracking-widest font-semibold transition-colors"
               onClick={handleApprove}
               disabled={!!actionLoading}
             >
@@ -254,7 +325,7 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
           )}
           {transition && batch.status !== 'FINALIZED' && (
             <button
-              className="bg-ink hover:bg-terracotta text-white px-6 py-3 text-xs uppercase tracking-widest font-semibold transition-colors"
+              className="bg-ink hover:bg-terracotta-warm text-white px-6 py-3 text-xs uppercase tracking-widest font-semibold transition-colors"
               onClick={handleTransition}
               disabled={!!actionLoading}
             >
@@ -276,22 +347,97 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {teams.map((team) => (
-              <div key={team.id} className="border border-hairline bg-white p-6 hover:border-forest transition-colors shadow-sm">
+              <div key={team.id} className="border border-hairline bg-white p-6 hover:border-forest transition-colors">
                 <div className="flex items-center justify-between mb-4">
                   <span className="font-serif text-xl font-bold">{team.name}</span>
-                  <span className="px-3 py-1 text-[10px] uppercase tracking-widest font-bold bg-forest/10 text-forest border border-forest/20">
-                    {team._count?.members || team.members?.length || 0} members
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {team.isLocked && (
+                      <span className="px-2 py-1 text-[10px] uppercase tracking-widest font-bold bg-ink/10 text-ink/70 border border-ink/20">
+                        🔒 Locked
+                      </span>
+                    )}
+                    <span className="px-3 py-1 text-[10px] uppercase tracking-widest font-bold bg-forest/10 text-forest border border-forest/20">
+                      {team._count?.members || team.members?.length || 0} members
+                    </span>
+                  </div>
                 </div>
+                {team.trainingStartedAt && (
+                  <div className="mb-4 bg-terracotta/10 border border-terracotta/30 px-3 py-2">
+                    <span className="text-[10px] uppercase tracking-widest font-bold text-terracotta">
+                      ⏸ In Training
+                    </span>
+                    {team.trainingReason && (
+                      <p className="text-xs text-ink/60 italic mt-1">{team.trainingReason}</p>
+                    )}
+                  </div>
+                )}
                 {team.members && team.members.slice(0, 5).map((m: any) => (
-                  <div key={m.id} className="text-sm text-ink/60 py-1 border-b border-hairline/50 last:border-0">
-                    {m.firstName} {m.lastName}
+                  <div key={m.id} className="flex items-center justify-between gap-2 text-sm text-ink/60 py-1 border-b border-hairline/50 last:border-0">
+                    <span className="truncate">{m.firstName} {m.lastName}</span>
+                    {teams.length > 1 && !team.isLocked && (
+                      <select
+                        value=""
+                        disabled={actionLoading === `move-${m.id}`}
+                        onChange={(e) => {
+                          const target = e.target.value;
+                          if (!target) return;
+                          if (confirm(`Move ${m.firstName} ${m.lastName} to ${teams.find((t) => t.id === target)?.name}?`)) {
+                            handleMoveMember(m.id, target);
+                          }
+                        }}
+                        className="text-[10px] uppercase tracking-widest text-forest border border-forest/30 bg-white px-1 py-0.5 focus:outline-none focus:border-forest disabled:opacity-50"
+                        title="Move member to another team"
+                      >
+                        <option value="">{actionLoading === `move-${m.id}` ? 'Moving…' : 'Move →'}</option>
+                        {teams
+                          .filter((t) => t.id !== team.id && !t.isLocked)
+                          .map((t) => (
+                            <option key={t.id} value={t.id}>{t.name}</option>
+                          ))}
+                      </select>
+                    )}
                   </div>
                 ))}
                 {team.members && team.members.length > 5 && (
                   <div className="text-xs text-ink/40 mt-2 uppercase tracking-widest">+{team.members.length - 5} more</div>
                 )}
                 <AdminElectionControls teamId={team.id} />
+                <AdminTeamControls teamId={team.id} onChange={loadData} />
+                <div className="mt-4 pt-4 border-t border-hairline flex flex-wrap gap-2">
+                  {team.trainingStartedAt ? (
+                    <button
+                      onClick={() => handleReactivateTeam(team.id)}
+                      disabled={!!actionLoading}
+                      className="text-[10px] uppercase tracking-widest font-bold text-forest border border-forest/30 px-3 py-1.5 hover:bg-forest hover:text-white transition-colors disabled:opacity-50"
+                    >
+                      {actionLoading === `reactivate-${team.id}` ? 'Reactivating...' : 'Reactivate'}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleMoveTeamToTraining(team.id)}
+                      disabled={!!actionLoading}
+                      className="text-[10px] uppercase tracking-widest font-bold text-terracotta border border-terracotta/30 px-3 py-1.5 hover:bg-terracotta hover:text-white transition-colors disabled:opacity-50"
+                    >
+                      {actionLoading === `training-${team.id}` ? 'Moving...' : 'Move to Training'}
+                    </button>
+                  )}
+                  {!team.isLocked && (
+                    <button
+                      onClick={() => handleLockTeam(team.id)}
+                      disabled={!!actionLoading}
+                      className="text-[10px] uppercase tracking-widest font-bold text-ink border border-ink/30 px-3 py-1.5 hover:bg-ink hover:text-white transition-colors disabled:opacity-50"
+                    >
+                      {actionLoading === `lock-${team.id}` ? 'Locking...' : '🔒 Lock Team'}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleRemoveTeam(team.id)}
+                    disabled={!!actionLoading}
+                    className="text-[10px] uppercase tracking-widest font-bold text-ink/50 border border-ink/20 px-3 py-1.5 hover:bg-ink hover:text-white transition-colors disabled:opacity-50"
+                  >
+                    {actionLoading === `remove-team-${team.id}` ? 'Removing...' : 'Remove Team'}
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -302,14 +448,14 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
       {batch.instructions && batch.instructions.length > 0 && (
         <section className="mb-16">
           <h2 className="font-serif text-2xl font-bold mb-6">Instructions Sent</h2>
-          <div className="border border-hairline bg-white shadow-sm">
+          <div className="border border-hairline bg-white">
             {batch.instructions.map((inst: any) => (
               <div key={inst.id} className="p-6 border-b border-hairline last:border-0 hover:bg-parchment/30 transition-colors">
                 <div className="flex items-center justify-between mb-2">
                   <span className="font-serif text-lg font-bold">{inst.title}</span>
                   <div className="flex items-center gap-3">
                     {inst.deadline && (
-                      <span className="text-[10px] uppercase tracking-widest text-terracotta font-semibold">
+                      <span className="text-[10px] uppercase tracking-widest text-terracotta-warm font-semibold">
                         ⏰ {new Date(inst.deadline).toLocaleDateString()}
                       </span>
                     )}
@@ -348,9 +494,9 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
           <div className="bg-white border-2 border-ink p-8 shadow-[8px_8px_0px_#1C1B19] w-full max-w-xl animate-fade-in max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-8 pb-4 border-b border-hairline">
               <h2 className="font-serif text-3xl font-bold">Send Instructions</h2>
-              <button className="text-2xl text-ink/40 hover:text-terracotta transition-colors leading-none" onClick={() => setShowInstructionModal(false)}>×</button>
+              <button className="text-2xl text-ink/40 hover:text-terracotta-warm transition-colors leading-none" onClick={() => setShowInstructionModal(false)}>×</button>
             </div>
-            <div className="bg-amber-50 border border-amber-200 p-4 mb-6 text-sm text-amber-800">
+            <div className="bg-saffron-glow/15 border border-saffron/30 p-4 mb-6 text-sm text-ink/70">
               📢 This will be sent to <strong>{batch._count?.applicants || 0} applicant(s)</strong> in Batch #{batch.batchNumber}
             </div>
             <form onSubmit={handleSendInstructions} className="flex flex-col gap-6">
@@ -397,7 +543,7 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
                 <button type="button" className="px-6 py-3 border border-ink text-xs uppercase tracking-widest font-semibold text-ink hover:bg-parchment transition-colors" onClick={() => setShowInstructionModal(false)}>
                   Cancel
                 </button>
-                <button type="submit" className="bg-forest hover:opacity-90 text-white px-8 py-3 text-xs uppercase tracking-widest font-semibold transition-colors">
+                <button type="submit" className="bg-saffron hover:bg-saffron-deep text-parchment px-8 py-3 text-xs uppercase tracking-widest font-semibold transition-colors">
                   Send to All Users
                 </button>
               </div>
@@ -421,7 +567,7 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
             />
             <div className="flex gap-3 justify-end">
               <button onClick={() => setShowCapacityModal(false)} className="px-4 py-2 border border-ink text-xs uppercase tracking-widest font-semibold">Cancel</button>
-              <button onClick={handleIncreaseCapacity} className="px-6 py-2 bg-forest text-white text-xs uppercase tracking-widest font-semibold">Update</button>
+              <button onClick={handleIncreaseCapacity} className="px-6 py-2 bg-saffron text-parchment text-xs uppercase tracking-widest font-semibold hover:bg-saffron-deep transition-colors">Update</button>
             </div>
           </div>
         </div>
@@ -455,7 +601,7 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
               </div>
               <div className="flex gap-3 justify-end mt-4 pt-4 border-t border-hairline">
                 <button type="button" onClick={() => setShowElectionModal(false)} className="px-4 py-2 border border-ink text-xs uppercase tracking-widest font-semibold">Cancel</button>
-                <button type="submit" disabled={actionLoading === 'election'} className="px-6 py-2 bg-terracotta text-white text-xs uppercase tracking-widest font-semibold">
+                <button type="submit" disabled={actionLoading === 'election'} className="px-6 py-2 bg-saffron text-parchment text-xs uppercase tracking-widest font-semibold hover:bg-saffron-deep transition-colors">
                   {actionLoading === 'election' ? 'Starting...' : 'Start All Elections'}
                 </button>
               </div>

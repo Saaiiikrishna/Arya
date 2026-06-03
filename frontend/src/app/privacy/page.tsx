@@ -27,7 +27,7 @@ export default function PrivacyPage() {
             </p>
           </section>
 
-          <section className="bg-alabaster p-8 border border-hairline rounded-sm my-12">
+          <section className="bg-alabaster p-8 border border-hairline my-12">
             <h2 className="font-serif text-2xl font-bold mb-6 text-forest uppercase tracking-tight">Summary of Key Points</h2>
             <div className="space-y-4 text-sm">
               <p>
@@ -45,21 +45,21 @@ export default function PrivacyPage() {
             </div>
           </section>
 
-          <nav id="toc" className="bg-ink/5 p-8 rounded-sm mb-12">
+          <nav id="toc" className="bg-ink/5 p-8 mb-12">
             <h2 className="font-serif text-xl font-bold mb-4 uppercase tracking-wider">Table of Contents</h2>
             <ol className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 text-xs uppercase tracking-widest font-medium">
-              <li><a href="#infocollect" className="hover:text-terracotta transition-colors">1. What information do we collect?</a></li>
-              <li><a href="#infouse" className="hover:text-terracotta transition-colors">2. How do we process your information?</a></li>
-              <li><a href="#whoshare" className="hover:text-terracotta transition-colors">3. When and with whom do we share your personal information?</a></li>
-              <li><a href="#cookies" className="hover:text-terracotta transition-colors">4. Do we use cookies and other tracking technologies?</a></li>
-              <li><a href="#sociallogins" className="hover:text-terracotta transition-colors">5. How do we handle your social logins?</a></li>
-              <li><a href="#inforetain" className="hover:text-terracotta transition-colors">6. How long do we keep your information?</a></li>
-              <li><a href="#infosafe" className="hover:text-terracotta transition-colors">7. How do we keep your information safe?</a></li>
-              <li><a href="#privacyrights" className="hover:text-terracotta transition-colors">8. What are your privacy rights?</a></li>
-              <li><a href="#DNT" className="hover:text-terracotta transition-colors">9. Controls for Do-Not-Track features</a></li>
-              <li><a href="#policyupdates" className="hover:text-terracotta transition-colors">10. Do we make updates to this notice?</a></li>
-              <li><a href="#contact" className="hover:text-terracotta transition-colors">11. How can you contact us about this notice?</a></li>
-              <li><a href="#request" className="hover:text-terracotta transition-colors">12. How can you review, update, or delete the data we collect?</a></li>
+              <li><a href="#infocollect" className="hover:text-terracotta-warm transition-colors">1. What information do we collect?</a></li>
+              <li><a href="#infouse" className="hover:text-terracotta-warm transition-colors">2. How do we process your information?</a></li>
+              <li><a href="#whoshare" className="hover:text-terracotta-warm transition-colors">3. When and with whom do we share your personal information?</a></li>
+              <li><a href="#cookies" className="hover:text-terracotta-warm transition-colors">4. Do we use cookies and other tracking technologies?</a></li>
+              <li><a href="#sociallogins" className="hover:text-terracotta-warm transition-colors">5. How do we handle your social logins?</a></li>
+              <li><a href="#inforetain" className="hover:text-terracotta-warm transition-colors">6. How long do we keep your information?</a></li>
+              <li><a href="#infosafe" className="hover:text-terracotta-warm transition-colors">7. How do we keep your information safe?</a></li>
+              <li><a href="#privacyrights" className="hover:text-terracotta-warm transition-colors">8. What are your privacy rights?</a></li>
+              <li><a href="#DNT" className="hover:text-terracotta-warm transition-colors">9. Controls for Do-Not-Track features</a></li>
+              <li><a href="#policyupdates" className="hover:text-terracotta-warm transition-colors">10. Do we make updates to this notice?</a></li>
+              <li><a href="#contact" className="hover:text-terracotta-warm transition-colors">11. How can you contact us about this notice?</a></li>
+              <li><a href="#request" className="hover:text-terracotta-warm transition-colors">12. How can you review, update, or delete the data we collect?</a></li>
             </ol>
           </nav>
 
@@ -110,7 +110,7 @@ export default function PrivacyPage() {
             <p>
               If you have questions or comments about this notice, you may email us at <a href="mailto:support@aryavartham.com" className="text-forest underline italic font-medium">support@aryavartham.com</a> or contact us by post at:
             </p>
-            <address className="not-italic bg-alabaster p-6 border border-hairline font-bold rounded-sm">
+            <address className="not-italic bg-alabaster p-6 border border-hairline font-bold">
               SKSC MYSILLYDREAMS PRIVATE LIMITED<br />
               KPHB, Hyderabad<br />
               Telangana 500085<br />

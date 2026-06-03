@@ -3,7 +3,9 @@ import { ThrottlerGuard, Throttle } from '@nestjs/throttler';
 import { ReferralService } from './referral.service';
 import { JwtAuthGuard, AdminGuard } from '../auth/guards';
 
-@Controller()
+// Mounted under /api to match the frontend client base (the route-path strings
+// already carry their full paths, e.g. 'referrals/verify', 'admin/referrals').
+@Controller('api')
 @UseGuards(ThrottlerGuard)
 export class ReferralController {
   constructor(private readonly referralService: ReferralService) {}

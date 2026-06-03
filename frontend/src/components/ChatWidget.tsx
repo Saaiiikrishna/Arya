@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '@/lib/api';
 import { io, Socket } from 'socket.io-client';
 import { Send, X, MessageSquare } from 'lucide-react';
@@ -19,25 +19,40 @@ export default function ChatWidget({ teamId, userId, userName }: ChatWidgetProps
   const [isConnected, setIsConnected] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Fetch recent history and merge it into local state, deduplicating by id and
+  // preserving any optimistic (temp_*) messages that aren't yet persisted.
+  const syncHistory = useCallback(async () => {
+    try {
+      const res = await api.getChatRoom(teamId);
+      if (!res || !res.messages) return;
+      // Backend returns newest first, so reverse to show chronological order.
+      const history = [...res.messages].reverse();
+      setMessages(prev => {
+        const historyIds = new Set(history.map((m: any) => m.id));
+        // Keep optimistic temp messages that haven't been confirmed by the server yet.
+        const pendingOptimistic = prev.filter(
+          (m: any) => typeof m.id === 'string' && m.id.startsWith('temp_') && !historyIds.has(m.id),
+        );
+        return [...history, ...pendingOptimistic];
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  }, [teamId]);
+
   // Load initial history
   useEffect(() => {
     if (isOpen && messages.length === 0) {
-      api.getChatRoom(teamId)
-        .then(res => {
-          if (res && res.messages) {
-            setMessages(res.messages.reverse()); // Assume backend returns newest first, so we reverse to show chronological
-          }
-        })
-        .catch(console.error);
+      syncHistory();
     }
-  }, [isOpen, teamId]);
+  }, [isOpen, teamId, syncHistory]);
 
   // Connect WebSockets
   useEffect(() => {
     // Only connect if the widget is opened to save connections
     if (!isOpen) return;
 
-    const token = localStorage.getItem('token');
+    const token = api.getToken();
     // Strip /api from the URL to connect to the root namespace
     const baseUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api').replace(/\/api\/?$/, '');
     const newSocket = io(baseUrl, {
@@ -48,6 +63,9 @@ export default function ChatWidget({ teamId, userId, userName }: ChatWidgetProps
     newSocket.on('connect', () => {
       setIsConnected(true);
       newSocket.emit('joinRoom', { roomId: `team_${teamId}` });
+      // Re-fetch recent history so messages received while disconnected are
+      // not lost. This fires on both the initial connect and any reconnect.
+      syncHistory();
     });
 
     newSocket.on('disconnect', () => {
@@ -63,7 +81,7 @@ export default function ChatWidget({ teamId, userId, userName }: ChatWidgetProps
     return () => {
       newSocket.disconnect();
     };
-  }, [isOpen, teamId]);
+  }, [isOpen, teamId, syncHistory]);
 
   // Scroll to bottom when messages update
   useEffect(() => {
@@ -99,7 +117,7 @@ export default function ChatWidget({ teamId, userId, userName }: ChatWidgetProps
     return (
       <button 
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-8 right-8 w-14 h-14 bg-forest text-white rounded-full shadow-lg flex-center hover:bg-forest/90 transition-transform hover:scale-105 z-50"
+        className="fixed bottom-8 right-8 w-14 h-14 bg-forest text-white rounded-full border border-hairline flex-center hover:bg-forest/90 transition-transform hover:scale-105 z-50"
       >
         <MessageSquare className="w-6 h-6" />
       </button>
@@ -107,13 +125,13 @@ export default function ChatWidget({ teamId, userId, userName }: ChatWidgetProps
   }
 
   return (
-    <div className="fixed bottom-8 right-8 w-[380px] h-[550px] bg-white border border-hairline shadow-2xl flex flex-col z-50 animate-fade-in font-sans">
+    <div className="fixed bottom-8 right-8 w-[380px] h-[550px] bg-white border border-hairline flex flex-col z-50 animate-fade-in font-sans">
       {/* Header */}
       <div className="bg-ink text-parchment p-4 flex justify-between items-center shrink-0">
         <div>
           <h3 className="font-serif font-bold text-lg leading-tight">Team Comms</h3>
           <p className="text-[10px] uppercase tracking-widest text-parchment/60 flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-forest' : 'bg-terracotta'}`}></span>
+            <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-saffron' : 'bg-terracotta'}`}></span>
             {isConnected ? 'Connected • Secure' : 'Connecting...'}
           </p>
         </div>
@@ -175,7 +193,7 @@ export default function ChatWidget({ teamId, userId, userName }: ChatWidgetProps
           <button 
             type="submit" 
             disabled={!newMessage.trim() || !isConnected}
-            className="bg-ink text-white p-2 hover:bg-forest transition-colors disabled:opacity-50 disabled:hover:bg-ink flex-center w-10 h-10 shrink-0"
+            className="bg-saffron text-parchment p-2 hover:bg-saffron-deep transition-colors disabled:opacity-50 disabled:hover:bg-saffron flex-center w-10 h-10 shrink-0"
           >
             <Send className="w-4 h-4 ml-[-2px]" />
           </button>

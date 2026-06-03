@@ -1,10 +1,11 @@
 import {
   Controller, Get, Post, Patch, Body, Param, Query, UseGuards, Req,
+  BadRequestException, ForbiddenException,
 } from '@nestjs/common';
 import { EquityService } from './equity.service';
-import { AdminGuard, JwtAuthGuard } from '../auth/guards';
+import { AdminGuard, JwtAuthGuard, SuperAdminGuard } from '../auth/guards';
 
-@Controller()
+@Controller('api')
 export class EquityController {
   constructor(private readonly equityService: EquityService) {}
 
@@ -71,14 +72,29 @@ export class EquityController {
     return this.equityService.startTimer(id, adminId);
   }
 
-  @UseGuards(AdminGuard)
+  /**
+   * Transfer the platform's controlling 51% to the founders. This is an
+   * irreversible danger-zone action, so it is SuperAdminGuard-protected, the
+   * super-admin role is re-verified here as defence-in-depth, and the caller
+   * must send an explicit confirmation flag in the body.
+   */
+  @UseGuards(SuperAdminGuard)
   @Post('admin/equity/companies/:id/handover')
   executeHandover(
     @Param('id') id: string,
     @Req() req: any,
+    @Body() body: { confirm?: boolean },
   ) {
+    // Defence-in-depth: re-verify SUPER_ADMIN even though the guard already did,
+    // so a misconfiguration of the guard cannot let a lesser role transfer 51%.
+    if (!req.user || req.user.role !== 'SUPER_ADMIN') {
+      throw new ForbiddenException('Super admin access required to execute a handover');
+    }
     const adminId = req.user.id || req.user.sub;
-    return this.equityService.executeHandover(id, adminId);
+    if (!adminId) {
+      throw new ForbiddenException('Authenticated super-admin actor required');
+    }
+    return this.equityService.executeHandover(id, adminId, body?.confirm === true);
   }
 
   @UseGuards(AdminGuard)
@@ -125,6 +141,29 @@ export class EquityController {
     return this.equityService.signAgreementFounder(id, applicantId);
   }
 
+  // ─── VESTING ENDPOINTS ────────────────────────────────────
+
+  @UseGuards(AdminGuard)
+  @Post('admin/equity/companies/:id/recompute-vesting')
+  recomputeVesting(@Param('id') id: string) {
+    return this.equityService.computeVesting(id);
+  }
+
+  @UseGuards(AdminGuard)
+  @Patch('admin/equity/holders/:holderId/vesting')
+  setHolderVesting(
+    @Param('holderId') holderId: string,
+    @Req() req: any,
+    @Body() body: { vestedPct?: number },
+  ) {
+    const vestedPct = body?.vestedPct;
+    if (typeof vestedPct !== 'number' || !Number.isFinite(vestedPct)) {
+      throw new BadRequestException('vestedPct must be a number');
+    }
+    const triggeredBy = req.user.id || req.user.sub;
+    return this.equityService.setHolderVesting(holderId, vestedPct, triggeredBy);
+  }
+
   // ─── EQUITY EVENT ENDPOINT ────────────────────────────────
 
   @UseGuards(AdminGuard)
@@ -136,12 +175,16 @@ export class EquityController {
       eventType: any;
       fromHolder?: string;
       toHolder?: string;
+      fromHolderId?: string;
+      toHolderId?: string;
       percentageAmount: number;
       description: string;
       metadata?: any;
     },
   ) {
+    // The audit actor is pinned to the JWT and passed as a trusted, separate
+    // argument. Any triggeredBy on the request body is ignored by the service.
     const triggeredBy = req.user.id || req.user.sub;
-    return this.equityService.recordEvent({ ...body, triggeredBy });
+    return this.equityService.recordEvent(body, triggeredBy);
   }
 }

@@ -65,6 +65,7 @@ export default function ApplicationForm({ onSubmit, defaultData, userInfo, readO
   const { user, isAuthenticated } = useAuth();
   const [step, setStep] = useState(1);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [saveFailed, setSaveFailed] = useState(false);
 
   // Step 1: Personal Info
   const [firstName, setFirstName] = useState('');
@@ -224,9 +225,30 @@ export default function ApplicationForm({ onSubmit, defaultData, userInfo, readO
         experienceYears: experienceYears ? parseInt(experienceYears) : null,
         hoursPerDay: hoursPerDay ? parseInt(hoursPerDay) : null,
       };
-      
+
       // Do not wait for response to avoid blocking typing
-      api.submitDossier(payload).catch(e => console.error("Draft autosave failed", e));
+      api.submitDossier(payload)
+        .then(() => {
+          setSaveFailed(false);
+          // Server is the source of truth now — clear any local fallback copy
+          try { localStorage.removeItem(DRAFT_KEY); } catch {}
+        })
+        .catch((e: any) => {
+          console.error('Draft autosave failed', e);
+          // Surface a visible "couldn't save" indicator so work-loss is obvious
+          setSaveFailed(true);
+          const msg = (e?.message || '').toLowerCase();
+          const isValidationError = msg.includes('format') || msg.includes('invalid');
+          if (isValidationError) {
+            // True 400 validation rejection — this draft can't be saved as-is,
+            // so don't keep a stale local copy that would also be rejected.
+            try { localStorage.removeItem(DRAFT_KEY); } catch {}
+          } else {
+            // Generic / network failure — keep a local backup so the user's
+            // work survives until the next successful retry.
+            try { localStorage.setItem(DRAFT_KEY, JSON.stringify(draft)); } catch {}
+          }
+        });
     } else {
       localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
     }
@@ -419,9 +441,9 @@ export default function ApplicationForm({ onSubmit, defaultData, userInfo, readO
           </span>
         </div>
         <div className="h-1 bg-hairline w-full">
-          <div 
-            className="h-full bg-forest transition-all duration-500 ease-out" 
-            style={{ width: `${progressPercent}%` }} 
+          <div
+            className="h-full bg-saffron transition-all duration-500 ease-out"
+            style={{ width: `${progressPercent}%` }}
           />
         </div>
         <div className="flex justify-between mt-3">
@@ -429,10 +451,10 @@ export default function ApplicationForm({ onSubmit, defaultData, userInfo, readO
             <div 
               key={s}
               className={`w-8 h-8 flex items-center justify-center text-xs font-bold border-2 transition-all ${
-                s === step 
-                  ? 'border-forest bg-forest text-parchment' 
-                  : s < step 
-                    ? 'border-forest/30 bg-forest/10 text-forest' 
+                s === step
+                  ? 'border-saffron bg-saffron text-parchment'
+                  : s < step
+                    ? 'border-forest/30 bg-forest/10 text-forest'
                     : 'border-hairline text-ink/30'
               }`}
             >
@@ -451,7 +473,7 @@ export default function ApplicationForm({ onSubmit, defaultData, userInfo, readO
             <h2 className="font-serif text-4xl md:text-5xl text-forest leading-tight mb-4">
               Tell us about yourself
             </h2>
-            <p className="font-serif italic text-lg text-ink/60 leading-relaxed mb-12 border-l border-terracotta pl-6 py-2">
+            <p className="font-serif italic text-lg text-ink/60 leading-relaxed mb-12 border-l border-terracotta-warm pl-6 py-2">
               Basic information to help us understand who you are and where you operate.
             </p>
 
@@ -630,7 +652,7 @@ export default function ApplicationForm({ onSubmit, defaultData, userInfo, readO
                       <button
                         type="button"
                         onClick={() => { setVerifiedReferrer(null); setReferralInput(''); }}
-                        className="ml-auto text-[10px] text-ink/40 uppercase tracking-widest hover:text-terracotta transition-colors"
+                        className="ml-auto text-[10px] text-ink/40 uppercase tracking-widest hover:text-terracotta-warm transition-colors"
                       >
                         Clear
                       </button>
@@ -647,7 +669,7 @@ export default function ApplicationForm({ onSubmit, defaultData, userInfo, readO
             <h2 className="font-serif text-4xl md:text-5xl text-forest leading-tight mb-4">
               Your craft & commitment
             </h2>
-            <p className="font-serif italic text-lg text-ink/60 leading-relaxed mb-12 border-l border-terracotta pl-6 py-2">
+            <p className="font-serif italic text-lg text-ink/60 leading-relaxed mb-12 border-l border-terracotta-warm pl-6 py-2">
               What do you bring to the table? We value diverse skillsets and genuine commitment over polished resumes.
             </p>
 
@@ -660,7 +682,7 @@ export default function ApplicationForm({ onSubmit, defaultData, userInfo, readO
                       key={skill}
                       type="button"
                       onClick={() => removeSkill(skill)}
-                      className="bg-forest/10 text-forest border border-forest/20 px-3 py-1.5 text-xs uppercase tracking-widest font-bold hover:bg-terracotta/10 hover:text-terracotta hover:border-terracotta/20 transition-colors"
+                      className="bg-forest/10 text-forest border border-forest/20 px-3 py-1.5 text-xs uppercase tracking-widest font-bold hover:bg-terracotta-warm/10 hover:text-terracotta-warm hover:border-terracotta-warm/20 transition-colors"
                     >
                       {skill} ×
                     </button>
@@ -750,7 +772,7 @@ export default function ApplicationForm({ onSubmit, defaultData, userInfo, readO
             <h2 className="font-serif text-4xl md:text-5xl text-forest leading-tight mb-4">
               Your vision
             </h2>
-            <p className="font-serif italic text-lg text-ink/60 leading-relaxed mb-12 border-l border-terracotta pl-6 py-2">
+            <p className="font-serif italic text-lg text-ink/60 leading-relaxed mb-12 border-l border-terracotta-warm pl-6 py-2">
               Whether you have a startup idea or want to join a team — both are equally valuable.
             </p>
 
@@ -826,7 +848,7 @@ export default function ApplicationForm({ onSubmit, defaultData, userInfo, readO
             <h2 className="font-serif text-4xl md:text-5xl text-forest leading-tight mb-4">
               The dossier
             </h2>
-            <p className="font-serif italic text-lg text-ink/60 leading-relaxed mb-12 border-l border-terracotta pl-6 py-2">
+            <p className="font-serif italic text-lg text-ink/60 leading-relaxed mb-12 border-l border-terracotta-warm pl-6 py-2">
               This section captures the nuance of your ambition. We look for the obsession that keeps you awake, the failures that shaped your resolve, and the vision that feels inevitable.
             </p>
 
@@ -897,7 +919,7 @@ export default function ApplicationForm({ onSubmit, defaultData, userInfo, readO
             <h2 className="font-serif text-4xl md:text-5xl text-forest leading-tight mb-4">
               Review & pledge
             </h2>
-            <p className="font-serif italic text-lg text-ink/60 leading-relaxed mb-12 border-l border-terracotta pl-6 py-2">
+            <p className="font-serif italic text-lg text-ink/60 leading-relaxed mb-12 border-l border-terracotta-warm pl-6 py-2">
               Review your application and accept the founding agreement to proceed.
             </p>
 
@@ -977,7 +999,7 @@ export default function ApplicationForm({ onSubmit, defaultData, userInfo, readO
             <button
               type="button"
               onClick={goNext}
-              className="bg-forest text-parchment px-12 py-5 text-sm font-sans uppercase tracking-widest hover:bg-forest/90 transition-colors active:opacity-70"
+              className="bg-saffron text-parchment px-12 py-5 text-sm font-sans uppercase tracking-widest hover:bg-saffron-deep transition-colors active:opacity-70"
             >
               Continue →
             </button>
@@ -985,7 +1007,7 @@ export default function ApplicationForm({ onSubmit, defaultData, userInfo, readO
             <button
               type="button"
               onClick={handleSubmit}
-              className="bg-forest text-parchment px-12 py-5 text-sm font-sans uppercase tracking-widest hover:bg-forest/90 transition-colors active:opacity-70"
+              className="bg-saffron text-parchment px-12 py-5 text-sm font-sans uppercase tracking-widest hover:bg-saffron-deep transition-colors active:opacity-70"
             >
               Seal & Submit Application
             </button>
@@ -994,9 +1016,15 @@ export default function ApplicationForm({ onSubmit, defaultData, userInfo, readO
 
         {/* Auto-save indicator */}
         <div className="text-center">
-          <p className="text-[9px] font-sans uppercase tracking-[0.15em] text-ink/30">
-            Draft auto-saved • Applications reviewed on a rolling basis
-          </p>
+          {saveFailed ? (
+            <p className="text-[9px] font-sans uppercase tracking-[0.15em] text-terracotta font-bold">
+              Couldn&apos;t save — will retry
+            </p>
+          ) : (
+            <p className="text-[9px] font-sans uppercase tracking-[0.15em] text-ink/30">
+              Draft auto-saved • Applications reviewed on a rolling basis
+            </p>
+          )}
         </div>
       </div>
     </div>

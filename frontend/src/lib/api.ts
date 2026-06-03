@@ -4,10 +4,25 @@ interface RequestOptions {
   method?: string;
   body?: any;
   headers?: Record<string, string>;
+  // Internal: skip the automatic 401 refresh+retry (used for the refresh call itself
+  // and the already-retried request) to avoid infinite recursion.
+  skipAuthRetry?: boolean;
+}
+
+// Error that carries the HTTP status so callers (e.g. auth.tsx) can branch on it.
+export class ApiError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
 }
 
 class ApiClient {
   private token: string | null = null;
+  // De-dupes concurrent refreshes so a burst of 401s triggers a single refresh.
+  private refreshPromise: Promise<boolean> | null = null;
 
   setToken(token: string | null) {
     this.token = token;
@@ -20,23 +35,36 @@ class ApiClient {
 
   async refreshAccessToken(): Promise<boolean> {
     if (typeof window === 'undefined') return false;
+    // Collapse concurrent callers onto a single in-flight refresh.
+    if (this.refreshPromise) return this.refreshPromise;
+
     const refreshToken = sessionStorage.getItem('arya_refresh');
     if (!refreshToken) return false;
-    try {
-      const data = await this.request<{ accessToken: string; refreshToken: string }>(
-        '/admin/auth/refresh',
-        { method: 'POST', body: { refreshToken } },
-      );
-      this.token = data.accessToken;
-      sessionStorage.setItem('arya_refresh', data.refreshToken);
-      return true;
-    } catch {
-      return false;
-    }
+
+    this.refreshPromise = (async () => {
+      try {
+        const data = await this.request<{ accessToken: string; refreshToken: string }>(
+          '/admin/auth/refresh',
+          // skipAuthRetry: a 401 here means the refresh token is dead — don't recurse.
+          { method: 'POST', body: { refreshToken }, skipAuthRetry: true },
+        );
+        this.token = data.accessToken;
+        sessionStorage.setItem('arya_refresh', data.refreshToken);
+        return true;
+      } catch {
+        return false;
+      } finally {
+        this.refreshPromise = null;
+      }
+    })();
+
+    return this.refreshPromise;
   }
 
   private async request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-    const { method = 'GET', body, headers = {} } = options;
+    const { method = 'GET', body, skipAuthRetry = false } = options;
+    // Clone caller-supplied headers so a retry doesn't reuse a stale Authorization header.
+    const headers: Record<string, string> = { ...(options.headers || {}) };
 
     const token = this.getToken();
     if (token) {
@@ -50,28 +78,57 @@ class ApiClient {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout for cold starts / network delays
 
+    let response: Response;
     try {
-      const response = await fetch(`${API_BASE}${endpoint}`, {
+      response = await fetch(`${API_BASE}${endpoint}`, {
         method,
         headers,
         body: body ? JSON.stringify(body) : undefined,
         signal: controller.signal,
       });
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({ message: 'Request failed' }));
-        throw new Error(error.message || `HTTP ${response.status}`);
-      }
-
-      if (response.status === 204) return {} as T;
-      return response.json();
     } catch (error: any) {
       clearTimeout(timeoutId);
-      if (error.name === 'AbortError') {
+      if (error?.name === 'AbortError') {
         throw new Error('Connection timed out. The server took too long to respond.');
       }
       throw error;
+    }
+    clearTimeout(timeoutId);
+
+    // Central auth recovery: on a 401 for an authenticated request, refresh the access
+    // token once and retry. If refresh fails, clear auth and bounce to login.
+    if (response.status === 401 && !skipAuthRetry && token) {
+      const refreshed = await this.refreshAccessToken();
+      if (refreshed) {
+        return this.request<T>(endpoint, { ...options, skipAuthRetry: true });
+      }
+      this.handleAuthFailure();
+      throw new ApiError(401, 'Session expired. Please sign in again.');
+    }
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Request failed' }));
+      throw new ApiError(response.status, error.message || `HTTP ${response.status}`);
+    }
+
+    if (response.status === 204) return {} as T;
+    return response.json();
+  }
+
+  // Clears stored auth and redirects to login after an unrecoverable 401.
+  private handleAuthFailure() {
+    this.token = null;
+    this.refreshPromise = null;
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('arya_refresh');
+      sessionStorage.removeItem('arya_profile');
+      localStorage.removeItem('arya_admin');
+      // Bounce to the right login for the current area, avoiding redirect loops.
+      const path = window.location.pathname;
+      const loginPath = path.startsWith('/investor') ? '/investor/login' : '/login';
+      if (path !== loginPath && !path.startsWith('/login') && !path.startsWith('/admin/login') && path !== '/investor/login') {
+        window.location.href = loginPath;
+      }
     }
   }
 
@@ -110,6 +167,7 @@ class ApiClient {
         this.request('/admin/auth/logout', { method: 'POST', body: { refreshToken: rt } }).catch(() => {});
       }
       sessionStorage.removeItem('arya_refresh');
+      sessionStorage.removeItem('arya_profile'); // clear cached user/role too
       localStorage.removeItem('arya_admin'); // legacy key cleanup
     }
     this.token = null;
@@ -247,6 +305,13 @@ class ApiClient {
     });
   }
 
+  async submitMyAnswers(answers: { questionId: string; value: any }[]) {
+    return this.request<any>('/applicants/me/answers', {
+      method: 'POST',
+      body: { answers },
+    });
+  }
+
   async giveConsent(accessToken: string, consentDocUrl?: string) {
     return this.request<any>(`/applicants/consent/${accessToken}`, {
       method: 'POST',
@@ -314,6 +379,11 @@ class ApiClient {
     return this.request<any>(`/batches/${batchNumber}/status`);
   }
 
+  // Public, safe-field list of all batches (for the Archives page).
+  async getPublicBatches() {
+    return this.request<any[]>('/batches/public');
+  }
+
   // Teams
   async getTeamsByBatch(batchId: string) {
     return this.request<any[]>(`/admin/teams/batch/${batchId}`);
@@ -325,6 +395,19 @@ class ApiClient {
 
   async formTeams(batchId: string) {
     return this.request<any>(`/admin/teams/form/${batchId}`, { method: 'POST' });
+  }
+
+  // Team lifecycle (admin): TRAINING pause / reactivate / remove.
+  async moveTeamToTraining(teamId: string, reason: string) {
+    return this.request<any>(`/admin/teams/${teamId}/training`, { method: 'PUT', body: { reason } });
+  }
+
+  async reactivateTeam(teamId: string) {
+    return this.request<any>(`/admin/teams/${teamId}/reactivate`, { method: 'PUT' });
+  }
+
+  async removeTeam(teamId: string) {
+    return this.request<any>(`/admin/teams/${teamId}`, { method: 'DELETE' });
   }
 
   // Smart Matching (Phase 2)
@@ -356,8 +439,66 @@ class ApiClient {
     return this.request<any[]>('/investors/showcases');
   }
 
-  async requestMeeting(investorId: string, data: { showcaseId: string; date: string; message?: string }) {
-    return this.request<any>(`/investors/${investorId}/meeting-request`, { method: 'POST', body: data });
+  // Meeting request (investor portal): the investor identity is derived from the
+  // JWT server-side — no investorId arg/param. POST /investors/meeting-request.
+  async requestMeeting(data: { showcaseId: string; message?: string }) {
+    return this.request<any>('/investors/meeting-request', { method: 'POST', body: data });
+  }
+
+  // ─── Investor Portal (role INVESTOR) ──────────────────────
+
+  // Investor email+password login → JWT with role INVESTOR (only once approved).
+  async investorLogin(email: string, password: string) {
+    return this.request<any>('/investors/login', { method: 'POST', body: { email, password } });
+  }
+
+  async getInvestorMe() {
+    return this.request<any>('/investors/me');
+  }
+
+  async getInvestorShowcases() {
+    return this.request<any[]>('/investors/showcases');
+  }
+
+  async getMyMeetingRequests() {
+    return this.request<any[]>('/investors/me/meeting-requests');
+  }
+
+  // ─── Investor Admin ───────────────────────────────────────
+
+  async getInvestors(isApproved?: boolean) {
+    const qs = isApproved !== undefined ? `?isApproved=${isApproved}` : '';
+    return this.request<any[]>(`/admin/investors${qs}`);
+  }
+
+  async getInvestorDetail(id: string) {
+    return this.request<any>(`/admin/investors/${id}`);
+  }
+
+  async approveInvestor(id: string) {
+    return this.request<any>(`/admin/investors/${id}/approve`, { method: 'PATCH' });
+  }
+
+  async createShowcase(data: any) {
+    return this.request<any>('/admin/showcases', { method: 'POST', body: data });
+  }
+
+  async updateShowcase(id: string, data: any) {
+    return this.request<any>(`/admin/showcases/${id}`, { method: 'PATCH', body: data });
+  }
+
+  async getMeetingRequests(params: { showcaseId?: string; investorId?: string } = {}) {
+    const qs = new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v !== undefined) as [string, string][],
+    ).toString();
+    return this.request<any[]>(`/admin/meeting-requests${qs ? `?${qs}` : ''}`);
+  }
+
+  async updateMeetingStatus(id: string, status: 'ACCEPTED' | 'DECLINED' | 'COMPLETED', scheduledAt?: string) {
+    return this.request<any>(`/admin/meeting-requests/${id}/status`, {
+      method: 'PATCH',
+      body: { status, scheduledAt },
+    });
   }
 
   // Support / Contributions (Phase 2)
@@ -816,6 +957,15 @@ class ApiClient {
     return this.request<any>('/admin/equity/update-timers', { method: 'POST' });
   }
 
+  // Founder vesting (admin): recompute from the schedule, or override one holder.
+  async recomputeVesting(companyId: string) {
+    return this.request<any>(`/admin/equity/companies/${companyId}/recompute-vesting`, { method: 'POST' });
+  }
+
+  async setHolderVesting(holderId: string, vestedPct: number) {
+    return this.request<any>(`/admin/equity/holders/${holderId}/vesting`, { method: 'PATCH', body: { vestedPct } });
+  }
+
   async createEquityAgreement(body: {
     companyId: string;
     agreementType: string;
@@ -833,6 +983,154 @@ class ApiClient {
 
   async signAgreementPlatform(agreementId: string) {
     return this.request<any>(`/admin/equity/agreements/${agreementId}/sign-platform`, { method: 'POST' });
+  }
+
+  // Record a manual equity event (transfer / dilution / etc). triggeredBy is
+  // pinned to the JWT server-side — never send it from the client.
+  async recordEquityEvent(data: {
+    companyId: string;
+    eventType: string;
+    fromHolder?: string;
+    toHolder?: string;
+    fromHolderId?: string;
+    toHolderId?: string;
+    percentageAmount: number;
+    description: string;
+    metadata?: any;
+  }) {
+    return this.request<any>('/admin/equity/events', { method: 'POST', body: data });
+  }
+
+  // ─── Notifications (admin) ────────────────────────────────
+
+  async listNotifications(params: {
+    applicantId?: string;
+    status?: string;
+    type?: string;
+    page?: number;
+    limit?: number;
+  } = {}) {
+    const qs = new URLSearchParams(
+      Object.entries(params)
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => [k, String(v)]),
+    ).toString();
+    return this.request<any>(`/admin/notifications${qs ? `?${qs}` : ''}`);
+  }
+
+  async resendNotification(id: string) {
+    return this.request<any>(`/admin/notifications/${id}/resend`, { method: 'POST' });
+  }
+
+  // ─── Sprints (admin) ──────────────────────────────────────
+
+  // Read a team's current sprint (admin-readable). Used by the team controls to
+  // know which sprint to complete / add milestones to.
+  async getSprintByTeamId(teamId: string) {
+    return this.request<any>(`/sprints/team/${teamId}`);
+  }
+
+  async createSprint(data: any) {
+    return this.request<any>('/admin/sprints', { method: 'POST', body: data });
+  }
+
+  async createMilestone(sprintId: string, data: any) {
+    return this.request<any>(`/admin/sprints/${sprintId}/milestones`, { method: 'POST', body: data });
+  }
+
+  async createBulkCommonMilestone(data: any) {
+    return this.request<any>('/admin/sprints/milestones/bulk-common', { method: 'POST', body: data });
+  }
+
+  async completeSprint(sprintId: string) {
+    return this.request<any>(`/admin/sprints/${sprintId}/complete`, { method: 'PATCH' });
+  }
+
+  // ─── Documents (admin) ────────────────────────────────────
+
+  // Returns the presigned download URL payload as provided by the endpoint.
+  async downloadDocument(id: string) {
+    return this.request<any>(`/admin/documents/${id}/download`);
+  }
+
+  // ─── Training (admin) ─────────────────────────────────────
+
+  async updateTrainingModule(id: string, data: any) {
+    return this.request<any>(`/admin/training/modules/${id}`, { method: 'PATCH', body: data });
+  }
+
+  async deleteTrainingModule(id: string) {
+    return this.request<any>(`/admin/training/modules/${id}`, { method: 'DELETE' });
+  }
+
+  async getTrainingStats() {
+    return this.request<any>('/admin/training/stats');
+  }
+
+  // Assignments are scoped per module: GET /admin/training/assignments/:moduleId
+  async getTrainingAssignments(moduleId: string) {
+    return this.request<any[]>(`/admin/training/assignments/${moduleId}`);
+  }
+
+  // ─── Donations (admin) ────────────────────────────────────
+
+  async getAdminDonations(params: { page?: number; limit?: number; status?: string } = {}) {
+    const qs = new URLSearchParams(
+      Object.entries(params)
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => [k, String(v)]),
+    ).toString();
+    return this.request<{ data: any[]; meta: any }>(`/admin/support${qs ? `?${qs}` : ''}`);
+  }
+
+  // ─── Chat (admin) ─────────────────────────────────────────
+
+  // Sender identity/name come from the JWT server-side; only content is sent.
+  async sendChatAnnouncement(data: { content: string }) {
+    return this.request<any>('/admin/chat/announcement', { method: 'POST', body: data });
+  }
+
+  // ─── Elections (admin) ────────────────────────────────────
+
+  // Add a custom question to a specific election. POST /admin/elections/:id/questions
+  async createElectionQuestions(electionId: string, data: {
+    label: string;
+    helpText?: string;
+    type?: string;
+    options?: any;
+    isRequired?: boolean;
+    sortOrder?: number;
+  }) {
+    return this.request<any>(`/admin/elections/${electionId}/questions`, { method: 'POST', body: data });
+  }
+
+  // ─── Eligibility (admin) ──────────────────────────────────
+
+  async evaluateApplicant(applicantId: string) {
+    return this.request<any>(`/admin/eligibility/evaluate/${applicantId}`);
+  }
+
+  // ─── Questions (admin) ────────────────────────────────────
+
+  async reorderQuestions(items: { id: string; sortOrder: number }[]) {
+    return this.request<any>('/admin/questions/reorder', { method: 'PUT', body: { items } });
+  }
+
+  // ─── Admin Accounts (SUPER_ADMIN) ─────────────────────────
+
+  async createAdminAccount(data: any) {
+    return this.request<any>('/admin/auth/create', { method: 'POST', body: data });
+  }
+
+  // ─── Settings (single-key helper) ─────────────────────────
+
+  // The backend exposes only a bulk PATCH /admin/settings; this wraps it for a
+  // single key so the consent page can update one setting at a time.
+  async updateSetting(key: string, value: string) {
+    return this.request<{ success: boolean }>('/admin/settings', {
+      method: 'PATCH',
+      body: { [key]: value },
+    });
   }
 
   // ─── Admin: Sprint management ────────────────────────────

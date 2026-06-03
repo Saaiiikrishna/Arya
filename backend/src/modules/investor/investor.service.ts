@@ -4,6 +4,22 @@ import { EmailService } from '../email/email.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
 import * as bcrypt from 'bcrypt';
 
+// Safe investor fields — excludes passwordHash (and any future secrets) from all responses.
+const INVESTOR_SAFE_SELECT = {
+  id: true,
+  email: true,
+  firstName: true,
+  lastName: true,
+  firm: true,
+  bio: true,
+  linkedIn: true,
+  interests: true,
+  isApproved: true,
+  avatarUrl: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
 @Injectable()
 export class InvestorService {
   private readonly logger = new Logger(InvestorService.name);
@@ -42,6 +58,7 @@ export class InvestorService {
         interests: data.interests || [],
         passwordHash,
       },
+      select: INVESTOR_SAFE_SELECT,
     });
   }
 
@@ -49,13 +66,17 @@ export class InvestorService {
     return this.prisma.investor.findMany({
       where: params?.isApproved !== undefined ? { isApproved: params.isApproved } : {},
       orderBy: { createdAt: 'desc' },
+      select: INVESTOR_SAFE_SELECT,
     });
   }
 
   async findById(id: string) {
     const investor = await this.prisma.investor.findUnique({
       where: { id },
-      include: { meetingRequests: { include: { showcase: true } } },
+      select: {
+        ...INVESTOR_SAFE_SELECT,
+        meetingRequests: { include: { showcase: true } },
+      },
     });
     if (!investor) throw new NotFoundException('Investor not found');
     return investor;
@@ -65,6 +86,7 @@ export class InvestorService {
     return this.prisma.investor.update({
       where: { id },
       data: { isApproved: true },
+      select: INVESTOR_SAFE_SELECT,
     });
   }
 
@@ -115,6 +137,15 @@ export class InvestorService {
     });
   }
 
+  /** Meeting requests made by a specific (authenticated) investor. */
+  async getMyMeetingRequests(investorId: string) {
+    return this.prisma.meetingRequest.findMany({
+      where: { investorId },
+      include: { showcase: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   async updateMeetingStatus(id: string, status: 'ACCEPTED' | 'DECLINED' | 'COMPLETED', scheduledAt?: Date) {
     return this.prisma.meetingRequest.update({
       where: { id },
@@ -128,7 +159,10 @@ export class InvestorService {
         ...(showcaseId ? { showcaseId } : {}),
         ...(investorId ? { investorId } : {}),
       },
-      include: { investor: true, showcase: true },
+      include: {
+        investor: { select: INVESTOR_SAFE_SELECT },
+        showcase: true,
+      },
       orderBy: { createdAt: 'desc' },
     });
   }

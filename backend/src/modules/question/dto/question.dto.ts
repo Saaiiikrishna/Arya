@@ -5,7 +5,11 @@ import {
   IsBoolean,
   IsInt,
   IsObject,
+  IsUUID,
+  ValidateNested,
+  IsArray,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { QuestionType, PhaseTag } from '@prisma/client';
 
 export class CreateQuestionDto {
@@ -86,7 +90,18 @@ export class UpdateQuestionDto {
   validation?: any;
 }
 
+export class ReorderQuestionItemDto {
+  @IsString()
+  @IsUUID()
+  id!: string;
+
+  @IsInt()
+  sortOrder!: number;
+}
+
 export class ReorderQuestionsDto {
-  @IsObject({ each: true })
-  items!: Array<{ id: string; sortOrder: number }>;
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ReorderQuestionItemDto)
+  items!: ReorderQuestionItemDto[];
 }

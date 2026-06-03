@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma';
 import { IdeaCategory, CommitmentLevel, TeamType } from '@prisma/client';
+import { NotificationService } from '../notifications/notification.service';
 
 // ─── Types ─────────────────────────────────────────────
 
@@ -58,11 +59,21 @@ const DEFAULT_CONFIG: MatchingConfig = {
   maxTeamSize: 25,
 };
 
+// Bounds for the swap-optimization loop so it always terminates quickly in the
+// request path. The optimization is best-effort: stopping early simply yields a
+// slightly less-optimized (but still valid) team layout.
+const SWAP_OPT_MAX_ROUNDS = 3;
+const SWAP_OPT_MAX_PAIR_EVALS = 50_000; // hard cap on bucket-pair evaluations
+const SWAP_OPT_TIME_BUDGET_MS = 3_000; // wall-clock budget
+
 @Injectable()
 export class MatchingService {
   private readonly logger = new Logger(MatchingService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationService,
+  ) {}
 
   // ─── Core: Smart Team Formation ──────────────────────
 
@@ -151,15 +162,15 @@ export class MatchingService {
       return { teamsCreated: 0, message: result.message || 'No teams formed' };
     }
 
-    // Clear existing teams
-    await this.prisma.applicant.updateMany({
-      where: { batchId },
-      data: { teamId: null },
-    });
-    await this.prisma.team.deleteMany({ where: { batchId } });
-
-    // Save in transaction
+    // Clear existing teams and recreate atomically — a mid-flight failure must
+    // not leave applicants teamless with their teams already deleted.
     const teams = await this.prisma.$transaction(async (tx) => {
+      await tx.applicant.updateMany({
+        where: { batchId },
+        data: { teamId: null },
+      });
+      await tx.team.deleteMany({ where: { batchId } });
+
       const created = [];
 
       for (const assignment of result.assignments!) {
@@ -195,10 +206,38 @@ export class MatchingService {
       });
 
       return created;
-    });
+    }, { timeout: 30000 });
 
     this.logger.log(`Smart match executed: ${teams.length} teams created for batch ${batchId}`);
+
+    // Notify every assigned member that their team was formed. Best-effort and
+    // fire-after-commit: the NotificationService methods already swallow errors,
+    // and we never block the response on delivery.
+    void this.notifyTeamsFormed(teams);
+
     return { teamsCreated: teams.length, teams };
+  }
+
+  /**
+   * Best-effort post-commit fan-out: for each created team, load its members and
+   * send the "team formed" notification. Never throws — failures are logged.
+   */
+  private async notifyTeamsFormed(teams: Array<{ id: string; name: string }>): Promise<void> {
+    try {
+      await Promise.allSettled(
+        teams.map(async (team) => {
+          const members = await this.prisma.applicant.findMany({
+            where: { teamId: team.id },
+            select: { id: true, email: true, firstName: true, phone: true },
+          });
+          await Promise.allSettled(
+            members.map((member) => this.notifications.teamFormed(member, team.name)),
+          );
+        }),
+      );
+    } catch (e) {
+      this.logger.error(`team-formed notifications failed: ${(e as any)?.message}`);
+    }
   }
 
   // ─── Move member between teams ───────────────────────
@@ -216,30 +255,72 @@ export class MatchingService {
     });
     if (!targetTeam) throw new NotFoundException('Target team not found');
 
-    if (targetTeam.memberCount >= targetTeam.batch.teamMaxSize) {
-      throw new BadRequestException('Target team is at maximum capacity');
+    // No-op: already on the target team.
+    if (applicant.teamId === targetTeamId) {
+      return { success: true, applicantId, targetTeamId };
     }
 
-    await this.prisma.$transaction([
-      // Remove from old team
-      ...(applicant.teamId
-        ? [
-            this.prisma.team.update({
-              where: { id: applicant.teamId },
-              data: { memberCount: { decrement: 1 } },
-            }),
-          ]
-        : []),
-      // Add to new team
-      this.prisma.applicant.update({
-        where: { id: applicantId },
-        data: { teamId: targetTeamId },
-      }),
-      this.prisma.team.update({
-        where: { id: targetTeamId },
-        data: { memberCount: { increment: 1 } },
-      }),
-    ]);
+    const maxSize = targetTeam.batch.teamMaxSize;
+
+    // Gate capacity on a LIVE count computed inside the transaction so that
+    // concurrent moves cannot both pass a stale `memberCount` check and over-fill
+    // the target team. The cached `memberCount` read above is only advisory.
+    // Serializable isolation is required: under READ COMMITTED two concurrent
+    // moves could each count N < max and both insert (a phantom-read race), so
+    // the count gate alone wouldn't hold. Serializable makes one of them abort.
+    await this.prisma.$transaction(
+      async (tx) => {
+        // Reject cross-batch moves. An applicant may only be assigned to a team
+        // in the SAME batch — otherwise the applicant's batchId and the team's
+        // batchId become inconsistent while both memberCounts are mutated.
+        // Re-read both batchIds inside the serializable snapshot so the check is
+        // consistent with the mutations below (the pre-transaction reads above
+        // are only advisory).
+        const [applicantRow, targetTeamRow] = await Promise.all([
+          tx.applicant.findUnique({
+            where: { id: applicantId },
+            select: { batchId: true },
+          }),
+          tx.team.findUnique({
+            where: { id: targetTeamId },
+            select: { batchId: true },
+          }),
+        ]);
+        if (!applicantRow) throw new NotFoundException('Applicant not found');
+        if (!targetTeamRow) throw new NotFoundException('Target team not found');
+        if (applicantRow.batchId !== targetTeamRow.batchId) {
+          throw new BadRequestException(
+            'Cannot move applicant to a team in a different batch',
+          );
+        }
+
+        const liveCount = await tx.applicant.count({
+          where: { teamId: targetTeamId },
+        });
+        if (liveCount >= maxSize) {
+          throw new BadRequestException('Target team is at maximum capacity');
+        }
+
+        // Remove from old team
+        if (applicant.teamId) {
+          await tx.team.update({
+            where: { id: applicant.teamId },
+            data: { memberCount: { decrement: 1 } },
+          });
+        }
+
+        // Add to new team
+        await tx.applicant.update({
+          where: { id: applicantId },
+          data: { teamId: targetTeamId },
+        });
+        await tx.team.update({
+          where: { id: targetTeamId },
+          data: { memberCount: { increment: 1 } },
+        });
+      },
+      { isolationLevel: 'Serializable' },
+    );
 
     return { success: true, applicantId, targetTeamId };
   }
@@ -292,6 +373,21 @@ export class MatchingService {
   // ─── Internal Algorithms ─────────────────────────────
 
   /**
+   * Generate a collision-free, Excel-style team name for a zero-based index:
+   * 0→"Team A", 25→"Team Z", 26→"Team AA", 27→"Team AB", ... This avoids the
+   * wrap/collision that a plain (index % 26) produces after 26 teams.
+   */
+  private teamNameForIndex(index: number): string {
+    let n = index;
+    let suffix = '';
+    do {
+      suffix = String.fromCharCode(65 + (n % 26)) + suffix;
+      n = Math.floor(n / 26) - 1;
+    } while (n >= 0);
+    return `Team ${suffix}`;
+  }
+
+  /**
    * Group applicants by their idea category
    */
   private groupByIdeaCategory(applicants: ApplicantProfile[]): Record<string, ApplicantProfile[]> {
@@ -333,7 +429,7 @@ export class MatchingService {
       const matchScore = this.calculateTeamScore(teamMembers, config);
 
       teams.push({
-        teamName: `Team ${String.fromCharCode(65 + ((offset + teams.length) % 26))}${(offset + teams.length) >= 26 ? Math.floor((offset + teams.length) / 26) : ''}`,
+        teamName: this.teamNameForIndex(offset + teams.length),
         teamType,
         ideaCategory: category,
         memberIds: teamMembers.map(m => m.id),
@@ -381,13 +477,34 @@ export class MatchingService {
       }
     }
 
-    // Now optimize each bucket for skill diversity via swap optimization
-    for (let round = 0; round < 3; round++) {
+    // Now optimize each bucket for skill diversity via swap optimization.
+    // This loop is O(rounds × teams² × teamSize²) and runs in the request path,
+    // so it is bounded by BOTH a hard pair-evaluation cap and a wall-clock
+    // budget. The optimization is best-effort — bailing out early just leaves a
+    // slightly less-optimized (but still valid) layout.
+    const swapDeadline = Date.now() + SWAP_OPT_TIME_BUDGET_MS;
+    let pairEvals = 0;
+    let stoppedEarly = false;
+    optimize: for (let round = 0; round < SWAP_OPT_MAX_ROUNDS; round++) {
       for (let i = 0; i < buckets.length; i++) {
         for (let j = i + 1; j < buckets.length; j++) {
+          if (pairEvals >= SWAP_OPT_MAX_PAIR_EVALS || Date.now() >= swapDeadline) {
+            stoppedEarly = true;
+            break optimize;
+          }
+          pairEvals++;
           this.trySwapForDiversity(buckets[i], buckets[j], config);
         }
       }
+    }
+
+    if (stoppedEarly) {
+      const reason =
+        pairEvals >= SWAP_OPT_MAX_PAIR_EVALS ? 'iteration cap' : 'time budget';
+      this.logger.warn(
+        `Swap optimization stopped early (${reason}) after ${pairEvals} bucket-pair evaluations ` +
+          `across ${buckets.length} teams; returning best-effort team layout`,
+      );
     }
 
     // Convert buckets to assignments
@@ -396,7 +513,7 @@ export class MatchingService {
 
       const matchScore = this.calculateTeamScore(buckets[i], config);
       teams.push({
-        teamName: `Team ${String.fromCharCode(65 + ((offset + i) % 26))}${(offset + i) >= 26 ? Math.floor((offset + i) / 26) : ''}`,
+        teamName: this.teamNameForIndex(offset + i),
         teamType: TeamType.BUILDER_POOL,
         ideaCategory: null,
         memberIds: buckets[i].map(m => m.id),

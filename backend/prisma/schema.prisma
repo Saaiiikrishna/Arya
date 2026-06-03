@@ -130,6 +130,7 @@ enum SprintStatus {
   ON_TRACK
   DELAYED
   TRAINING
+  COMPLETED
 }
 
 enum MilestoneType {
@@ -319,6 +320,9 @@ model Applicant {
   scarTissue     String?         @db.Text @map("scar_tissue")
   whatsappPhone  String?         @map("whatsapp_phone")
   whatsappVerified Boolean       @default(false) @map("whatsapp_verified")
+  // STOP opt-out is tracked in the dedicated WhatsappOptOut table (keyed by
+  // normalized phone) — not a per-applicant flag — so the send-path check is an
+  // indexed PK lookup and also covers numbers with no applicant row.
   whatsappPresenceChecked Boolean @default(false) @map("whatsapp_presence_checked")
   department     DepartmentRole? @map("department")
   isAvailable    Boolean         @default(true) @map("is_available")
@@ -350,6 +354,8 @@ model Applicant {
   @@index([appliedAt])
   @@index([accessToken])
   @@index([referredById])
+  @@index([phone])
+  @@index([whatsappPhone])
   @@map("applicants")
 }
 
@@ -393,7 +399,7 @@ model Batch {
   status              BatchStatus @default(FILLING)
   capacity            Int         @default(1000)
   currentCount        Int         @default(0) @map("current_count")
-  pledgeAmount        Float       @default(10000.0) @map("pledge_amount")
+  pledgeAmount        Int         @default(1000000) @map("pledge_amount") // integer paise (₹10,000)
   teamMinSize         Int         @default(5) @map("team_min_size")
   teamMaxSize         Int         @default(25) @map("team_max_size")
   teamFormationConfig Json?       @map("team_formation_config") // { weights, diversityVsSimilarity, etc. }
@@ -427,6 +433,9 @@ model Team {
   matchScore       Float?    @map("match_score")
   ideaCategory     IdeaCategory? @map("idea_category")
   isLocked         Boolean       @default(false) @map("is_locked")
+  // TRAINING pause (post-90-day remediation): reason note + when it began.
+  trainingReason    String?      @db.Text @map("training_reason")
+  trainingStartedAt DateTime?    @map("training_started_at")
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
@@ -524,8 +533,8 @@ model Project {
   projectName      String        @map("project_name")
   targetMarket     String        @map("target_market")
   description      String        @db.Text
-  estimatedFunds   Float         @map("estimated_funds")
-  fundedAmount     Float         @default(0) @map("funded_amount")
+  estimatedFunds   Int           @map("estimated_funds")            // integer minor units (cents)
+  fundedAmount     Int           @default(0) @map("funded_amount")  // integer minor units (cents)
   status           ProjectStatus @default(UNDER_DEVELOPMENT)
   createdAt        DateTime      @default(now()) @map("created_at")
   updatedAt        DateTime      @updatedAt @map("updated_at")
@@ -540,6 +549,10 @@ model Sprint {
   id         String       @id @default(uuid()) @db.Uuid
   teamId     String       @map("team_id") @db.Uuid
   status     SprintStatus @default(ON_TRACK)
+  // 1 = first 90 days, 2 = second 90 days. The 1000-day equity timer may only
+  // start after both sprints are COMPLETED (the first 180 days).
+  sprintNumber Int        @default(1) @map("sprint_number")
+  completedAt DateTime?   @map("completed_at")
   startDate  DateTime     @map("start_date")
   endDate    DateTime     @map("end_date")
   createdAt  DateTime     @default(now()) @map("created_at")
@@ -572,7 +585,7 @@ model Milestone {
 model LedgerTransaction {
   id          String                @id @default(uuid()) @db.Uuid
   projectId   String                @map("project_id") @db.Uuid
-  amount      Float
+  amount      Int                   // integer minor units (cents)
   type        LedgerTransactionType
   description String
   date        DateTime              @default(now())
@@ -589,7 +602,7 @@ model Payment {
   razorpayOrderId   String?       @map("razorpay_order_id") @unique
   razorpayPaymentId String?       @map("razorpay_payment_id") @unique
   razorpaySignature String?       @map("razorpay_signature")
-  amount            Float
+  amount            Int           // integer paise
   currency          String        @default("INR")
   status            PaymentStatus @default(CREATED)
   createdAt         DateTime      @default(now()) @map("created_at")
@@ -647,6 +660,16 @@ model Investor {
   @@map("investors")
 }
 
+/// WhatsApp STOP opt-out list, keyed by normalized (digits-only) phone so the
+/// send-path check is an indexed primary-key lookup (no LIKE scan) and applies
+/// even to numbers that have no applicant record.
+model WhatsappOptOut {
+  phone     String   @id // normalized digits-only phone number
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("whatsapp_opt_outs")
+}
+
 model StartupShowcase {
   id            String   @id @default(uuid()) @db.Uuid
   teamId        String   @unique @map("team_id") @db.Uuid
@@ -699,7 +722,7 @@ model Donation {
   id                String        @id @default(uuid()) @db.Uuid
   donorName         String        @map("donor_name")
   donorEmail        String        @map("donor_email")
-  amount            Float
+  amount            Int           // integer paise
   currency          String        @default("INR")
   type              DonationType  @default(ONE_TIME)
   message           String?       @db.Text

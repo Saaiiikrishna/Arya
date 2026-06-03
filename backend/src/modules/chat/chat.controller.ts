@@ -10,25 +10,34 @@ export class ChatController {
 
   @UseGuards(JwtAuthGuard)
   @Get('chat/room/team/:teamId')
-  async getRoomByTeam(@Param('teamId') teamId: string) {
-    return this.chatService.getRoomByTeam(teamId);
+  async getRoomByTeam(@Req() req: any, @Param('teamId') teamId: string) {
+    const requesterId = req.user.id || req.user.sub;
+    return this.chatService.getRoomByTeam(teamId, requesterId, req.user.role);
   }
 
   @UseGuards(JwtAuthGuard)
   @Get('chat/room/:id/messages')
   async getMessages(
+    @Req() req: any,
     @Param('id') roomId: string,
     @Query('limit') limit?: string,
   ) {
+    const requesterId = req.user.id || req.user.sub;
+    const parsedLimit = limit !== undefined ? parseInt(limit, 10) : undefined;
     return this.chatService.getMessages(roomId, {
-      limit: limit ? parseInt(limit) : undefined,
+      limit: parsedLimit !== undefined && !Number.isNaN(parsedLimit) ? parsedLimit : undefined,
+      requesterId,
+      requesterRole: req.user.role,
     });
   }
 
   @UseGuards(JwtAuthGuard)
   @Get('chat/announcements')
   async getAnnouncements(@Query('limit') limit?: string) {
-    return this.chatService.getAnnouncements(limit ? parseInt(limit) : undefined);
+    const parsedLimit = limit !== undefined ? parseInt(limit, 10) : undefined;
+    return this.chatService.getAnnouncements(
+      parsedLimit !== undefined && !Number.isNaN(parsedLimit) ? parsedLimit : undefined,
+    );
   }
 
   // ─── Admin ─────────────────────────────────────────

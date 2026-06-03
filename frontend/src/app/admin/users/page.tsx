@@ -1,19 +1,26 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Fragment, useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import Link from 'next/link';
 
 const STATUS_CONFIG: Record<string, { bg: string; text: string; border: string; label: string }> = {
-  PENDING:   { bg: 'bg-amber-50',      text: 'text-amber-700',    border: 'border-amber-200', label: 'Pending' },
-  ELIGIBLE:  { bg: 'bg-emerald-50',    text: 'text-emerald-700',  border: 'border-emerald-200', label: 'Approved' },
-  INELIGIBLE:{ bg: 'bg-red-50',        text: 'text-red-700',      border: 'border-red-200', label: 'Ineligible' },
-  ACTIVE:    { bg: 'bg-forest/10',     text: 'text-forest',       border: 'border-forest/20', label: 'Active' },
-  REMOVED:   { bg: 'bg-terracotta/10', text: 'text-terracotta',   border: 'border-terracotta/20', label: 'Rejected' },
-  CONSENTED: { bg: 'bg-blue-50',       text: 'text-blue-700',     border: 'border-blue-200', label: 'Consented' },
-  FINALIZED: { bg: 'bg-purple-50',     text: 'text-purple-700',   border: 'border-purple-200', label: 'Finalized' },
-  TRAINING:  { bg: 'bg-indigo-50',     text: 'text-indigo-700',   border: 'border-indigo-200', label: 'Training' },
-  HELD:      { bg: 'bg-slate-100',     text: 'text-slate-600',    border: 'border-slate-300', label: 'On Hold' },
+  PENDING:   { bg: 'bg-marigold/15',        text: 'text-warning',         border: 'border-marigold/40', label: 'Pending' },
+  ELIGIBLE:  { bg: 'bg-forest/10',          text: 'text-forest',          border: 'border-forest/20', label: 'Approved' },
+  INELIGIBLE:{ bg: 'bg-terracotta/10',      text: 'text-terracotta',      border: 'border-terracotta/20', label: 'Ineligible' },
+  ACTIVE:    { bg: 'bg-saffron/10',         text: 'text-saffron-deep',    border: 'border-saffron/20', label: 'Active' },
+  REMOVED:   { bg: 'bg-terracotta/10',      text: 'text-terracotta',      border: 'border-terracotta/20', label: 'Rejected' },
+  CONSENTED: { bg: 'bg-success/10',         text: 'text-success',         border: 'border-success/25', label: 'Consented' },
+  FINALIZED: { bg: 'bg-terracotta-warm/10', text: 'text-terracotta-warm', border: 'border-terracotta-warm/25', label: 'Finalized' },
+  TRAINING:  { bg: 'bg-info/10',            text: 'text-info',            border: 'border-info/25', label: 'Training' },
+  HELD:      { bg: 'bg-ink/5',              text: 'text-ink/50',          border: 'border-ink/15', label: 'On Hold' },
+};
+
+// DocumentStatus enum (PENDING | UPLOADED | VERIFIED) → badge styling.
+const DOC_STATUS_CONFIG: Record<string, { bg: string; text: string; border: string; label: string }> = {
+  PENDING:  { bg: 'bg-marigold/15', text: 'text-warning', border: 'border-marigold/40', label: 'Pending' },
+  UPLOADED: { bg: 'bg-info/10',     text: 'text-info',    border: 'border-info/25',     label: 'Uploaded' },
+  VERIFIED: { bg: 'bg-success/10',  text: 'text-success', border: 'border-success/25',  label: 'Verified' },
 };
 
 export default function UsersPage() {
@@ -24,6 +31,12 @@ export default function UsersPage() {
   const [page, setPage] = useState(1);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  // Per-applicant documents, keyed by applicant id, loaded lazily on expand.
+  const [docs, setDocs] = useState<Record<string, any[]>>({});
+  const [docsLoading, setDocsLoading] = useState<string | null>(null);
+  const [docsError, setDocsError] = useState<Record<string, string>>({});
+  // Tracks an in-flight per-document action (download/verify), keyed by document id.
+  const [docActionLoading, setDocActionLoading] = useState<string | null>(null);
 
   const loadUsers = async () => {
     setLoading(true);
@@ -85,6 +98,63 @@ export default function UsersPage() {
     }
   };
 
+  const loadDocs = async (applicantId: string) => {
+    setDocsLoading(applicantId);
+    setDocsError((prev) => { const next = { ...prev }; delete next[applicantId]; return next; });
+    try {
+      const result = await api.getApplicantDocuments(applicantId);
+      setDocs((prev) => ({ ...prev, [applicantId]: result }));
+    } catch (err: any) {
+      setDocsError((prev) => ({ ...prev, [applicantId]: err.message || 'Failed to load documents' }));
+    } finally {
+      setDocsLoading(null);
+    }
+  };
+
+  const toggleExpand = (applicantId: string) => {
+    const next = expandedId === applicantId ? null : applicantId;
+    setExpandedId(next);
+    // Lazy-load documents the first time a row is expanded.
+    if (next && docs[next] === undefined) loadDocs(next);
+  };
+
+  const handleDownloadDoc = async (documentId: string) => {
+    setDocActionLoading(documentId);
+    try {
+      const res = await api.downloadDocument(documentId);
+      const url = res?.downloadUrl;
+      if (url) {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      } else {
+        alert('No download URL was returned for this document.');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to generate download link');
+    } finally {
+      setDocActionLoading(null);
+    }
+  };
+
+  const handleVerifyDoc = async (documentId: string, applicantId: string) => {
+    if (!confirm('Mark this document as verified?')) return;
+    setDocActionLoading(documentId);
+    try {
+      await api.verifyDocument(documentId);
+      await loadDocs(applicantId);
+    } catch (err: any) {
+      alert(err.message || 'Failed to verify document');
+    } finally {
+      setDocActionLoading(null);
+    }
+  };
+
+  const formatFileSize = (bytes?: number | null) => {
+    if (bytes == null) return '—';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
   const statuses = ['', 'PENDING', 'HELD', 'ELIGIBLE', 'INELIGIBLE', 'ACTIVE', 'REMOVED', 'CONSENTED', 'FINALIZED', 'TRAINING'];
 
   const getStatusBadge = (status: string) => {
@@ -107,7 +177,7 @@ export default function UsersPage() {
           <h1 className="font-serif text-5xl font-bold leading-none">Users & Roster</h1>
         </div>
         <div className="text-left md:text-right">
-          <p className="text-3xl font-serif text-terracotta mb-1">{data.meta.total.toLocaleString()}</p>
+          <p className="text-3xl font-serif text-terracotta-warm mb-1">{data.meta.total.toLocaleString()}</p>
           <p className="text-sm text-ink/40 uppercase tracking-widest">Total Applicants</p>
         </div>
       </header>
@@ -123,7 +193,7 @@ export default function UsersPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <button type="submit" className="bg-ink hover:bg-terracotta text-white px-8 py-3 text-xs uppercase tracking-widest font-semibold transition-colors hidden sm:block">Search</button>
+          <button type="submit" className="bg-ink hover:bg-terracotta-warm text-white px-8 py-3 text-xs uppercase tracking-widest font-semibold transition-colors hidden sm:block">Search</button>
         </form>
         <div className="w-px h-12 bg-hairline hidden md:block"></div>
         <select
@@ -153,7 +223,7 @@ export default function UsersPage() {
         </div>
       ) : (
         <>
-          <div className="border border-hairline bg-white overflow-x-auto shadow-sm">
+          <div className="border border-hairline bg-white overflow-x-auto">
             <table className="w-full text-left font-sans">
               <thead className="bg-parchment/80 border-b border-hairline">
                 <tr>
@@ -167,10 +237,10 @@ export default function UsersPage() {
               </thead>
               <tbody>
                 {data.data.map((user) => (
-                  <>
-                    <tr key={user.id} className={`border-b border-hairline last:border-0 hover:bg-parchment/30 transition-colors ${expandedId === user.id ? 'bg-parchment/40' : ''}`}>
+                  <Fragment key={user.id}>
+                    <tr className={`border-b border-hairline last:border-0 hover:bg-parchment/30 transition-colors ${expandedId === user.id ? 'bg-parchment/40' : ''}`}>
                       <td className="px-6 py-5 font-serif text-lg font-bold">
-                        <button onClick={() => setExpandedId(expandedId === user.id ? null : user.id)} className="text-left hover:text-forest transition-colors">
+                        <button onClick={() => toggleExpand(user.id)} className="text-left hover:text-forest transition-colors">
                           {user.firstName} {user.lastName}
                           <span className="ml-2 text-ink/30 text-sm">{expandedId === user.id ? '▲' : '▼'}</span>
                         </button>
@@ -188,7 +258,7 @@ export default function UsersPage() {
                               {/* Approve: set ELIGIBLE */}
                               {user.status !== 'ELIGIBLE' && user.status !== 'REMOVED' && user.status !== 'ACTIVE' && (
                                 <button
-                                  className="text-[10px] uppercase tracking-widest font-bold text-emerald-600 hover:text-emerald-800 transition-colors px-2 py-1 border border-emerald-200 bg-emerald-50 hover:bg-emerald-100"
+                                  className="text-[10px] uppercase tracking-widest font-bold text-forest hover:text-forest-deep transition-colors px-2 py-1 border border-forest/20 bg-forest/10 hover:bg-forest/20"
                                   onClick={() => handleStatusAction(user.id, 'ELIGIBLE', 'Approve', `${user.firstName} ${user.lastName}`)}
                                 >
                                   ✓ Approve
@@ -197,7 +267,7 @@ export default function UsersPage() {
                               {/* Hold: set HELD */}
                               {user.status !== 'HELD' && user.status !== 'REMOVED' && (
                                 <button
-                                  className="text-[10px] uppercase tracking-widest font-bold text-slate-500 hover:text-slate-700 transition-colors px-2 py-1 border border-slate-200 bg-slate-50 hover:bg-slate-100"
+                                  className="text-[10px] uppercase tracking-widest font-bold text-ink/50 hover:text-ink transition-colors px-2 py-1 border border-ink/15 bg-ink/5 hover:bg-ink/10"
                                   onClick={() => handleStatusAction(user.id, 'HELD', 'Hold', `${user.firstName} ${user.lastName}`)}
                                 >
                                   ⏸ Hold
@@ -206,7 +276,7 @@ export default function UsersPage() {
                               {/* Reject: set REMOVED */}
                               {user.status !== 'REMOVED' && (
                                 <button
-                                  className="text-[10px] uppercase tracking-widest font-bold text-terracotta hover:text-red-800 transition-colors px-2 py-1 border border-terracotta/20 bg-terracotta/5 hover:bg-terracotta/10"
+                                  className="text-[10px] uppercase tracking-widest font-bold text-terracotta hover:text-terracotta-warm transition-colors px-2 py-1 border border-terracotta/20 bg-terracotta/5 hover:bg-terracotta/10"
                                   onClick={() => handleRemove(user.id, `${user.firstName} ${user.lastName}`)}
                                 >
                                   ✕ Reject
@@ -223,7 +293,7 @@ export default function UsersPage() {
                               )}
                               {/* Delete completely */}
                               <button
-                                className="text-[10px] uppercase tracking-widest font-bold text-red-700 hover:text-red-900 transition-colors px-2 py-1 border border-red-300 bg-red-100 hover:bg-red-200"
+                                className="text-[10px] uppercase tracking-widest font-bold text-parchment bg-terracotta hover:bg-[#7a0c03] transition-colors px-2 py-1 border border-terracotta"
                                 onClick={() => handleDelete(user.id, `${user.firstName} ${user.lastName}`)}
                               >
                                 ✕ Delete
@@ -236,7 +306,7 @@ export default function UsersPage() {
                     
                     {/* Expandable Detail Row */}
                     {expandedId === user.id && (
-                      <tr key={`${user.id}-detail`} className="bg-parchment/30">
+                      <tr className="bg-parchment/30">
                         <td colSpan={6} className="px-6 py-8">
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                             {/* Personal Info */}
@@ -311,10 +381,74 @@ export default function UsersPage() {
                               )}
                             </div>
                           </div>
+
+                          {/* Documents */}
+                          <div className="border border-hairline bg-white p-5 mt-8">
+                            <h4 className="text-[10px] uppercase tracking-widest text-forest font-bold mb-4 pb-2 border-b border-hairline flex items-center justify-between">
+                              <span>Documents</span>
+                              <button
+                                onClick={() => loadDocs(user.id)}
+                                disabled={docsLoading === user.id}
+                                className="text-[9px] uppercase tracking-widest font-bold text-ink/40 hover:text-forest transition-colors disabled:opacity-40"
+                              >
+                                ↻ Refresh
+                              </button>
+                            </h4>
+
+                            {docsLoading === user.id ? (
+                              <p className="uppercase tracking-widest text-[10px] font-semibold text-ink/50 animate-pulse py-2">Loading documents...</p>
+                            ) : docsError[user.id] ? (
+                              <p className="text-terracotta text-sm py-2">{docsError[user.id]}</p>
+                            ) : (docs[user.id]?.length ?? 0) === 0 ? (
+                              <p className="text-ink/30 italic text-sm py-2">No documents uploaded yet</p>
+                            ) : (
+                              <div className="divide-y divide-hairline">
+                                {docs[user.id].map((doc: any) => {
+                                  const cfg = DOC_STATUS_CONFIG[doc.status] || { bg: 'bg-ink/5', text: 'text-ink/50', border: 'border-ink/15', label: doc.status };
+                                  return (
+                                    <div key={doc.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-3">
+                                      <div className="min-w-0">
+                                        <p className="font-serif text-base font-bold truncate">{doc.fileName}</p>
+                                        <p className="text-[11px] text-ink/40 uppercase tracking-widest mt-0.5">
+                                          {doc.type || 'OTHER'} · {formatFileSize(doc.fileSize)}
+                                          {doc.uploadedAt ? ` · ${new Date(doc.uploadedAt).toLocaleDateString()}` : ''}
+                                        </p>
+                                      </div>
+                                      <div className="flex gap-3 items-center flex-wrap shrink-0">
+                                        <span className={`px-3 py-1 text-[10px] uppercase tracking-widest font-bold border ${cfg.bg} ${cfg.text} ${cfg.border}`}>
+                                          {cfg.label}
+                                        </span>
+                                        {docActionLoading === doc.id ? (
+                                          <span className="text-[10px] uppercase tracking-widest text-ink/40 animate-pulse">Processing...</span>
+                                        ) : (
+                                          <>
+                                            <button
+                                              onClick={() => handleDownloadDoc(doc.id)}
+                                              className="text-[10px] uppercase tracking-widest font-bold text-forest hover:text-forest-deep transition-colors px-2 py-1 border border-forest/20 bg-forest/10 hover:bg-forest/20"
+                                            >
+                                              ↓ Download
+                                            </button>
+                                            {doc.status !== 'VERIFIED' && (
+                                              <button
+                                                onClick={() => handleVerifyDoc(doc.id, user.id)}
+                                                className="text-[10px] uppercase tracking-widest font-bold text-saffron-deep hover:text-saffron transition-colors px-2 py-1 border border-saffron/20 bg-saffron/10 hover:bg-saffron/20"
+                                              >
+                                                ✓ Verify
+                                              </button>
+                                            )}
+                                          </>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -327,7 +461,7 @@ export default function UsersPage() {
               const p = page <= 3 ? i + 1 : page - 2 + i;
               if (p > data.meta.totalPages) return null;
               return (
-                <button key={p} className={`px-4 py-2 border border-hairline text-xs uppercase tracking-widest transition-colors font-semibold ${p === page ? 'bg-forest text-white border-forest' : 'bg-white hover:bg-parchment'}`} onClick={() => setPage(p)}>
+                <button key={p} className={`px-4 py-2 border border-hairline text-xs uppercase tracking-widest transition-colors font-semibold ${p === page ? 'bg-saffron text-parchment border-saffron' : 'bg-white hover:bg-parchment'}`} onClick={() => setPage(p)}>
                   {p}
                 </button>
               );

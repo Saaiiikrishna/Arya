@@ -100,6 +100,24 @@ export class WhatsappService {
         for (const message of value?.messages ?? []) {
           const masked = `${String(message.from ?? '').slice(0, 4)}****`;
           this.logger.log(`WA incoming from ${masked}: type=${message.type}`);
+
+          // Honor STOP opt-out: record the normalized number in WhatsappOptOut so
+          // the send path (isOptedOut) skips it. Best-effort; never throws.
+          if (message.type === 'text' && message.text?.body?.trim().toUpperCase() === 'STOP') {
+            const normalized = String(message.from ?? '').replace(/\D/g, '');
+            if (normalized) {
+              try {
+                await this.prisma.whatsappOptOut.upsert({
+                  where: { phone: normalized },
+                  create: { phone: normalized },
+                  update: {},
+                });
+                this.logger.log(`STOP opt-out recorded for ${masked}`);
+              } catch (e) {
+                this.logger.error(`Failed to record STOP opt-out for ${masked}: ${(e as any)?.message}`);
+              }
+            }
+          }
         }
       }
     }
@@ -111,6 +129,17 @@ export class WhatsappService {
     const { to, templateName, languageCode = 'en_US', components = [], applicantId } = params;
     const cleanPhone = to.replace(/\D/g, '');
     if (!cleanPhone) return false;
+
+    // Honor STOP opt-out: if a known applicant matching this phone has
+    // whatsappOptOut=true, skip the send. Unknown numbers (no matching
+    // applicant row) still send, e.g. OTP for new signups. Best-effort:
+    // never block a send because the lookup itself errored.
+    if (await this.isOptedOut(cleanPhone)) {
+      this.logger.log(
+        `[WHATSAPP SKIP] To: ${cleanPhone}, Template: ${templateName} — recipient opted out (STOP)`,
+      );
+      return false;
+    }
 
     if (this.isDev || !this.apiToken || this.apiToken === 'your_meta_token_here') {
       this.logger.log(`[WA MOCK] → ${cleanPhone}  template: ${templateName}  params: ${JSON.stringify(components)}`);
@@ -508,6 +537,22 @@ export class WhatsappService {
     return { attempted: applicants.length, succeeded, failed };
   }
 
+  /** TRAINING pause notification — a team paused between sprints for remediation. */
+  async sendTeamTraining(phone: string, firstName: string, reason: string, applicantId?: string): Promise<boolean> {
+    return this.sendTemplate({
+      to: phone,
+      templateName: 'team_training',
+      components: [{
+        type: 'body',
+        parameters: [
+          { type: 'text', text: firstName },
+          { type: 'text', text: reason },
+        ],
+      }],
+      applicantId,
+    });
+  }
+
   // ─── Admin Broadcast (arbitrary template + body text) ────
 
   /**
@@ -568,10 +613,32 @@ export class WhatsappService {
       { name: 'platform_announcement', category: 'MARKETING', description: 'Admin broadcast / platform promotion', parameters: ['{{1}} = title', '{{2}} = message body'] },
       { name: 'referral_milestone', category: 'UTILITY', description: 'Referral badge earned', parameters: ['{{1}} = name', '{{2}} = referral count', '{{3}} = badge name'] },
       { name: 'batch_opening', category: 'MARKETING', description: 'New batch open for applications', parameters: ['{{1}} = batch number', '{{2}} = application URL'] },
+      { name: 'team_training', category: 'UTILITY', description: 'Team paused for training/remediation between sprints', parameters: ['{{1}} = first name', '{{2}} = reason'] },
     ];
   }
 
   // ─── Private ─────────────────────────────────────────────
+
+  /**
+   * True if this phone has opted out via STOP — an indexed primary-key lookup
+   * against the WhatsappOptOut table (normalized digits). Best-effort: a lookup
+   * error is treated as "not opted out" so a transient DB issue never silently
+   * drops legitimate messages.
+   */
+  private async isOptedOut(normalizedPhone: string): Promise<boolean> {
+    try {
+      const normalized = (normalizedPhone ?? '').replace(/\D/g, '');
+      if (!normalized) return false;
+      const row = await this.prisma.whatsappOptOut.findUnique({
+        where: { phone: normalized },
+        select: { phone: true },
+      });
+      return !!row;
+    } catch (err) {
+      this.logger.error(`Opt-out lookup failed for ${normalizedPhone}; allowing send`, err as any);
+      return false;
+    }
+  }
 
   private async logNotification(applicantId: string, subject: string, body: string, success: boolean) {
     try {

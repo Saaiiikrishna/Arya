@@ -34,14 +34,14 @@ export default function ProfilePage() {
   return (
     <Layout activeTab="archives">
       <div className="min-h-[80vh] flex items-center justify-center py-20 px-6">
-        <div className="max-w-2xl w-full bg-white border border-hairline shadow-sm overflow-hidden translate-y-[-5vh]">
+        <div className="max-w-2xl w-full bg-white border border-hairline overflow-hidden translate-y-[-5vh]">
           {/* Header Section */}
           <div className="bg-parchment/30 border-b border-hairline p-12 text-center">
             {user.avatarUrl ? (
               <img 
                 src={user.avatarUrl} 
                 alt="Profile" 
-                className="w-24 h-24 rounded-full border-2 border-forest/20 mx-auto mb-6 shadow-lg"
+                className="w-24 h-24 rounded-full border-2 border-forest/20 mx-auto mb-6"
               />
             ) : (
               <div className="w-24 h-24 rounded-full bg-forest/5 flex items-center justify-center mx-auto mb-6 border border-hairline">

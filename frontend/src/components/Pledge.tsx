@@ -18,7 +18,7 @@ export default function Pledge({ onCommit, onClose }: PledgeProps) {
           </div>
           <div className="flex items-center gap-4">
             <span className="text-[10px] font-sans uppercase tracking-widest text-ink/60">Step 02 / 02</span>
-            <button onClick={onClose} className="text-forest hover:text-terracotta transition-colors">
+            <button onClick={onClose} className="text-forest hover:text-terracotta-warm transition-colors">
               <X className="w-6 h-6" />
             </button>
           </div>
@@ -29,7 +29,7 @@ export default function Pledge({ onCommit, onClose }: PledgeProps) {
         {/* Left: The Pledge Terms */}
         <section className="w-full md:w-1/2 p-8 md:p-16 lg:p-24 flex flex-col justify-center border-b md:border-b-0 md:border-r border-hairline bg-alabaster">
           <div className="max-w-xl mx-auto md:mx-0">
-            <span className="text-terracotta font-sans text-[10px] uppercase tracking-[0.2em] mb-8 block">
+            <span className="text-terracotta-warm font-sans text-[10px] uppercase tracking-[0.2em] mb-8 block">
               Member Covenant
             </span>
             <h1 className="text-5xl md:text-6xl font-serif text-forest mb-12 leading-tight">The Pledge.</h1>
@@ -105,7 +105,7 @@ export default function Pledge({ onCommit, onClose }: PledgeProps) {
               <button
                 type="button"
                 onClick={onCommit}
-                className="w-full bg-forest text-white py-6 font-sans text-xs uppercase tracking-[0.3em] hover:bg-forest/90 transition-colors duration-300 flex items-center justify-center gap-3 active:scale-[0.98]"
+                className="w-full bg-saffron text-parchment py-6 font-sans text-xs uppercase tracking-[0.3em] border border-saffron-deep/40 hover:bg-saffron-deep transition-colors duration-300 flex items-center justify-center gap-3 active:scale-[0.98]"
               >
                 Proceed to Payment
                 <ArrowRight className="w-4 h-4" />

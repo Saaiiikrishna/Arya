@@ -95,9 +95,17 @@ export class ApplicantController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Post('applicants/me/answers')
+  async submitMyAnswers(@Req() req: any, @Body() dto: SubmitAdditionalAnswersDto) {
+    const applicantId = req.user.id || req.user.sub;
+    return this.applicantService.submitMyAdditionalAnswers(applicantId, dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get('applicants/:memberId/profile')
-  async getMemberProfile(@Param('memberId') memberId: string) {
-    return this.applicantService.getMemberProfile(memberId);
+  async getMemberProfile(@Req() req: any, @Param('memberId') memberId: string) {
+    const requesterId = req.user.id || req.user.sub;
+    return this.applicantService.getMemberProfile(memberId, requesterId, req.user.role);
   }
 
   @Post('applicants/consent/:accessToken')

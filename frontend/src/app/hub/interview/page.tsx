@@ -40,16 +40,20 @@ export default function InterviewPage() {
 
   const fetchAll = useCallback(async () => {
     try {
-      const [bookingRes, videoRes, hubRes] = await Promise.allSettled([
+      // The interview page belongs to Stage 0 (Selection), where applicants are
+      // typically pre-payment. The Hub endpoint is payment-gated and returns 403
+      // for those applicants, so we read batchId from the profile endpoint, which
+      // is available at every stage and also exposes batchId.
+      const [bookingRes, videoRes, profileRes] = await Promise.allSettled([
         api.getMyInterviewBooking(),
         api.getMyVideoSubmission(),
-        api.getMyHub(),
+        api.getMyProfile(),
       ]);
 
       if (bookingRes.status === 'fulfilled') setBooking(bookingRes.value);
       if (videoRes.status === 'fulfilled') setVideo(videoRes.value);
-      if (hubRes.status === 'fulfilled') {
-        const bid = hubRes.value?.applicant?.batchId;
+      if (profileRes.status === 'fulfilled') {
+        const bid = profileRes.value?.batchId ?? null;
         setBatchId(bid);
         if (bid) {
           const slotsRes = await api.getAvailableInterviewSlots(bid);
@@ -153,7 +157,7 @@ export default function InterviewPage() {
                 href={item.href}
                 className={`group flex items-center gap-3 font-medium text-sm tracking-wide uppercase transition-colors ${item.active ? 'text-ink' : 'text-ink/40 hover:text-ink'}`}
               >
-                <span className={`w-1 h-1 ${item.active ? 'bg-forest' : 'bg-transparent group-hover:bg-ink'}`} />
+                <span className={`w-1 h-1 ${item.active ? 'bg-saffron' : 'bg-transparent group-hover:bg-ink'}`} />
                 <span>{item.label}</span>
               </a>
             ))}
@@ -251,7 +255,7 @@ export default function InterviewPage() {
                 <button
                   onClick={handleVideoSubmit}
                   disabled={submittingVideo}
-                  className="mt-8 bg-forest text-white px-8 py-4 font-bold uppercase tracking-widest text-sm hover:bg-forest/90 transition-colors disabled:opacity-50"
+                  className="mt-8 bg-saffron text-parchment px-8 py-4 font-bold uppercase tracking-widest text-sm hover:bg-saffron-deep transition-colors disabled:opacity-50"
                 >
                   {submittingVideo ? 'Saving…' : 'Submit Video Responses'}
                 </button>
@@ -323,12 +327,20 @@ export default function InterviewPage() {
                     <button
                       onClick={() => !slot.isFull && handleBook(slot.id)}
                       disabled={slot.isFull || !!bookingSlot}
-                      className="flex items-center gap-2 px-6 py-3 bg-forest text-white font-bold uppercase tracking-widest text-[10px] hover:bg-forest/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="flex items-center gap-2 px-6 py-3 bg-saffron text-parchment font-bold uppercase tracking-widest text-[10px] hover:bg-saffron-deep transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       {bookingSlot === slot.id ? 'Booking…' : slot.isFull ? 'Full' : <>Book <ChevronRight className="w-3 h-3" /></>}
                     </button>
                   </div>
                 ))}
+              </div>
+            ) : !batchId ? (
+              <div className="bg-white border border-hairline p-12 text-center">
+                <Calendar className="w-10 h-10 text-ink/20 mx-auto mb-4" />
+                <p className="font-serif text-xl font-bold mb-2">Not assigned to a batch yet</p>
+                <p className="text-ink/50 text-sm">
+                  Interview slots open up once you have been placed into a batch. Check back soon.
+                </p>
               </div>
             ) : (
               <div className="bg-white border border-hairline p-12 text-center">

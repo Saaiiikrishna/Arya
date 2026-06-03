@@ -37,30 +37,30 @@ export default function TermsPage() {
           <div className="bg-alabaster border border-hairline p-8">
             <h2 className="font-serif text-2xl font-bold mb-6 text-forest">TABLE OF CONTENTS</h2>
             <nav className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm uppercase tracking-widest">
-              <a href="#services" className="hover:text-terracotta transition-colors">1. OUR SERVICES</a>
-              <a href="#ip" className="hover:text-terracotta transition-colors">2. INTELLECTUAL PROPERTY RIGHTS</a>
-              <a href="#userreps" className="hover:text-terracotta transition-colors">3. USER REPRESENTATIONS</a>
-              <a href="#userreg" className="hover:text-terracotta transition-colors">4. USER REGISTRATION</a>
-              <a href="#purchases" className="hover:text-terracotta transition-colors">5. PURCHASES AND PAYMENT</a>
-              <a href="#refund" className="hover:text-terracotta transition-colors">6. REFUND POLICY</a>
-              <a href="#prohibited" className="hover:text-terracotta transition-colors">7. PROHIBITED ACTIVITIES</a>
-              <a href="#ugc" className="hover:text-terracotta transition-colors">8. USER GENERATED CONTRIBUTIONS</a>
-              <a href="#license" className="hover:text-terracotta transition-colors">9. CONTRIBUTION LICENCE</a>
-              <a href="#sitemanage" className="hover:text-terracotta transition-colors">10. SERVICES MANAGEMENT</a>
-              <Link href="/privacy" className="hover:text-terracotta transition-colors">11. PRIVACY POLICY</Link>
-              <a href="#copyright" className="hover:text-terracotta transition-colors">12. COPYRIGHT INFRINGEMENTS</a>
-              <a href="#termination" className="hover:text-terracotta transition-colors">13. TERM AND TERMINATION</a>
-              <a href="#modifications" className="hover:text-terracotta transition-colors">14. MODIFICATIONS AND INTERRUPTIONS</a>
-              <a href="#law" className="hover:text-terracotta transition-colors">15. GOVERNING LAW</a>
-              <a href="#disputes" className="hover:text-terracotta transition-colors">16. DISPUTE RESOLUTION</a>
-              <a href="#corrections" className="hover:text-terracotta transition-colors">17. CORRECTIONS</a>
-              <a href="#disclaimer" className="hover:text-terracotta transition-colors">18. DISCLAIMER</a>
-              <a href="#liability" className="hover:text-terracotta transition-colors">19. LIMITATIONS OF LIABILITY</a>
-              <a href="#indemnification" className="hover:text-terracotta transition-colors">20. INDEMNIFICATION</a>
-              <a href="#userdata" className="hover:text-terracotta transition-colors">21. USER DATA</a>
-              <a href="#electronic" className="hover:text-terracotta transition-colors">22. ELECTRONIC COMMUNICATIONS</a>
-              <a href="#misc" className="hover:text-terracotta transition-colors">23. MISCELLANEOUS</a>
-              <a href="#contact" className="hover:text-terracotta transition-colors">24. CONTACT US</a>
+              <a href="#services" className="hover:text-terracotta-warm transition-colors">1. OUR SERVICES</a>
+              <a href="#ip" className="hover:text-terracotta-warm transition-colors">2. INTELLECTUAL PROPERTY RIGHTS</a>
+              <a href="#userreps" className="hover:text-terracotta-warm transition-colors">3. USER REPRESENTATIONS</a>
+              <a href="#userreg" className="hover:text-terracotta-warm transition-colors">4. USER REGISTRATION</a>
+              <a href="#purchases" className="hover:text-terracotta-warm transition-colors">5. PURCHASES AND PAYMENT</a>
+              <a href="#refund" className="hover:text-terracotta-warm transition-colors">6. REFUND POLICY</a>
+              <a href="#prohibited" className="hover:text-terracotta-warm transition-colors">7. PROHIBITED ACTIVITIES</a>
+              <a href="#ugc" className="hover:text-terracotta-warm transition-colors">8. USER GENERATED CONTRIBUTIONS</a>
+              <a href="#license" className="hover:text-terracotta-warm transition-colors">9. CONTRIBUTION LICENCE</a>
+              <a href="#sitemanage" className="hover:text-terracotta-warm transition-colors">10. SERVICES MANAGEMENT</a>
+              <Link href="/privacy" className="hover:text-terracotta-warm transition-colors">11. PRIVACY POLICY</Link>
+              <a href="#copyright" className="hover:text-terracotta-warm transition-colors">12. COPYRIGHT INFRINGEMENTS</a>
+              <a href="#termination" className="hover:text-terracotta-warm transition-colors">13. TERM AND TERMINATION</a>
+              <a href="#modifications" className="hover:text-terracotta-warm transition-colors">14. MODIFICATIONS AND INTERRUPTIONS</a>
+              <a href="#law" className="hover:text-terracotta-warm transition-colors">15. GOVERNING LAW</a>
+              <a href="#disputes" className="hover:text-terracotta-warm transition-colors">16. DISPUTE RESOLUTION</a>
+              <a href="#corrections" className="hover:text-terracotta-warm transition-colors">17. CORRECTIONS</a>
+              <a href="#disclaimer" className="hover:text-terracotta-warm transition-colors">18. DISCLAIMER</a>
+              <a href="#liability" className="hover:text-terracotta-warm transition-colors">19. LIMITATIONS OF LIABILITY</a>
+              <a href="#indemnification" className="hover:text-terracotta-warm transition-colors">20. INDEMNIFICATION</a>
+              <a href="#userdata" className="hover:text-terracotta-warm transition-colors">21. USER DATA</a>
+              <a href="#electronic" className="hover:text-terracotta-warm transition-colors">22. ELECTRONIC COMMUNICATIONS</a>
+              <a href="#misc" className="hover:text-terracotta-warm transition-colors">23. MISCELLANEOUS</a>
+              <a href="#contact" className="hover:text-terracotta-warm transition-colors">24. CONTACT US</a>
             </nav>
           </div>
 

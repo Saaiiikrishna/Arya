@@ -32,7 +32,7 @@ export default function LoginPage() {
       router.push('/hub');
       return (
         <div className="min-h-screen bg-parchment flex items-center justify-center p-8">
-          <div className="w-full max-w-md bg-white border border-hairline p-12 text-center shadow-sm">
+          <div className="w-full max-w-md bg-white border border-hairline p-12 text-center">
             <h2 className="font-serif text-2xl font-bold mb-4 text-terracotta">Access Restricted</h2>
             <p className="text-ink/60 mb-6 text-sm">
               This area is reserved for administrators. Redirecting you to your Hub...
@@ -45,7 +45,7 @@ export default function LoginPage() {
 
     return (
       <div className="min-h-screen bg-parchment flex items-center justify-center p-8 selection:bg-forest selection:text-parchment">
-        <div className="w-full max-w-md bg-white border border-hairline p-12 text-center shadow-sm relative overflow-hidden">
+        <div className="w-full max-w-md bg-white border border-hairline p-12 text-center relative overflow-hidden">
           <div className="absolute top-0 right-0 w-16 h-16 bg-forest/5 -mr-8 -mt-8 rotate-45 border border-forest/10" />
           <div className="flex justify-center mb-6 relative z-10 pt-4">
             <span className="text-4xl font-serif italic text-forest leading-none">Aryavartham</span>
@@ -57,7 +57,7 @@ export default function LoginPage() {
           <div className="flex flex-col gap-4 relative z-10">
             <button
               onClick={() => router.push('/admin/dashboard')}
-              className="bg-forest text-parchment px-8 py-4 text-sm font-sans uppercase tracking-[0.2em] font-bold hover:bg-forest/90 transition-colors"
+              className="bg-saffron text-parchment px-8 py-4 text-sm font-sans uppercase tracking-[0.2em] font-bold hover:bg-saffron-deep transition-colors"
             >
               Command Center →
             </button>
@@ -77,7 +77,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-parchment flex items-center justify-center p-8 selection:bg-forest selection:text-parchment">
-      <div className="w-full max-w-md bg-white border border-hairline p-12 shadow-[8px_8px_0px_0px_rgba(4,38,24,0.05)] animate-fade-in relative overflow-hidden">
+      <div className="w-full max-w-md bg-white border border-hairline p-12 animate-fade-in relative overflow-hidden">
         {/* Decorative corner */}
         <div className="absolute top-0 right-0 w-16 h-16 bg-forest/5 -mr-8 -mt-8 rotate-45 border border-forest/10" />
         
@@ -142,14 +142,14 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="mt-6 w-full bg-forest text-parchment py-4 font-sans text-[10px] uppercase tracking-[0.2em] font-bold hover:bg-forest/90 transition-all border border-forest disabled:opacity-50 disabled:cursor-not-allowed group"
+            className="mt-6 w-full bg-saffron text-parchment py-4 font-sans text-[10px] uppercase tracking-[0.2em] font-bold hover:bg-saffron-deep transition-all border border-saffron disabled:opacity-50 disabled:cursor-not-allowed group"
           >
             {loading ? (
               <span className="animate-pulse">Authenticating...</span>
             ) : (
               <span className="flex items-center justify-center gap-2">
-                Init Session 
-                <span className="text-terracotta group-hover:translate-x-1 transition-transform">→</span>
+                Init Session
+                <span className="text-terracotta-warm group-hover:translate-x-1 transition-transform">→</span>
               </span>
             )}
           </button>

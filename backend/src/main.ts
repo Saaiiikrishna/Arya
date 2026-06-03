@@ -1,11 +1,13 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { AppModule } from './app.module';
 import { PrismaService } from './prisma';
+import { AllExceptionsFilter } from './common/all-exceptions.filter';
 
 async function autoSeed(app: any) {
   const logger = new Logger('AutoSeed');
@@ -64,12 +66,65 @@ async function autoSeed(app: any) {
       logger.log('Test account verified: test@arya.com');
     }
   } catch (error) {
+    if (isDatabaseUnreachable(error)) {
+      logger.error(
+        'Auto-seed failed: database is unreachable — aborting boot. ' +
+          (error as any)?.message,
+      );
+      throw error;
+    }
     logger.warn('Auto-seed skipped (non-fatal): ' + (error as any)?.message);
   }
 }
 
+/**
+ * Returns true when the error indicates Prisma could not reach / initialize the
+ * database connection (vs. a benign, idempotent data-level error we can skip).
+ * A genuinely unreachable DB must fail boot rather than be silently swallowed.
+ */
+function isDatabaseUnreachable(error: unknown): boolean {
+  const e = error as any;
+  const name: string = e?.name ?? '';
+  const code: string = e?.code ?? '';
+
+  // Prisma connection / initialization errors.
+  if (name === 'PrismaClientInitializationError') return true;
+  if (name === 'PrismaClientRustPanicError') return true;
+
+  // Prisma known connection-level error codes:
+  //  P1000 auth failed, P1001 can't reach server, P1002 timed out,
+  //  P1003 db does not exist, P1008 operation timed out,
+  //  P1010 access denied, P1017 server closed connection.
+  if (['P1000', 'P1001', 'P1002', 'P1003', 'P1008', 'P1010', 'P1017'].includes(code)) {
+    return true;
+  }
+
+  // Underlying socket-level network failures (driver adapter / pg).
+  if (['ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', 'ECONNRESET', 'EHOSTUNREACH'].includes(code)) {
+    return true;
+  }
+
+  return false;
+}
+
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { rawBody: true });
+  // rawBody: true keeps req.rawBody for webhook HMAC verification (Razorpay/WhatsApp).
+  // bodyParser: false disables Nest's default (100kb) parsers so we can register
+  // ours with an explicit size limit below — rawBody capture is preserved because
+  // useBodyParser still threads the rawBody verify hook through.
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    rawBody: true,
+    bodyParser: false,
+  });
+
+  // Request body-size limits (defends against oversized-payload DoS) while
+  // keeping the rawBody buffer intact for webhook signature verification.
+  const bodyLimit = '1mb';
+  app.useBodyParser('json', { limit: bodyLimit });
+  app.useBodyParser('urlencoded', { limit: bodyLimit, extended: true });
+
+  // Clean JSON errors; full detail logged server-side, nothing leaked to clients.
+  app.useGlobalFilters(new AllExceptionsFilter());
 
   const configService = app.get(ConfigService);
 
@@ -133,5 +188,28 @@ async function bootstrap() {
   console.log(`🚀 Arya Backend running on port ${port}`);
 }
 
-bootstrap();
+// Process-level safety nets: log loudly instead of dying silently.
+const processLogger = new Logger('Process');
+
+process.on('unhandledRejection', (reason: unknown) => {
+  processLogger.error(
+    'Unhandled promise rejection',
+    reason instanceof Error ? reason.stack : String(reason),
+  );
+});
+
+process.on('uncaughtException', (error: Error) => {
+  processLogger.error('Uncaught exception', error?.stack ?? String(error));
+  // An uncaught exception leaves the process in an undefined state; exit so the
+  // orchestrator (Docker/PM2/systemd) can restart a clean instance.
+  process.exit(1);
+});
+
+bootstrap().catch((error) => {
+  processLogger.error(
+    'Fatal error during bootstrap — aborting boot',
+    error instanceof Error ? error.stack : String(error),
+  );
+  process.exit(1);
+});
 

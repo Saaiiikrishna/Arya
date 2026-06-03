@@ -6,8 +6,9 @@ import { SettingsProvider } from "@/lib/settings";
 import TrackerInit from "@/components/TrackerInit";
 
 export const metadata: Metadata = {
-  title: "Arya — Team Formation Platform",
-  description: "Batch-based user onboarding and team formation pipeline",
+  title: "Aryavartham — The Founder's Club",
+  description: "Build a Startup in 180 Days. We don't invest in you — we build with you. A co-founder programme for the obsessive, the restless, and the relentlessly curious.",
+  icons: { icon: "/logo-short.svg" },
 };
 
 export default function RootLayout({

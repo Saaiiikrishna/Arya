@@ -43,7 +43,7 @@ async function main() {
         <p>We will review your application and contact you soon.</p>
         <p>You can check your application status anytime: <a href="{{statusUrl}}">View Status</a></p>
         <br/>
-        <p>Best regards,<br/>The Arya Team</p>
+        <p>Best regards,<br/>The Aryavartham Team</p>
       `,
     },
     {
@@ -56,7 +56,7 @@ async function main() {
         <p>You can view Batch {{filledBatchNumber}} details here: <a href="{{batchUrl}}">View Batch Details</a></p>
         <p>We will notify you once your batch starts processing.</p>
         <br/>
-        <p>Best regards,<br/>The Arya Team</p>
+        <p>Best regards,<br/>The Aryavartham Team</p>
       `,
     },
     {
@@ -68,7 +68,7 @@ async function main() {
         <p>You will be freshly matched into a team. We will keep you updated on the progress.</p>
         <p>Check your updated status: <a href="{{statusUrl}}">View Status</a></p>
         <br/>
-        <p>Best regards,<br/>The Arya Team</p>
+        <p>Best regards,<br/>The Aryavartham Team</p>
       `,
     },
     {
@@ -80,7 +80,7 @@ async function main() {
         <div>{{content}}</div>
         <p>Please answer the additional questions here: <a href="{{statusUrl}}">Complete Questions</a></p>
         <br/>
-        <p>Best regards,<br/>The Arya Team</p>
+        <p>Best regards,<br/>The Aryavartham Team</p>
       `,
     },
     {
@@ -96,7 +96,7 @@ async function main() {
         </ol>
         <p>Complete your consent: <a href="{{statusUrl}}">Give Consent</a></p>
         <br/>
-        <p>Best regards,<br/>The Arya Team</p>
+        <p>Best regards,<br/>The Aryavartham Team</p>
       `,
     },
     {
@@ -111,7 +111,7 @@ async function main() {
         <p>Please complete the questionnaire before the deadline. Failure to respond may result in removal from Batch {{batchNumber}}.</p>
         <p><a href="{{statusUrl}}">Complete Questionnaire →</a></p>
         <br/>
-        <p>Best regards,<br/>The Arya Team</p>
+        <p>Best regards,<br/>The Aryavartham Team</p>
       `,
     },
     {
@@ -124,7 +124,7 @@ async function main() {
         <p>If you haven't responded yet, please complete it now to remain in Batch {{batchNumber}}.</p>
         <p><a href="{{statusUrl}}">Complete Questionnaire →</a></p>
         <br/>
-        <p>Best regards,<br/>The Arya Team</p>
+        <p>Best regards,<br/>The Aryavartham Team</p>
       `,
     },
     {
@@ -136,7 +136,7 @@ async function main() {
         <p>Head over to your Hub to meet your teammates and get started.</p>
         <p><a href="{{hubUrl}}">Visit Your Hub →</a></p>
         <br/>
-        <p>Best regards,<br/>The Arya Team</p>
+        <p>Best regards,<br/>The Aryavartham Team</p>
       `,
     },
     {
@@ -150,7 +150,7 @@ async function main() {
         <p>Visit your Hub to participate in the election process.</p>
         <p><a href="{{hubUrl}}">Go to Hub →</a></p>
         <br/>
-        <p>Best regards,<br/>The Arya Team</p>
+        <p>Best regards,<br/>The Aryavartham Team</p>
       `,
     },
     {
@@ -163,7 +163,7 @@ async function main() {
         <p>Congratulations to the new leader! Visit the Hub for more details.</p>
         <p><a href="{{hubUrl}}">Go to Hub →</a></p>
         <br/>
-        <p>Best regards,<br/>The Arya Team</p>
+        <p>Best regards,<br/>The Aryavartham Team</p>
       `,
     },
     {
@@ -174,7 +174,7 @@ async function main() {
         <p>{{content}}</p>
         <p><strong>⏰ Deadline: {{deadline}}</strong></p>
         <br/>
-        <p>Best regards,<br/>The Arya Team</p>
+        <p>Best regards,<br/>The Aryavartham Team</p>
       `,
     },
     {
@@ -186,7 +186,103 @@ async function main() {
         <p>Don't worry — you can still apply for the upcoming batch!</p>
         <p><a href="{{applyUrl}}">Apply for Next Batch →</a></p>
         <br/>
-        <p>Best regards,<br/>The Arya Team</p>
+        <p>Best regards,<br/>The Aryavartham Team</p>
+      `,
+    },
+    {
+      slug: 'payment-success',
+      subject: 'Pledge Confirmed — Welcome to The Founder\'s Club',
+      body: `
+        <h2>Hi {{firstName}},</h2>
+        <p>Your pledge has been received and confirmed. Welcome aboard — you are now a member of <strong>Batch {{batchNumber}}</strong>.</p>
+        <p>Head to your Hub to track team formation, your 90-day sprint, and everything ahead.</p>
+        <p><a href="{{hubUrl}}">Go to your Hub →</a></p>
+        <br/>
+        <p>Best regards,<br/>The Aryavartham Team</p>
+      `,
+    },
+    {
+      slug: 'eligible-notification',
+      subject: 'You\'re Through — Screening Cleared',
+      body: `
+        <h2>Hi {{firstName}},</h2>
+        <p>Great news — you have cleared screening for <strong>Batch {{batchNumber}}</strong>. You\'re moving forward in The Founder\'s Club.</p>
+        <p>Watch for next steps on team formation and your sprint.</p>
+        <p><a href="{{statusUrl}}">View your status →</a></p>
+        <br/>
+        <p>Best regards,<br/>The Aryavartham Team</p>
+      `,
+    },
+    {
+      slug: 'ineligible-notification',
+      subject: 'Update on Your Application — Batch {{batchNumber}}',
+      body: `
+        <h2>Hi {{firstName}},</h2>
+        <p>Thank you for applying. After screening, your application for <strong>Batch {{batchNumber}}</strong> hasn\'t advanced this round.</p>
+        <p>This is not the end of the road — you\'re welcome to apply for an upcoming batch.</p>
+        <p><a href="{{applyUrl}}">Apply for the next batch →</a></p>
+        <br/>
+        <p>Best regards,<br/>The Aryavartham Team</p>
+      `,
+    },
+    {
+      slug: 'interview-scheduled',
+      subject: 'Interview Confirmed — {{date}} at {{time}}',
+      body: `
+        <h2>Hi {{firstName}},</h2>
+        <p>Your interview is booked for <strong>{{date}} at {{time}}</strong>.</p>
+        <p>Join link: <strong>{{meetLink}}</strong></p>
+        <p>If a link is not shown above, it will be shared closer to the date.</p>
+        <p>Please be on time and keep your idea and motivation front of mind.</p>
+        <br/>
+        <p>Best regards,<br/>The Aryavartham Team</p>
+      `,
+    },
+    {
+      slug: 'interview-decision-selected',
+      subject: 'You\'re Selected — Cohort {{cohortNumber}}',
+      body: `
+        <h2>Hi {{firstName}},</h2>
+        <p>Congratulations! Following your interview, you have been <strong>selected</strong> for Cohort {{cohortNumber}}.</p>
+        <p>We\'ll be in touch with next steps. Welcome to the trenches.</p>
+        <p><a href="{{hubUrl}}">Go to your Hub →</a></p>
+        <br/>
+        <p>Best regards,<br/>The Aryavartham Team</p>
+      `,
+    },
+    {
+      slug: 'interview-decision-rejected',
+      subject: 'Update on Your Interview',
+      body: `
+        <h2>Hi {{firstName}},</h2>
+        <p>Thank you for taking the time to interview with us. After careful consideration, we won\'t be moving forward together this round.</p>
+        <p>We genuinely encourage you to apply again for a future batch.</p>
+        <br/>
+        <p>Best regards,<br/>The Aryavartham Team</p>
+      `,
+    },
+    {
+      slug: 'referral-milestone-email',
+      subject: '🎖 Milestone Unlocked — {{badgeName}}',
+      body: `
+        <h2>Hi {{firstName}},</h2>
+        <p>You\'ve reached <strong>{{count}} referrals</strong> and earned the <strong>{{badgeName}}</strong> badge. Thank you for growing the Club.</p>
+        <p><a href="{{hubUrl}}">See your rewards →</a></p>
+        <br/>
+        <p>Best regards,<br/>The Aryavartham Team</p>
+      `,
+    },
+    {
+      slug: 'team-training',
+      subject: 'An important update on your team\'s journey',
+      body: `
+        <h2>Hi {{firstName}},</h2>
+        <p>Your team has been moved into a <strong>training pause</strong> so you can regroup, sharpen your idea, and come back stronger for the next sprint.</p>
+        <p><strong>Reason:</strong> {{reason}}</p>
+        <p>This is a step forward, not a setback. Use this time to address the feedback above — our team will work with you on next steps.</p>
+        <p><a href="{{hubUrl}}">Go to your Hub →</a></p>
+        <br/>
+        <p>Best regards,<br/>The Aryavartham Team</p>
       `,
     },
   ];

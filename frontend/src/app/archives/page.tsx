@@ -3,26 +3,59 @@
 import { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import Link from 'next/link';
 
+const ADMIN_ROLES = ['ADMIN', 'SUPER_ADMIN', 'MODERATOR'];
+
 export default function ArchivesPage() {
+  const { role, loading: authLoading } = useAuth();
+  const isAdmin = !!role && ADMIN_ROLES.includes(role);
+
   const [batches, setBatches] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.getBatches()
-      .then(data => {
-        // Show all batches sorted by batch number descending
-        setBatches(data.sort((a: any, b: any) => b.batchNumber - a.batchNumber));
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, []);
+    // Wait until auth has resolved so we know whether to use the admin or the
+    // public data source.
+    if (authLoading) return;
+
+    let cancelled = false;
+
+    async function loadAdmin() {
+      const data = await api.getBatches();
+      return data.sort((a: any, b: any) => b.batchNumber - a.batchNumber);
+    }
+
+    async function loadPublic() {
+      // Public, safe-field list of all batches (newest first) — no PII, no admin
+      // auth required. Replaces the fragile current-batch-and-walk-backwards
+      // approach, which returned nothing whenever no batch was currently FILLING.
+      const data = await api.getPublicBatches().catch(() => []);
+      return Array.isArray(data) ? data : [];
+    }
+
+    (async () => {
+      try {
+        const data = isAdmin ? await loadAdmin() : await loadPublic();
+        if (!cancelled) setBatches(data);
+      } catch (err) {
+        console.error(err);
+        if (!cancelled) setBatches([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, isAdmin]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'FINALIZED': case 'PRODUCTION': return 'text-forest bg-forest/10 border-forest/20';
-      case 'FILLING': return 'text-terracotta bg-terracotta/10 border-terracotta/20';
+      case 'FILLING': return 'text-marigold bg-marigold/10 border-marigold/20';
       default: return 'text-ink/60 bg-ink/5 border-ink/10';
     }
   };
@@ -37,7 +70,7 @@ export default function ArchivesPage() {
           </p>
         </div>
 
-        {loading ? (
+        {(loading || authLoading) ? (
           <div className="flex flex-col items-center justify-center py-20">
             <div className="animate-pulse text-forest font-serif italic text-xl">Decrypting Archives...</div>
           </div>
@@ -52,7 +85,7 @@ export default function ArchivesPage() {
         ) : (
           <div className="flex flex-col gap-6">
             {batches.map(batch => (
-              <div key={batch.id} className="border border-hairline bg-white hover:shadow-sm transition-shadow">
+              <div key={batch.id || batch.batchNumber} className="border border-hairline bg-white">
                 <div className="p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                   <div className="flex-1">
                     <div className="flex items-center gap-4 mb-3">
@@ -85,8 +118,8 @@ export default function ArchivesPage() {
                 {/* Capacity Bar */}
                 <div className="px-8 pb-6">
                   <div className="h-1.5 w-full bg-parchment">
-                    <div 
-                      className="h-full bg-forest transition-all"
+                    <div
+                      className="h-full bg-saffron transition-all"
                       style={{ width: `${Math.min(100, (batch.currentCount / batch.capacity) * 100)}%` }}
                     />
                   </div>

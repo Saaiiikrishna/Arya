@@ -2,8 +2,8 @@ import { Injectable, ExecutionContext, ForbiddenException } from '@nestjs/common
 import { AuthGuard } from '@nestjs/passport';
 
 /**
- * Requires a valid JWT AND the INVESTOR role.
- * Apply to all /investors/* routes that should be inaccessible to applicants and admins.
+ * Requires a valid JWT AND the INVESTOR role. Use on investor-facing routes so
+ * applicants/admins can't act as investors and vice-versa.
  */
 @Injectable()
 export class InvestorGuard extends AuthGuard('jwt') {

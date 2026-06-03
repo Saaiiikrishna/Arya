@@ -19,43 +19,30 @@ function SuccessContent() {
   const isFull = batchStatus && batchStatus.currentCount >= batchStatus.capacity;
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: 'var(--gradient-hero)',
-      padding: 'var(--space-xl)',
-    }}>
-      <div className="card-glass animate-fade-in" style={{
-        width: '100%', maxWidth: 500,
-        padding: 'var(--space-2xl)', textAlign: 'center',
-      }}>
-        <div style={{ fontSize: '4rem', marginBottom: 'var(--space-md)' }}>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-parchment to-parchment-dark p-8">
+      <div className="w-full max-w-lg bg-alabaster border border-hairline p-12 text-center animate-fade-in">
+        <div className="text-6xl mb-4">
           {isFull ? '📋' : '🎉'}
         </div>
-        <h1 style={{
-          fontSize: '1.75rem', fontWeight: 700,
-          marginBottom: 'var(--space-sm)',
-        }}>
+        <h1 className="font-serif text-3xl font-bold mb-2 text-forest">
           {isFull ? 'Application Received — Batch Full' : 'Application Submitted!'}
         </h1>
-        <p className="text-secondary" style={{ marginBottom: 'var(--space-lg)' }}>
+        <p className="text-ink/60 mb-6">
           {isFull ? (
             <>
               Your application has been received for{' '}
-              <strong style={{ color: 'var(--color-accent)' }}>Batch #{batchNumber || '1'}</strong>.
+              <strong className="text-saffron-deep">Batch #{batchNumber || '1'}</strong>.
               This batch is now at full capacity. You&apos;ve been placed on the waitlist
               and will be notified if a spot opens or when the next batch begins.
             </>
           ) : (
             <>
               Thank you for applying! You&apos;ve been placed in{' '}
-              <strong style={{ color: 'var(--color-accent)' }}>Batch #{batchNumber || '1'}</strong>.
+              <strong className="text-saffron-deep">Batch #{batchNumber || '1'}</strong>.
             </>
           )}
         </p>
-        <p className="text-sm text-muted" style={{ marginBottom: 'var(--space-xl)' }}>
+        <p className="text-sm text-ink/40 mb-8">
           {isFull
             ? "We'll send you a notification email as soon as there's an update regarding your batch. Keep an eye on your inbox."
             : "We've sent a confirmation email with your application details and a link to track your status. We'll notify you as your batch progresses."
@@ -63,35 +50,28 @@ function SuccessContent() {
         </p>
 
         {batchStatus && (
-          <div style={{
-            background: 'var(--color-bg-tertiary)',
-            borderRadius: 'var(--radius-md)',
-            padding: 'var(--space-md)',
-            marginBottom: 'var(--space-lg)',
-          }}>
-            <div className="text-xs text-muted" style={{ marginBottom: 4 }}>
+          <div className="bg-parchment-dark p-4 mb-6">
+            <div className="text-xs text-ink/40 mb-1">
               Batch #{batchNumber || batchStatus.batchNumber} Status
             </div>
-            <div className="text-sm" style={{ fontWeight: 600 }}>
+            <div className="text-sm font-semibold">
               {batchStatus.currentCount}/{batchStatus.capacity} applicants
-              {isFull && <span style={{ color: 'var(--color-error)', marginLeft: 8 }}>● Full</span>}
+              {isFull && <span className="text-terracotta ml-2">● Full</span>}
             </div>
           </div>
         )}
 
-        <div style={{
-          background: 'var(--color-bg-tertiary)',
-          borderRadius: 'var(--radius-md)',
-          padding: 'var(--space-md)',
-          marginBottom: 'var(--space-xl)',
-        }}>
-          <div className="text-xs text-muted" style={{ marginBottom: 4 }}>What happens next?</div>
+        <div className="bg-parchment-dark p-4 mb-8">
+          <div className="text-xs text-ink/40 mb-1">What happens next?</div>
           <div className="text-sm">
             ✅ Screening → 🧩 Team Formation → 📝 Consent → 🚀 Launch
           </div>
         </div>
 
-        <Link href="/" className="btn btn-primary">
+        <Link
+          href="/"
+          className="inline-flex items-center justify-center bg-saffron text-parchment px-7 py-3.5 font-bold uppercase tracking-widest text-xs hover:bg-saffron-deep active:translate-x-0.5 active:translate-y-0.5 transition-colors"
+        >
           Back to Home
         </Link>
       </div>
@@ -102,8 +82,8 @@ function SuccessContent() {
 export default function SuccessPage() {
   return (
     <Suspense fallback={
-      <div className="loading-page" style={{ minHeight: '100vh' }}>
-        <div className="spinner" />
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-8 h-8 rounded-full border-2 border-hairline border-t-forest animate-spin" />
       </div>
     }>
       <SuccessContent />

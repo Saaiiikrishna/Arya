@@ -100,7 +100,7 @@ export default function DepartmentBoard({ teamId }: { teamId: string }) {
   if (!data) return null;
 
   return (
-    <div className="bg-white border border-hairline shadow-sm">
+    <div className="bg-white border border-hairline">
       <div className="px-8 py-6 border-b border-hairline flex items-center justify-between">
         <div>
           <h3 className="font-serif text-xl font-bold">Department Board</h3>
@@ -169,14 +169,14 @@ export default function DepartmentBoard({ teamId }: { teamId: string }) {
                   <button
                     onClick={() => handleClaim(department)}
                     disabled={!!claiming}
-                    className="px-4 py-2 bg-forest text-white text-[10px] font-bold uppercase tracking-widest hover:bg-forest/90 transition-colors disabled:opacity-50"
+                    className="px-4 py-2 bg-saffron text-parchment text-[10px] font-bold uppercase tracking-widest hover:bg-saffron-deep transition-colors disabled:opacity-50"
                   >
                     {isClaiming ? 'Claiming…' : 'Claim'}
                   </button>
                 )}
 
                 {isMine && (
-                  <span className="px-4 py-2 border border-forest text-forest text-[10px] font-bold uppercase tracking-widest">
+                  <span className="px-4 py-2 border border-saffron text-saffron-deep text-[10px] font-bold uppercase tracking-widest">
                     Your Role
                   </span>
                 )}

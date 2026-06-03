@@ -121,15 +121,15 @@ export default function AdminReferralsPage() {
 
   const statusBadge = (status: string) => {
     const colors: Record<string, string> = {
-      PENDING: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-      ELIGIBLE: 'bg-blue-100 text-blue-800 border-blue-200',
-      CONSENTED: 'bg-green-100 text-green-800 border-green-200',
-      ACTIVE: 'bg-forest/10 text-forest border-forest/20',
-      REMOVED: 'bg-red-100 text-red-800 border-red-200',
-      INELIGIBLE: 'bg-gray-100 text-gray-800 border-gray-200',
+      PENDING: 'bg-marigold/15 text-warning border-marigold/40',
+      ELIGIBLE: 'bg-forest/10 text-forest border-forest/20',
+      CONSENTED: 'bg-success/10 text-success border-success/25',
+      ACTIVE: 'bg-saffron/10 text-saffron-deep border-saffron/20',
+      REMOVED: 'bg-terracotta/10 text-terracotta border-terracotta/20',
+      INELIGIBLE: 'bg-ink/5 text-ink/50 border-ink/15',
     };
     return (
-      <span className={`px-2 py-0.5 text-[9px] uppercase tracking-widest font-bold border ${colors[status] || 'bg-gray-100 text-gray-600 border-gray-200'}`}>
+      <span className={`px-2 py-0.5 text-[9px] uppercase tracking-widest font-bold border ${colors[status] || 'bg-ink/5 text-ink/50 border-ink/15'}`}>
         {status}
       </span>
     );
@@ -173,12 +173,12 @@ export default function AdminReferralsPage() {
 
           <div className="border border-hairline bg-white p-8">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-terracotta/10 flex items-center justify-center">
-                <UserPlus className="w-5 h-5 text-terracotta" />
+              <div className="w-10 h-10 bg-terracotta-warm/10 flex items-center justify-center">
+                <UserPlus className="w-5 h-5 text-terracotta-warm" />
               </div>
               <span className="text-[10px] uppercase tracking-widest text-ink/40 font-bold">Active Affiliates</span>
             </div>
-            <div className="font-serif text-4xl font-bold text-terracotta">{stats?.totalAffiliates || 0}</div>
+            <div className="font-serif text-4xl font-bold text-terracotta-warm">{stats?.totalAffiliates || 0}</div>
             <p className="text-[10px] text-ink/40 mt-2 uppercase tracking-widest">Members with referral links</p>
           </div>
 
@@ -207,8 +207,8 @@ export default function AdminReferralsPage() {
             onClick={() => setActiveTab(tab)}
             className={`px-6 py-3 text-[10px] uppercase tracking-widest font-bold transition-colors border-b-2 -mb-px ${
               activeTab === tab
-                ? 'border-forest text-forest'
-                : 'border-transparent text-ink/40 hover:text-ink/60'
+                ? 'border-saffron text-saffron-deep'
+                : 'border-transparent text-ink/40 hover:text-terracotta-warm'
             }`}
           >
             {tab === 'overview' ? 'Top Referrers' : tab === 'referrals' ? 'All Referrals' : 'Affiliate Manager'}
@@ -235,7 +235,7 @@ export default function AdminReferralsPage() {
                 {stats.topReferrers.map((ref, idx) => (
                   <div key={ref.applicantId} className="flex items-center gap-6 p-5 hover:bg-parchment/5 transition-colors group">
                     {/* Rank */}
-                    <span className={`font-serif text-2xl font-bold w-8 text-center ${idx < 3 ? 'text-terracotta' : 'text-parchment/30'}`}>
+                    <span className={`font-serif text-2xl font-bold w-8 text-center ${idx < 3 ? 'text-terracotta-warm' : 'text-parchment/30'}`}>
                       {idx + 1}
                     </span>
 
@@ -271,7 +271,7 @@ export default function AdminReferralsPage() {
 
                     {/* Count */}
                     <div className="text-right">
-                      <div className="font-serif text-2xl font-bold text-terracotta">{ref.totalReferrals}</div>
+                      <div className="font-serif text-2xl font-bold text-terracotta-warm">{ref.totalReferrals}</div>
                       <div className="text-[9px] uppercase tracking-widest text-parchment/40">referrals</div>
                     </div>
                   </div>
@@ -300,7 +300,7 @@ export default function AdminReferralsPage() {
             </div>
             <button
               onClick={() => loadReferrals(1)}
-              className="px-6 py-3 bg-forest text-white text-[10px] uppercase tracking-widest font-bold hover:bg-forest/90 transition-colors"
+              className="px-6 py-3 bg-saffron text-parchment text-[10px] uppercase tracking-widest font-bold hover:bg-saffron-deep transition-colors"
             >
               Search
             </button>
@@ -402,7 +402,7 @@ export default function AdminReferralsPage() {
                     {/* Toggle */}
                     <button
                       onClick={() => toggleAffiliate(ref.applicantId, ref.isActive)}
-                      className={`transition-colors ${ref.isActive ? 'text-forest' : 'text-ink/20'}`}
+                      className={`transition-colors ${ref.isActive ? 'text-saffron-deep' : 'text-ink/20'}`}
                       title={ref.isActive ? 'Disable affiliate' : 'Enable affiliate'}
                     >
                       {ref.isActive ? <ToggleRight className="w-7 h-7" /> : <ToggleLeft className="w-7 h-7" />}

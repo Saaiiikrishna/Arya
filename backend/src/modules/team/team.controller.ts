@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Req, Query } from '@nestjs/common';
+import { Controller, Get, Post, Put, Patch, Delete, Param, Body, UseGuards, Req, Query, BadRequestException } from '@nestjs/common';
 import { TeamService } from './team.service';
 import { JwtAuthGuard, AdminGuard } from '../auth/guards';
 
@@ -34,6 +34,34 @@ export class TeamController {
   }
 
   @UseGuards(AdminGuard)
+  @Put('admin/teams/:id/training')
+  async moveToTraining(
+    @Param('id') teamId: string,
+    @Req() req: any,
+    @Body('reason') reason: string,
+  ) {
+    if (typeof reason !== 'string' || reason.trim().length === 0) {
+      throw new BadRequestException('reason is required and must be a non-empty string');
+    }
+    const adminId = req.user.id || req.user.sub;
+    return this.teamService.moveToTraining(teamId, reason, adminId);
+  }
+
+  @UseGuards(AdminGuard)
+  @Put('admin/teams/:id/reactivate')
+  async reactivateFromTraining(@Param('id') teamId: string, @Req() req: any) {
+    const adminId = req.user.id || req.user.sub;
+    return this.teamService.reactivateFromTraining(teamId, adminId);
+  }
+
+  @UseGuards(AdminGuard)
+  @Delete('admin/teams/:id')
+  async removeTeam(@Param('id') teamId: string, @Req() req: any) {
+    const adminId = req.user.id || req.user.sub;
+    return this.teamService.removeTeam(teamId, adminId);
+  }
+
+  @UseGuards(AdminGuard)
   @Patch('admin/teams/requests/:reqId/resolve')
   async adminResolveRequest(
     @Param('reqId') reqId: string,
@@ -61,9 +89,11 @@ export class TeamController {
   @Get('teams/:id/requests')
   async getRequests(
     @Param('id') teamId: string,
+    @Req() req: any,
     @Query('status') status?: string,
   ) {
-    return this.teamService.getTeamRequests(teamId, status);
+    const callerId = req.user.id || req.user.sub;
+    return this.teamService.getTeamRequests(teamId, callerId, req.user.role, status);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -82,8 +112,9 @@ export class TeamController {
 
   @UseGuards(JwtAuthGuard)
   @Get('teams/:id/departments')
-  async getDepartments(@Param('id') teamId: string) {
-    return this.teamService.getTeamDepartments(teamId);
+  async getDepartments(@Param('id') teamId: string, @Req() req: any) {
+    const callerId = req.user.id || req.user.sub;
+    return this.teamService.getTeamDepartments(teamId, callerId, req.user.role);
   }
 
   @UseGuards(JwtAuthGuard)

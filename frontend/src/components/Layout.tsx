@@ -101,7 +101,7 @@ export default function Layout({ children, activeTab = 'manifesto', onTabChange,
                   className={`pb-1 font-sans text-[10px] uppercase tracking-widest cursor-pointer transition-colors duration-300 ${
                     activeTab === tab.id
                       ? 'text-forest border-b border-forest'
-                      : 'text-ink/60 hover:text-terracotta'
+                      : 'text-ink/60 hover:text-terracotta-warm'
                   }`}
                 >
                   {tab.label}
@@ -118,7 +118,7 @@ export default function Layout({ children, activeTab = 'manifesto', onTabChange,
                 />
               ) : (
                 <User 
-                  className="w-6 h-6 text-forest cursor-pointer hover:text-terracotta transition-colors" 
+                  className="w-6 h-6 text-forest cursor-pointer hover:text-terracotta-warm transition-colors" 
                   onClick={() => router.push(isAuthenticated ? '/profile' : '/login')} 
                 />
               )}
@@ -166,7 +166,7 @@ export default function Layout({ children, activeTab = 'manifesto', onTabChange,
                 <button
                   key={link}
                   onClick={() => handleNavigation(link.toLowerCase())}
-                  className="text-left font-sans text-xs uppercase tracking-widest text-ink/70 hover:text-terracotta transition-colors"
+                  className="text-left font-sans text-xs uppercase tracking-widest text-ink/70 hover:text-terracotta-warm transition-colors"
                 >
                   {link}
                 </button>
@@ -179,7 +179,7 @@ export default function Layout({ children, activeTab = 'manifesto', onTabChange,
                 <button
                   key={link}
                   onClick={() => handleNavigation(link.toLowerCase())}
-                  className="text-left font-sans text-xs uppercase tracking-widest text-ink/70 hover:text-terracotta transition-colors"
+                  className="text-left font-sans text-xs uppercase tracking-widest text-ink/70 hover:text-terracotta-warm transition-colors"
                 >
                   {link}
                 </button>
@@ -189,17 +189,17 @@ export default function Layout({ children, activeTab = 'manifesto', onTabChange,
             <div className="flex flex-col gap-4 border-l border-forest/10 pl-6">
                <h4 className="font-serif italic text-forest mb-2">Network</h4>
                {settings?.social_twitter && (
-                 <a href={settings.social_twitter} target="_blank" rel="noopener noreferrer" className="font-sans text-xs uppercase tracking-widest text-ink/70 hover:text-terracotta transition-colors">
+                 <a href={settings.social_twitter} target="_blank" rel="noopener noreferrer" className="font-sans text-xs uppercase tracking-widest text-ink/70 hover:text-terracotta-warm transition-colors">
                    Twitter (X)
                  </a>
                )}
                {settings?.social_linkedin && (
-                 <a href={settings.social_linkedin} target="_blank" rel="noopener noreferrer" className="font-sans text-xs uppercase tracking-widest text-ink/70 hover:text-terracotta transition-colors">
+                 <a href={settings.social_linkedin} target="_blank" rel="noopener noreferrer" className="font-sans text-xs uppercase tracking-widest text-ink/70 hover:text-terracotta-warm transition-colors">
                    LinkedIn
                  </a>
                )}
                {settings?.social_instagram && (
-                 <a href={settings.social_instagram} target="_blank" rel="noopener noreferrer" className="font-sans text-xs uppercase tracking-widest text-ink/70 hover:text-terracotta transition-colors">
+                 <a href={settings.social_instagram} target="_blank" rel="noopener noreferrer" className="font-sans text-xs uppercase tracking-widest text-ink/70 hover:text-terracotta-warm transition-colors">
                    Instagram
                  </a>
                )}
