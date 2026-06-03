@@ -240,6 +240,22 @@ export class EquityService {
         throw new BadRequestException(`Handover not permitted before day 1000 (currently day ${dayNumber})`);
       }
 
+      // Dual-approval gate: the controlling stake only releases once the company
+      // is assessed profitable & sustainable, JOINTLY approved by an admin AND the
+      // team's assigned co-founder. Both approval rows must exist — this applies to
+      // the system cron too, so nothing auto-transfers without human sign-off.
+      const approvals = await tx.handoverApproval.findMany({
+        where: { companyId },
+        select: { role: true },
+      });
+      const approvedRoles = new Set(approvals.map((a) => a.role));
+      const missingRoles = ['ADMIN', 'COFOUNDER'].filter((r) => !approvedRoles.has(r));
+      if (missingRoles.length > 0) {
+        throw new BadRequestException(
+          `Handover requires joint approval before transferring the platform stake. Missing: ${missingRoles.join(' + ')}. An admin and the team's co-founder must each record a profitability/sustainability approval first.`,
+        );
+      }
+
       const platformHolder = company.equityHolders.find((h) => h.holderType === 'PLATFORM' && h.isActive);
       const founderHolders = company.equityHolders.filter((h) => h.holderType === 'FOUNDER' && h.isActive);
       if (!platformHolder) throw new BadRequestException('No active platform equity holder found');
@@ -301,6 +317,79 @@ export class EquityService {
 
     this.logger.log(`Handover executed for company ${companyId} on day ${result.dayNumber} (authorised by ${adminId})`);
     return { success: true, dayNumber: result.dayNumber, transferred: result.transferred };
+  }
+
+  /**
+   * Record one party's handover approval (the profitability & sustainability
+   * sign-off). role is 'ADMIN' or 'COFOUNDER'; approverId comes from the JWT.
+   * Idempotent per (company, role) — re-approving updates the existing row.
+   * Rejected once the company is already handed over.
+   */
+  async recordHandoverApproval(
+    companyId: string,
+    role: 'ADMIN' | 'COFOUNDER',
+    approverId: string,
+    note?: string,
+  ) {
+    const company = await this.prisma.companyEntity.findUnique({
+      where: { id: companyId },
+      select: { id: true, status: true },
+    });
+    if (!company) throw new NotFoundException('Company not found');
+    if (company.status === 'HANDED_OVER') {
+      throw new BadRequestException('Company has already been handed over');
+    }
+
+    await this.prisma.handoverApproval.upsert({
+      where: { companyId_role: { companyId, role } },
+      create: { companyId, role, approverId, note: note ?? null },
+      update: { approverId, note: note ?? null },
+    });
+
+    this.logger.log(`Handover approval recorded for company ${companyId} by ${role} ${approverId}`);
+    return this.getHandoverApprovals(companyId);
+  }
+
+  /**
+   * Co-founder handover approval — verifies the caller is the ACTIVE co-founder
+   * assigned to this company's team before recording the COFOUNDER approval.
+   */
+  async recordCoFounderHandoverApproval(companyId: string, coFounderId: string, note?: string) {
+    const company = await this.prisma.companyEntity.findUnique({
+      where: { id: companyId },
+      select: { teamId: true },
+    });
+    if (!company) throw new NotFoundException('Company not found');
+
+    const assignment = await this.prisma.coFounderAssignment.findFirst({
+      where: { coFounderId, teamId: company.teamId, isActive: true },
+      select: { id: true },
+    });
+    if (!assignment) {
+      throw new ForbiddenException("You are not the assigned co-founder for this company's team");
+    }
+
+    return this.recordHandoverApproval(companyId, 'COFOUNDER', coFounderId, note);
+  }
+
+  /** Approval status for a company: both parties' rows + whether handover is unlocked. */
+  async getHandoverApprovals(companyId: string) {
+    const approvals = await this.prisma.handoverApproval.findMany({
+      where: { companyId },
+      orderBy: { createdAt: 'asc' },
+    });
+    const byRole = (r: string) => approvals.find((a) => a.role === r) ?? null;
+    const admin = byRole('ADMIN');
+    const coFounder = byRole('COFOUNDER');
+    return {
+      companyId,
+      admin,
+      coFounder,
+      adminApproved: !!admin,
+      coFounderApproved: !!coFounder,
+      fullyApproved: !!admin && !!coFounder,
+      approvals,
+    };
   }
 
   /** Update the days-elapsed counter for all active companies (cron-friendly) */

@@ -1233,10 +1233,30 @@ model CompanyEntity {
   equityHolders      EquityHolder[]
   equityAgreements   EquityAgreement[]
   equityEvents       EquityEvent[]
+  handoverApprovals  HandoverApproval[]
 
   @@index([status])
   @@index([timerEndDate])
   @@map("company_entities")
+}
+
+/// Dual approval required before the 1000-day handover transfers the platform's
+/// 51% to founders: the platform's controlling stake only releases once the
+/// company is assessed profitable & sustainable, JOINTLY by an admin and the
+/// team's assigned co-founder. One row per (company, role); both must exist.
+model HandoverApproval {
+  id          String   @id @default(uuid()) @db.Uuid
+  companyId   String   @map("company_id") @db.Uuid
+  role        String   // 'ADMIN' | 'COFOUNDER' — the approving party
+  approverId  String   @map("approver_id") // admin id or cofounder id (from JWT)
+  note        String?  @db.Text // profitability / sustainability assessment
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  company     CompanyEntity @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, role])
+  @@index([companyId])
+  @@map("handover_approvals")
 }
 
 model EquityHolder {

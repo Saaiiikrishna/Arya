@@ -101,6 +101,22 @@ export class ApplicantController {
     return this.applicantService.submitMyAdditionalAnswers(applicantId, dto);
   }
 
+  // ─── WhatsApp verification ───────────────────────────────
+  @UseGuards(JwtAuthGuard)
+  @Throttle({ short: { limit: 5, ttl: 60000 } })
+  @Post('applicants/me/whatsapp/send-otp')
+  async sendWhatsappVerifyOtp(@Req() req: any) {
+    const applicantId = req.user.id || req.user.sub;
+    return this.applicantService.sendWhatsappVerifyOtp(applicantId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('applicants/me/whatsapp/verify')
+  async verifyWhatsappOtp(@Req() req: any, @Body('otp') otp: string) {
+    const applicantId = req.user.id || req.user.sub;
+    return this.applicantService.verifyWhatsappOtp(applicantId, otp);
+  }
+
   @UseGuards(JwtAuthGuard)
   @Get('applicants/:memberId/profile')
   async getMemberProfile(@Req() req: any, @Param('memberId') memberId: string) {

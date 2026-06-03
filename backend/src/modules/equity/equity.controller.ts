@@ -4,6 +4,7 @@ import {
 } from '@nestjs/common';
 import { EquityService } from './equity.service';
 import { AdminGuard, JwtAuthGuard, SuperAdminGuard } from '../auth/guards';
+import { CoFounderGuard } from '../cofounder/cofounder.guard';
 
 @Controller('api')
 export class EquityController {
@@ -95,6 +96,39 @@ export class EquityController {
       throw new ForbiddenException('Authenticated super-admin actor required');
     }
     return this.equityService.executeHandover(id, adminId, body?.confirm === true);
+  }
+
+  // ─── HANDOVER DUAL-APPROVAL ───────────────────────────────
+  // The 1000-day handover only unlocks once BOTH an admin and the team's assigned
+  // co-founder record a profitability/sustainability approval.
+
+  @UseGuards(AdminGuard)
+  @Get('admin/equity/companies/:id/handover-approvals')
+  getHandoverApprovals(@Param('id') id: string) {
+    return this.equityService.getHandoverApprovals(id);
+  }
+
+  @UseGuards(AdminGuard)
+  @Post('admin/equity/companies/:id/handover-approval')
+  approveHandoverAsAdmin(
+    @Param('id') id: string,
+    @Req() req: any,
+    @Body() body: { note?: string },
+  ) {
+    const adminId = req.user.id || req.user.sub;
+    return this.equityService.recordHandoverApproval(id, 'ADMIN', adminId, body?.note);
+  }
+
+  /** Co-founder approval — identity from the JWT; must be the team's assigned co-founder. */
+  @UseGuards(CoFounderGuard)
+  @Post('equity/companies/:id/handover-approval')
+  approveHandoverAsCoFounder(
+    @Param('id') id: string,
+    @Req() req: any,
+    @Body() body: { note?: string },
+  ) {
+    const coFounderId = req.user.id || req.user.sub;
+    return this.equityService.recordCoFounderHandoverApproval(id, coFounderId, body?.note);
   }
 
   @UseGuards(AdminGuard)
