@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CompanyStatus, EquityEventType } from '@prisma/client';
 
@@ -517,6 +517,23 @@ export class EquityService {
   async signAgreementFounder(agreementId: string, applicantId: string) {
     const agreement = await this.prisma.equityAgreement.findUnique({ where: { id: agreementId } });
     if (!agreement) throw new NotFoundException('Agreement not found');
+
+    // Authorization: only an active FOUNDER equity holder of THIS agreement's
+    // company may sign it. Without this check any authenticated applicant could
+    // sign (and, if the platform already signed, ACTIVATE) any company's
+    // founder agreement — a broken-access-control hole on a binding action.
+    const founderHolder = await this.prisma.equityHolder.findFirst({
+      where: {
+        companyId: agreement.companyId,
+        applicantId,
+        holderType: 'FOUNDER',
+        isActive: true,
+      },
+      select: { id: true },
+    });
+    if (!founderHolder) {
+      throw new ForbiddenException('Only a founder of this company can sign its agreement');
+    }
 
     const update: any = {
       founderSignedAt: new Date(),

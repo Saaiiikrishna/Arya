@@ -166,6 +166,7 @@ class ApiClient {
         this.request('/admin/auth/logout', { method: 'POST', body: { refreshToken: rt } }).catch(() => {});
       }
       sessionStorage.removeItem('arya_refresh');
+      sessionStorage.removeItem('arya_profile'); // clear cached user/role too
       localStorage.removeItem('arya_admin'); // legacy key cleanup
     }
     this.token = null;

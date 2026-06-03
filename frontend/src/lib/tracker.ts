@@ -27,7 +27,9 @@ function getApplicantInfo(): {
 } {
   if (typeof window === 'undefined') return {};
   try {
-    const raw = localStorage.getItem('arya_profile');
+    // Auth state lives in sessionStorage (per-tab), not localStorage — reading
+    // localStorage here always returned empty, dropping applicant attribution.
+    const raw = sessionStorage.getItem('arya_profile');
     if (raw) {
       const profile = JSON.parse(raw);
       return {
