@@ -109,7 +109,7 @@ export default function Manifesto({ onApply, batchInfo }: ManifestoProps) {
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.2 }}
-            className={`relative group p-[1px] flex items-center justify-center ${isClosed ? '' : 'overflow-hidden'}`}
+            className={`relative group p-[1px] flex items-center justify-center rounded-full ${isClosed ? '' : 'overflow-hidden'}`}
           >
             {/* Animated rotating gradient border */}
             {!isClosed && (
@@ -121,7 +121,7 @@ export default function Manifesto({ onApply, batchInfo }: ManifestoProps) {
               />
             )}
             {/* Inner Container */}
-            <div className={`relative z-10 w-full inline-flex justify-center items-center px-4 md:px-5 py-2 border ${badgeBorder} ${bgClass} cursor-default transition-colors duration-500`}>
+            <div className={`relative z-10 w-full inline-flex justify-center items-center px-4 md:px-5 py-2 border rounded-full ${badgeBorder} ${bgClass} cursor-default transition-colors duration-500`}>
               <span className="relative flex items-center justify-center h-2 w-2 mr-3 shrink-0">
                 {!isClosed && <span className={`animate-ping absolute inline-flex h-3 w-3 rounded-full opacity-60 ${dotColor}`}></span>}
                 <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${dotColor}`}></span>
@@ -400,26 +400,6 @@ export default function Manifesto({ onApply, batchInfo }: ManifestoProps) {
         initial={{ opacity: 0, y: 40 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.1 }} transition={{ duration: 0.8 }}
       >
         <div className="max-w-3xl mx-auto px-6">
-          <h3 className="text-4xl md:text-5xl font-serif italic mb-12 text-forest tracking-tighter">
-            &quot;Yatra Naryasthu Pujyanthe,<br />Ramante Tatra Devatha&quot;
-          </h3>
-
-          <motion.div
-            className="w-full max-w-lg mx-auto mb-12 relative overflow-hidden border border-hairline/20"
-            initial={{ scale: 0.95, opacity: 0 }}
-            whileInView={{ scale: 1, opacity: 1 }}
-            viewport={{ once: true, amount: 0.2 }}
-            transition={{ duration: 0.7, delay: 0.2 }}
-          >
-            <div className="absolute inset-0 bg-gradient-to-tr from-forest/20 to-transparent mix-blend-overlay z-10 pointer-events-none"></div>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/women_leadership.png"
-              alt="Representation of women leadership and respect"
-              className="w-full h-auto object-cover transform hover:scale-105 transition-transform duration-700"
-            />
-          </motion.div>
-
           <div className="w-32 h-[2px] bg-terracotta-warm mx-auto mb-12 opacity-30" />
           <p className="text-2xl md:text-3xl font-sans text-ink/80 leading-relaxed mb-6">
             We believe in empowering <span className="editorial-underline italic text-forest">women leaders.</span>

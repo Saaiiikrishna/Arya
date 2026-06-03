@@ -83,3 +83,43 @@ A specific component for this design system. It uses `headline-lg` in Newsreader
 *   **Don’t use shadows:** If an element needs to stand out, use a background color shift or a high-contrast border.
 *   **Don’t use standard "Blue" for links:** Use `primary` (Forest Green) or `tertiary` (Terracotta).
 *   **Don’t crowd the content:** If in doubt, increase the spacing. The system relies on the `16` (5.5rem) and `20` (7rem) tokens to create an expensive, airy feel.
+
+---
+
+## 7. Public Marketing Layer (Scoped Exception)
+
+> **Scope:** This section applies **only** to the public, top-of-funnel marketing surfaces:
+> the home landing (`/`), the storefront (`/store`, `/store/[slug]`, `/store/[slug]/build`),
+> and the journal (`/articles`, `/articles/[slug]`). **The application (`/hub/*`), all `/admin/*`
+> dashboards, `/apply`, `/investors`, and every authenticated/operational screen remain governed by
+> Sections 1–6 above — 0px corners, no shadows, matte CTAs. No exceptions there.**
+
+The marketing layer's job is conversion: it must feel premium, modern, and tactile to a first-time
+visitor. To do that it is permitted a small, **deliberately bounded** set of departures from Organic
+Brutalism. These are implemented as `mkt-*` utility classes in `globals.css` and are only ever used
+inside a `.mkt` wrapper, which guarantees they cannot leak into the app/admin design.
+
+### What the marketing layer MAY do
+*   **Rounded geometry:** Pills (`rounded-full`) and softly-rounded cards/containers (12–24px radius)
+    are allowed for hero badges, CTAs, feature cards, and media frames.
+*   **Glossy, not matte, CTAs:** Primary actions use a saffron→marigold gradient with an inner top
+    highlight, a soft saffron glow, and a **subtle animated sheen** that sweeps across on hover
+    (`.mkt-btn`). A secondary glass variant (`.mkt-btn-ghost`) is available.
+*   **Premium glass:** Frosted, rounded glass cards (`.mkt-card`, `.mkt-glass`) with brand-tinted
+    translucency and `backdrop-blur`.
+*   **Soft depth & glow:** Bounded `box-shadow`/glow is allowed **only** on `mkt-*` elements to sell
+    the glossy effect. Keep it tasteful (low alpha, brand-tinted).
+*   **Ambient motion:** Slow floating accents (`.mkt-float`), gradient orbs, and `motion` scroll
+    reveals. Keep every animation ≤ 700ms and **honor `prefers-reduced-motion`**.
+
+### What stays the same (even here)
+*   **Palette is unchanged:** forest / parchment / alabaster / terracotta / saffron / marigold / ink.
+    No new brand hues.
+*   **Type system is unchanged:** Newsreader / Fraunces (display) + Public Sans; labels uppercase
+    with letter-spacing.
+*   **Restraint:** Glossy/rounded is for *marketing emphasis*, not everywhere. Body surfaces still lean
+    on parchment, hairlines, and editorial typography. Don't gamify.
+
+### Rule of thumb
+If a screen requires login or is operational (admin, hub, apply, investor portal) → **Sections 1–6,
+strictly**. If a screen's job is to convince a stranger to join, buy, or read → **`.mkt` layer allowed**.
