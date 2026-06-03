@@ -130,6 +130,7 @@ enum SprintStatus {
   ON_TRACK
   DELAYED
   TRAINING
+  COMPLETED
 }
 
 enum MilestoneType {
@@ -394,6 +395,9 @@ model Team {
   matchScore       Float?    @map("match_score")
   ideaCategory     IdeaCategory? @map("idea_category")
   isLocked         Boolean       @default(false) @map("is_locked")
+  // TRAINING pause (post-90-day remediation): reason note + when it began.
+  trainingReason    String?      @db.Text @map("training_reason")
+  trainingStartedAt DateTime?    @map("training_started_at")
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
@@ -499,6 +503,10 @@ model Sprint {
   id         String       @id @default(uuid()) @db.Uuid
   teamId     String       @map("team_id") @db.Uuid
   status     SprintStatus @default(ON_TRACK)
+  // 1 = first 90 days, 2 = second 90 days. The 1000-day equity timer may only
+  // start after both sprints are COMPLETED (the first 180 days).
+  sprintNumber Int        @default(1) @map("sprint_number")
+  completedAt DateTime?   @map("completed_at")
   startDate  DateTime     @map("start_date")
   endDate    DateTime     @map("end_date")
   createdAt  DateTime     @default(now()) @map("created_at")

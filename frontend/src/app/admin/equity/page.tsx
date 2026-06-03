@@ -46,6 +46,10 @@ export default function AdminEquityPage() {
   const [filterStatus, setFilterStatus] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
 
+  // Per-holder vesting override state
+  const [vestingEdits, setVestingEdits] = useState<Record<string, string>>({});
+  const [vestingSavingId, setVestingSavingId] = useState<string | null>(null);
+
   // Create form state
   const [teams, setTeams] = useState<any[]>([]);
   const [createForm, setCreateForm] = useState({
@@ -103,6 +107,43 @@ export default function AdminEquityPage() {
       await refresh();
     } catch (e) { alert('Failed to execute handover'); console.error(e); }
     finally { setActionLoading(false); }
+  };
+
+  const recomputeVesting = async (id: string) => {
+    if (!confirm('Recompute founder vesting from the schedule? This will recalculate vested percentages for all holders.')) return;
+    setActionLoading(true);
+    try {
+      await api.recomputeVesting(id);
+      setVestingEdits({});
+      await openDetail(id);
+      await refresh();
+    } catch (e) { alert('Failed to recompute vesting'); console.error(e); }
+    finally { setActionLoading(false); }
+  };
+
+  const saveHolderVesting = async (holder: any) => {
+    const raw = vestingEdits[holder.id];
+    const value = Number(raw);
+    if (raw === undefined || raw === '' || Number.isNaN(value)) {
+      alert('Enter a valid vesting percentage');
+      return;
+    }
+    const max = Number(holder.equityPct);
+    if (value < 0 || value > max) {
+      alert(`Vesting must be between 0 and ${max}% (the holder's equity stake)`);
+      return;
+    }
+    setVestingSavingId(holder.id);
+    try {
+      await api.setHolderVesting(holder.id, value);
+      setVestingEdits(prev => {
+        const next = { ...prev };
+        delete next[holder.id];
+        return next;
+      });
+      if (selectedId) await openDetail(selectedId);
+    } catch (e) { alert('Failed to update holder vesting'); console.error(e); }
+    finally { setVestingSavingId(null); }
   };
 
   const handleCreate = async () => {
@@ -361,6 +402,15 @@ export default function AdminEquityPage() {
                     {detail.sector && <div className="mt-1 text-xs text-ink/50">Sector: {detail.sector}</div>}
                   </div>
                   <div className="flex gap-2">
+                    {detail.status !== 'HANDED_OVER' && detail.status !== 'DISSOLVED' && (
+                      <button
+                        onClick={() => recomputeVesting(detail.id)}
+                        disabled={actionLoading}
+                        className="px-4 py-2 border border-forest text-forest text-[10px] uppercase tracking-widest font-bold hover:bg-forest hover:text-parchment transition-colors disabled:opacity-50 flex items-center gap-2"
+                      >
+                        <TrendingUp className="w-3 h-3" /> Recompute Vesting
+                      </button>
+                    )}
                     {!detail.timerStartDate && detail.status !== 'HANDED_OVER' && (
                       <button
                         onClick={() => startTimer(detail.id)}
@@ -441,19 +491,44 @@ export default function AdminEquityPage() {
                 {/* Holders table */}
                 <div className="border border-hairline bg-white p-6">
                   <h3 className="font-serif text-lg font-bold mb-4">Equity Holders</h3>
-                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                  <div className="space-y-2 max-h-80 overflow-y-auto">
                     {detail.equityHolders?.map((h: any) => (
-                      <div key={h.id} className={`flex items-center justify-between p-3 border border-hairline text-sm ${!h.isActive ? 'opacity-40' : ''}`}>
-                        <div>
-                          <span className="font-bold">{h.holderName}</span>
-                          <span className={`ml-2 px-1.5 py-0.5 text-[8px] uppercase tracking-widest font-bold border ${
-                            h.holderType === 'PLATFORM' ? 'bg-forest/10 text-forest border-forest/20' : 'bg-terracotta-warm/10 text-terracotta-warm border-terracotta-warm/20'
-                          }`}>{h.holderType}</span>
+                      <div key={h.id} className={`p-3 border border-hairline text-sm ${!h.isActive ? 'opacity-40' : ''}`}>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="font-bold">{h.holderName}</span>
+                            <span className={`ml-2 px-1.5 py-0.5 text-[8px] uppercase tracking-widest font-bold border ${
+                              h.holderType === 'PLATFORM' ? 'bg-forest/10 text-forest border-forest/20' : 'bg-terracotta-warm/10 text-terracotta-warm border-terracotta-warm/20'
+                            }`}>{h.holderType}</span>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-serif font-bold">{h.equityPct}%</div>
+                            <div className="text-[9px] text-ink/40">{h.vestedPct}% vested</div>
+                          </div>
                         </div>
-                        <div className="text-right">
-                          <div className="font-serif font-bold">{h.equityPct}%</div>
-                          <div className="text-[9px] text-ink/40">{h.vestedPct}% vested</div>
-                        </div>
+                        {h.isActive && (
+                          <div className="mt-3 pt-3 border-t border-hairline/60 flex items-center gap-2">
+                            <label className="text-[9px] uppercase tracking-widest text-ink/40 font-bold whitespace-nowrap">Set Vested %</label>
+                            <input
+                              type="number"
+                              min={0}
+                              max={h.equityPct}
+                              step="0.01"
+                              placeholder={String(h.vestedPct)}
+                              value={vestingEdits[h.id] ?? ''}
+                              onChange={e => setVestingEdits(prev => ({ ...prev, [h.id]: e.target.value }))}
+                              className="w-20 border border-hairline px-2 py-1.5 text-xs focus:outline-none focus:border-forest"
+                            />
+                            <span className="text-[9px] text-ink/30 whitespace-nowrap">of {h.equityPct}%</span>
+                            <button
+                              onClick={() => saveHolderVesting(h)}
+                              disabled={vestingSavingId === h.id || (vestingEdits[h.id] ?? '') === ''}
+                              className="ml-auto px-3 py-1.5 bg-forest text-parchment text-[9px] uppercase tracking-widest font-bold hover:bg-forest/90 disabled:opacity-40 transition-colors"
+                            >
+                              {vestingSavingId === h.id ? 'Saving…' : 'Save'}
+                            </button>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

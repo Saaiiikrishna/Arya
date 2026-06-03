@@ -444,6 +444,9 @@ export class ApplicantService {
           isLeader: team.leaderId === m.id,
         })),
         leaderId: team.leaderId,
+        // TRAINING pause context for the Hub banner.
+        trainingReason: team.trainingReason || null,
+        trainingStartedAt: team.trainingStartedAt || null,
         activeElection: team.elections?.[0] || null,
         pendingRequests: team.requests || [],
       } : null,

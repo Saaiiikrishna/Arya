@@ -395,6 +395,19 @@ class ApiClient {
     return this.request<any>(`/admin/teams/form/${batchId}`, { method: 'POST' });
   }
 
+  // Team lifecycle (admin): TRAINING pause / reactivate / remove.
+  async moveTeamToTraining(teamId: string, reason: string) {
+    return this.request<any>(`/admin/teams/${teamId}/training`, { method: 'PUT', body: { reason } });
+  }
+
+  async reactivateTeam(teamId: string) {
+    return this.request<any>(`/admin/teams/${teamId}/reactivate`, { method: 'PUT' });
+  }
+
+  async removeTeam(teamId: string) {
+    return this.request<any>(`/admin/teams/${teamId}`, { method: 'DELETE' });
+  }
+
   // Smart Matching (Phase 2)
   async previewMatch(batchId: string, config?: any) {
     return this.request<any>(`/admin/matching/preview/${batchId}`, { method: 'POST', body: config });
@@ -882,6 +895,15 @@ class ApiClient {
 
   async updateEquityTimers() {
     return this.request<any>('/admin/equity/update-timers', { method: 'POST' });
+  }
+
+  // Founder vesting (admin): recompute from the schedule, or override one holder.
+  async recomputeVesting(companyId: string) {
+    return this.request<any>(`/admin/equity/companies/${companyId}/recompute-vesting`, { method: 'POST' });
+  }
+
+  async setHolderVesting(holderId: string, vestedPct: number) {
+    return this.request<any>(`/admin/equity/holders/${holderId}/vesting`, { method: 'PATCH', body: { vestedPct } });
   }
 
   async createEquityAgreement(body: {

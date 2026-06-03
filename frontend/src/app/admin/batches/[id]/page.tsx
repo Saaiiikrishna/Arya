@@ -138,6 +138,50 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
     }
   };
 
+  const handleMoveTeamToTraining = async (teamId: string) => {
+    const reason = prompt('Reason for moving this team to Training (required):');
+    if (reason === null) return;
+    const trimmed = reason.trim();
+    if (!trimmed) {
+      alert('A reason is required to move a team to Training.');
+      return;
+    }
+    setActionLoading(`training-${teamId}`);
+    try {
+      await api.moveTeamToTraining(teamId, trimmed);
+      await loadData();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setActionLoading('');
+    }
+  };
+
+  const handleReactivateTeam = async (teamId: string) => {
+    setActionLoading(`reactivate-${teamId}`);
+    try {
+      await api.reactivateTeam(teamId);
+      await loadData();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setActionLoading('');
+    }
+  };
+
+  const handleRemoveTeam = async (teamId: string) => {
+    if (!confirm('Remove this team? This cannot be undone.')) return;
+    setActionLoading(`remove-team-${teamId}`);
+    try {
+      await api.removeTeam(teamId);
+      await loadData();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setActionLoading('');
+    }
+  };
+
   const handleStartBatchElections = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!confirm('This will start a leadership election for ALL teams in this batch. Continue?')) return;
@@ -283,6 +327,16 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
                     {team._count?.members || team.members?.length || 0} members
                   </span>
                 </div>
+                {team.trainingStartedAt && (
+                  <div className="mb-4 bg-terracotta/10 border border-terracotta/30 px-3 py-2">
+                    <span className="text-[10px] uppercase tracking-widest font-bold text-terracotta">
+                      ⏸ In Training
+                    </span>
+                    {team.trainingReason && (
+                      <p className="text-xs text-ink/60 italic mt-1">{team.trainingReason}</p>
+                    )}
+                  </div>
+                )}
                 {team.members && team.members.slice(0, 5).map((m: any) => (
                   <div key={m.id} className="text-sm text-ink/60 py-1 border-b border-hairline/50 last:border-0">
                     {m.firstName} {m.lastName}
@@ -292,6 +346,32 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
                   <div className="text-xs text-ink/40 mt-2 uppercase tracking-widest">+{team.members.length - 5} more</div>
                 )}
                 <AdminElectionControls teamId={team.id} />
+                <div className="mt-4 pt-4 border-t border-hairline flex flex-wrap gap-2">
+                  {team.trainingStartedAt ? (
+                    <button
+                      onClick={() => handleReactivateTeam(team.id)}
+                      disabled={!!actionLoading}
+                      className="text-[10px] uppercase tracking-widest font-bold text-forest border border-forest/30 px-3 py-1.5 hover:bg-forest hover:text-white transition-colors disabled:opacity-50"
+                    >
+                      {actionLoading === `reactivate-${team.id}` ? 'Reactivating...' : 'Reactivate'}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleMoveTeamToTraining(team.id)}
+                      disabled={!!actionLoading}
+                      className="text-[10px] uppercase tracking-widest font-bold text-terracotta border border-terracotta/30 px-3 py-1.5 hover:bg-terracotta hover:text-white transition-colors disabled:opacity-50"
+                    >
+                      {actionLoading === `training-${team.id}` ? 'Moving...' : 'Move to Training'}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleRemoveTeam(team.id)}
+                    disabled={!!actionLoading}
+                    className="text-[10px] uppercase tracking-widest font-bold text-ink/50 border border-ink/20 px-3 py-1.5 hover:bg-ink hover:text-white transition-colors disabled:opacity-50"
+                  >
+                    {actionLoading === `remove-team-${team.id}` ? 'Removing...' : 'Remove Team'}
+                  </button>
+                </div>
               </div>
             ))}
           </div>

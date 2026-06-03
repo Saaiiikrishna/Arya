@@ -171,6 +171,9 @@ export class WhatsappService {
   sendTeamAssignment(to: string, name: string, teamName: string, mentorName: string, applicantId?: string) {
     return this.notify(to, 'team_assignment', this.body(name, teamName, mentorName), applicantId, 'Team Assignment');
   }
+  sendTeamTraining(to: string, firstName: string, reason: string, applicantId?: string) {
+    return this.notify(to, 'team_training', this.body(firstName, reason), applicantId, 'Team Training');
+  }
   sendDeadlineReminder(to: string, name: string, deadlineName: string, daysLeft: string, date: string, applicantId?: string) {
     return this.notify(to, 'deadline_reminder', this.body(name, deadlineName, daysLeft, date), applicantId, 'Deadline Reminder');
   }

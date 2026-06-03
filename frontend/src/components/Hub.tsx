@@ -65,11 +65,22 @@ export default function Hub() {
 
   const firstName = applicant?.firstName || user?.firstName || 'Founder';
 
+  // The hub payload wraps the sprint in an envelope: sprint.status is the
+  // synthetic lifecycle state ('AWAITING_TEAM' | 'IDEATION' | 'ACTIVE') while
+  // sprint.phase carries the real SprintStatus enum (ON_TRACK | DELAYED |
+  // TRAINING | COMPLETED). A sprint is "in progress" only when the envelope is
+  // ACTIVE *and* the phase is still running — TRAINING is paused and COMPLETED
+  // is done, so neither should render the live milestone timeline.
+  const sprintInProgress =
+    !!sprint &&
+    sprint.status === 'ACTIVE' &&
+    (sprint.phase === 'ON_TRACK' || sprint.phase === 'DELAYED');
+
   // Sprint display logic
   const renderSprintHeader = () => {
     if (!sprint) return null;
-    
-    if (sprint.status === 'ACTIVE') {
+
+    if (sprintInProgress) {
       return (
         <div className="text-right">
           <p className="text-3xl font-serif text-saffron-deep mb-1">
@@ -158,6 +169,27 @@ export default function Hub() {
                 <p className="text-sm text-ink/60 leading-relaxed">
                   Your seat is secured. You are now awaiting team formation — you will be assigned to a team once the admissions committee finalizes batch rosters.
                 </p>
+              </div>
+            </div>
+          )}
+
+          {/* Training pause — team paused between the two 90-day sprints to regroup */}
+          {applicant?.status === 'TRAINING' && (
+            <div className="mb-8 bg-saffron-glow/15 border border-marigold/40 border-l-4 border-l-saffron p-5 flex items-start gap-3 animate-fade-in">
+              <Award className="w-5 h-5 text-saffron-deep flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-serif text-lg font-bold text-saffron-deep mb-1">You&apos;re in a Training Pause</p>
+                <p className="text-sm text-ink/70 leading-relaxed">
+                  Your team has been placed in a training pause between sprints — a chance to regroup,
+                  sharpen the idea, and come back stronger for the next 90-day sprint. This is not a setback;
+                  it&apos;s dedicated time to build the foundations that make the next sprint count.
+                </p>
+                {team?.trainingReason && (
+                  <p className="text-sm text-ink/60 leading-relaxed mt-3">
+                    <span className="text-[12px] uppercase tracking-widest text-saffron-deep/80 font-bold">Focus for this pause:&nbsp;</span>
+                    {team.trainingReason}
+                  </p>
+                )}
               </div>
             </div>
           )}
@@ -295,7 +327,7 @@ export default function Hub() {
                   90-Day Sprint
                 </h2>
                 <div className="bg-white border border-hairline p-6 relative">
-                  {sprint?.status === 'ACTIVE' && sprint.milestones && sprint.milestones.length > 0 ? (
+                  {sprintInProgress && sprint.milestones && sprint.milestones.length > 0 ? (
                     <>
                       <div className="absolute left-[39px] top-6 bottom-6 w-[2px] bg-ink/10">
                         <div className="w-full bg-saffron" style={{ height: `${(sprint.milestones.filter((m: any) => m.isCompleted).length / sprint.milestones.length) * 100}%` }} />
@@ -366,7 +398,7 @@ export default function Hub() {
                     </div>
                     <div className="flex justify-between items-center pt-4 border-t border-ink/30">
                       <p className="text-sm text-ink/40">
-                        {sprint?.status === 'ACTIVE' ? 'Sprint in progress' : 'Sprint not started'}
+                        {sprintInProgress ? 'Sprint in progress' : 'Sprint not started'}
                       </p>
                       <button
                         disabled

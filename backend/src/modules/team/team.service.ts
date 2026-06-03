@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, Logger, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma';
 import { NotificationService } from '../notifications/notification.service';
-import { ApplicantStatus, DepartmentRole, TeamRequestStatus } from '@prisma/client';
+import { ApplicantStatus, DepartmentRole, TeamRequestStatus, SprintStatus } from '@prisma/client';
 
 const ADMIN_ROLES = ['ADMIN', 'SUPER_ADMIN', 'MODERATOR'];
 const RESOLVABLE_STATUSES: TeamRequestStatus[] = ['APPROVED', 'REJECTED'];
@@ -373,6 +373,140 @@ export class TeamService {
       where: { id: teamId },
       data: { isLocked: true },
     });
+  }
+
+  // ─── Training lifecycle (admin) ───────────────────────────
+
+  /**
+   * Pause a team into TRAINING (post-90-day remediation): move every non-REMOVED
+   * member to TRAINING, flip the current (most recent non-COMPLETED) sprint to
+   * TRAINING, and stamp the team's reason + start time. Requires a reason.
+   * Member notifications fire best-effort after commit and never block.
+   */
+  async moveToTraining(teamId: string, reason: string, adminId: string) {
+    const trimmed = (reason ?? '').trim();
+    if (!trimmed) throw new BadRequestException('A reason is required to move a team to training');
+
+    const team = await this.prisma.team.findUnique({ where: { id: teamId } });
+    if (!team) throw new NotFoundException('Team not found');
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.applicant.updateMany({
+        where: { teamId, status: { not: ApplicantStatus.REMOVED } },
+        data: { status: ApplicantStatus.TRAINING },
+      });
+
+      // Current sprint = most recent by startDate that is not yet COMPLETED.
+      const currentSprint = await tx.sprint.findFirst({
+        where: { teamId, status: { not: SprintStatus.COMPLETED } },
+        orderBy: { startDate: 'desc' },
+      });
+      if (currentSprint) {
+        await tx.sprint.update({
+          where: { id: currentSprint.id },
+          data: { status: SprintStatus.TRAINING },
+        });
+      }
+
+      await tx.team.update({
+        where: { id: teamId },
+        data: { trainingReason: trimmed, trainingStartedAt: new Date() },
+      });
+    });
+
+    this.logger.log(`Team ${teamId} moved to TRAINING by admin ${adminId}`);
+
+    // Best-effort, non-blocking fan-out after commit.
+    void this.notifyTeamTraining(teamId, trimmed);
+
+    return { teamId, status: 'TRAINING', reason: trimmed };
+  }
+
+  /**
+   * Best-effort post-commit fan-out: notify every (now-TRAINING) member that
+   * their team was paused. Never throws — failures are logged.
+   */
+  private async notifyTeamTraining(teamId: string, reason: string): Promise<void> {
+    try {
+      const members = await this.prisma.applicant.findMany({
+        where: { teamId, status: ApplicantStatus.TRAINING },
+        select: { id: true, email: true, firstName: true, phone: true },
+      });
+      await Promise.allSettled(
+        members.map((member) => this.notifications.teamTraining(member, reason)),
+      );
+    } catch (e) {
+      this.logger.error(`team-training notifications failed: ${(e as any)?.message}`);
+    }
+  }
+
+  /**
+   * Reactivate a team out of TRAINING: restore members from TRAINING to ACTIVE,
+   * flip the TRAINING sprint back to ON_TRACK, and clear the team's training note.
+   */
+  async reactivateFromTraining(teamId: string, adminId: string) {
+    const team = await this.prisma.team.findUnique({ where: { id: teamId } });
+    if (!team) throw new NotFoundException('Team not found');
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.applicant.updateMany({
+        where: { teamId, status: ApplicantStatus.TRAINING },
+        data: { status: ApplicantStatus.ACTIVE },
+      });
+
+      await tx.sprint.updateMany({
+        where: { teamId, status: SprintStatus.TRAINING },
+        data: { status: SprintStatus.ON_TRACK },
+      });
+
+      await tx.team.update({
+        where: { id: teamId },
+        data: { trainingReason: null, trainingStartedAt: null },
+      });
+    });
+
+    this.logger.log(`Team ${teamId} reactivated from TRAINING by admin ${adminId}`);
+
+    return { teamId, status: 'ACTIVE' };
+  }
+
+  /**
+   * Remove a team: mark every non-REMOVED member REMOVED (stamp removedAt) and
+   * decrement the batch's currentCount by the number actually removed, clamped
+   * so the count can never go negative.
+   */
+  async removeTeam(teamId: string, adminId: string) {
+    const team = await this.prisma.team.findUnique({ where: { id: teamId } });
+    if (!team) throw new NotFoundException('Team not found');
+
+    const removedCount = await this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.applicant.updateMany({
+        where: { teamId, status: { not: ApplicantStatus.REMOVED } },
+        data: { status: ApplicantStatus.REMOVED, removedAt: new Date() },
+      });
+
+      if (count > 0) {
+        const batch = await tx.batch.findUnique({
+          where: { id: team.batchId },
+          select: { currentCount: true },
+        });
+        if (batch) {
+          const decrement = Math.min(count, batch.currentCount);
+          if (decrement > 0) {
+            await tx.batch.update({
+              where: { id: team.batchId },
+              data: { currentCount: { decrement } },
+            });
+          }
+        }
+      }
+
+      return count;
+    });
+
+    this.logger.log(`Team ${teamId} removed (${removedCount} members) by admin ${adminId}`);
+
+    return { teamId, removedCount };
   }
 
   // ─── Team Requests ────────────────────────────────────────

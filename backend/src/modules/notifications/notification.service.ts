@@ -81,6 +81,13 @@ export class NotificationService {
     ]);
   }
 
+  async teamTraining(a: NotifiableApplicant, reason: string) {
+    await Promise.allSettled([
+      this.email1(a.email, 'team-training', { firstName: a.firstName, reason, hubUrl: this.hub() }, a.id),
+      a.phone ? this.whatsapp.sendTeamTraining(a.phone, a.firstName, reason, a.id) : Promise.resolve(false),
+    ]);
+  }
+
   async batchFilled(a: NotifiableApplicant) {
     await this.email1(a.email, 'batch-filled', { firstName: a.firstName, filledBatchNumber: this.bn(a), batchNumber: this.bn(a), batchUrl: this.hub() }, a.id);
   }

@@ -9,12 +9,33 @@ export class SprintService {
 
   async createSprint(createSprintDto: CreateSprintDto) {
     const { teamId, title, startDate, endDate } = createSprintDto;
+    // sprintNumber is derived, never client-supplied: the first sprint a team
+    // creates is 1, the second is 2 (the two 90-day sprints = first 180 days).
+    const existingCount = await this.prisma.sprint.count({ where: { teamId } });
     return this.prisma.sprint.create({
       data: {
         teamId,
+        sprintNumber: existingCount + 1,
         startDate,
         endDate,
       },
+      include: { milestones: true },
+    });
+  }
+
+  /**
+   * Marks a sprint COMPLETED and stamps completedAt. Idempotent: a sprint that
+   * is already COMPLETED is returned unchanged. The 1000-day equity timer gate
+   * keys off sprints with status COMPLETED, so this sets exactly that.
+   */
+  async completeSprint(sprintId: string, _adminId?: string) {
+    const sprint = await this.prisma.sprint.findUnique({ where: { id: sprintId } });
+    if (!sprint) throw new NotFoundException('Sprint not found');
+    if (sprint.status === 'COMPLETED') return sprint;
+
+    return this.prisma.sprint.update({
+      where: { id: sprintId },
+      data: { status: 'COMPLETED', completedAt: new Date() },
       include: { milestones: true },
     });
   }

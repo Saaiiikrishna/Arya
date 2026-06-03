@@ -1,10 +1,11 @@
 import {
   Controller, Get, Post, Patch, Body, Param, Query, UseGuards, Req,
+  BadRequestException,
 } from '@nestjs/common';
 import { EquityService } from './equity.service';
 import { AdminGuard, JwtAuthGuard, SuperAdminGuard } from '../auth/guards';
 
-@Controller()
+@Controller('api')
 export class EquityController {
   constructor(private readonly equityService: EquityService) {}
 
@@ -125,6 +126,29 @@ export class EquityController {
     return this.equityService.signAgreementFounder(id, applicantId);
   }
 
+  // ─── VESTING ENDPOINTS ────────────────────────────────────
+
+  @UseGuards(AdminGuard)
+  @Post('admin/equity/companies/:id/recompute-vesting')
+  recomputeVesting(@Param('id') id: string) {
+    return this.equityService.computeVesting(id);
+  }
+
+  @UseGuards(AdminGuard)
+  @Patch('admin/equity/holders/:holderId/vesting')
+  setHolderVesting(
+    @Param('holderId') holderId: string,
+    @Req() req: any,
+    @Body() body: { vestedPct?: number },
+  ) {
+    const vestedPct = body?.vestedPct;
+    if (typeof vestedPct !== 'number' || !Number.isFinite(vestedPct)) {
+      throw new BadRequestException('vestedPct must be a number');
+    }
+    const triggeredBy = req.user.id || req.user.sub;
+    return this.equityService.setHolderVesting(holderId, vestedPct, triggeredBy);
+  }
+
   // ─── EQUITY EVENT ENDPOINT ────────────────────────────────
 
   @UseGuards(AdminGuard)
@@ -136,6 +160,8 @@ export class EquityController {
       eventType: any;
       fromHolder?: string;
       toHolder?: string;
+      fromHolderId?: string;
+      toHolderId?: string;
       percentageAmount: number;
       description: string;
       metadata?: any;

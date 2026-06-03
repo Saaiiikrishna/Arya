@@ -272,6 +272,19 @@ async function main() {
         <p>Best regards,<br/>The Aryavartham Team</p>
       `,
     },
+    {
+      slug: 'team-training',
+      subject: 'An important update on your team\'s journey',
+      body: `
+        <h2>Hi {{firstName}},</h2>
+        <p>Your team has been moved into a <strong>training pause</strong> so you can regroup, sharpen your idea, and come back stronger for the next sprint.</p>
+        <p><strong>Reason:</strong> {{reason}}</p>
+        <p>This is a step forward, not a setback. Use this time to address the feedback above — our team will work with you on next steps.</p>
+        <p><a href="{{hubUrl}}">Go to your Hub →</a></p>
+        <br/>
+        <p>Best regards,<br/>The Aryavartham Team</p>
+      `,
+    },
   ];
 
   for (const template of templates) {
