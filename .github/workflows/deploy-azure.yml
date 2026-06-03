@@ -114,7 +114,12 @@ jobs:
                 "RAZORPAY_KEY_SECRET=${{ secrets.RAZORPAY_KEY_SECRET }}" \
                 "RAZORPAY_WEBHOOK_SECRET=${{ secrets.RAZORPAY_WEBHOOK_SECRET }}" \
                 "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}" \
-                "GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}"
+                "GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}" \
+                "WHATSAPP_API_TOKEN=${{ secrets.WHATSAPP_API_TOKEN }}" \
+                "WHATSAPP_PHONE_ID=${{ secrets.WHATSAPP_PHONE_ID }}" \
+                "WHATSAPP_WABA_ID=${{ secrets.WHATSAPP_WABA_ID }}" \
+                "WHATSAPP_VERIFY_TOKEN=${{ secrets.WHATSAPP_VERIFY_TOKEN }}" \
+                "WHATSAPP_APP_SECRET=${{ secrets.WHATSAPP_APP_SECRET }}"
           else
             az containerapp create \
               --name arya-backend-api \
@@ -150,7 +155,12 @@ jobs:
                 "RAZORPAY_KEY_SECRET=${{ secrets.RAZORPAY_KEY_SECRET }}" \
                 "RAZORPAY_WEBHOOK_SECRET=${{ secrets.RAZORPAY_WEBHOOK_SECRET }}" \
                 "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}" \
-                "GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}"
+                "GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}" \
+                "WHATSAPP_API_TOKEN=${{ secrets.WHATSAPP_API_TOKEN }}" \
+                "WHATSAPP_PHONE_ID=${{ secrets.WHATSAPP_PHONE_ID }}" \
+                "WHATSAPP_WABA_ID=${{ secrets.WHATSAPP_WABA_ID }}" \
+                "WHATSAPP_VERIFY_TOKEN=${{ secrets.WHATSAPP_VERIFY_TOKEN }}" \
+                "WHATSAPP_APP_SECRET=${{ secrets.WHATSAPP_APP_SECRET }}"
           fi
 
       - name: Get Backend URL

@@ -107,7 +107,11 @@ export class NotificationService {
         { firstName: a.firstName, cohortNumber: String(cohortNumber ?? ''), hubUrl: this.hub() },
         a.id,
       ),
-      a.phone ? this.whatsapp.sendInterviewDecision(a.phone, selected, a.firstName, String(cohortNumber ?? ''), a.id) : Promise.resolve(false),
+      a.phone
+        ? (selected
+            ? this.whatsapp.sendInterviewSelected(a.phone, a.firstName, String(cohortNumber ?? ''), a.id)
+            : this.whatsapp.sendInterviewRejected(a.phone, a.firstName, a.id))
+        : Promise.resolve(false),
     ]);
   }
 
@@ -127,7 +131,7 @@ export class NotificationService {
   async otpWhatsApp(phone: string | null | undefined, otp: string) {
     if (!phone) return;
     try {
-      await this.whatsapp.sendOtpWhatsApp(phone, otp);
+      await this.whatsapp.sendOtp(phone, otp);
     } catch (e) {
       this.logger.error(`WhatsApp OTP failed: ${(e as any)?.message}`);
     }
@@ -137,7 +141,7 @@ export class NotificationService {
   async platformAnnouncement(a: NotifiableApplicant, title: string, message: string) {
     if (!a.phone) return;
     try {
-      await this.whatsapp.sendPlatformAnnouncement(a.phone, title, message, a.id);
+      await this.whatsapp.sendAnnouncement(a.phone, title, message, a.id);
     } catch (e) {
       this.logger.error(`WhatsApp announcement failed: ${(e as any)?.message}`);
     }

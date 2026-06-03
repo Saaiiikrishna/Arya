@@ -233,9 +233,17 @@ export class AuthService {
       const applicant = await this.prisma.applicant.findUnique({ where: { id: payload.sub } });
       if (!applicant) throw new UnauthorizedException('User not found');
       newPayload = { sub: applicant.id, email: applicant.email, role: 'APPLICANT' };
+    } else if (payload.role === 'MENTOR') {
+      const mentor = await (this.prisma as any).mentor.findUnique({ where: { id: payload.sub } });
+      if (!mentor || !mentor.isActive) throw new UnauthorizedException('Mentor not found or inactive');
+      newPayload = { sub: mentor.id, email: mentor.email, role: 'MENTOR' };
+    } else if (payload.role === 'COFOUNDER') {
+      const cf = await (this.prisma as any).coFounder.findUnique({ where: { id: payload.sub } });
+      if (!cf || !cf.isActive) throw new UnauthorizedException('Co-founder not found or inactive');
+      newPayload = { sub: cf.id, email: cf.email, role: 'COFOUNDER' };
     } else if (payload.role === 'INVESTOR') {
       const investor = await this.prisma.investor.findUnique({ where: { id: payload.sub } });
-      if (!investor || !investor.isApproved) throw new UnauthorizedException('User not found or not approved');
+      if (!investor || !investor.isApproved) throw new UnauthorizedException('Investor not found or not approved');
       newPayload = { sub: investor.id, email: investor.email, role: 'INVESTOR' };
     } else {
       const admin = await this.prisma.admin.findUnique({ where: { id: payload.sub } });
@@ -314,31 +322,31 @@ export class AuthService {
 
   async validateUser(payload: JwtPayload) {
     if (payload.role === 'APPLICANT') {
-      const applicant = await this.prisma.applicant.findUnique({
-        where: { id: payload.sub },
-      });
+      const applicant = await this.prisma.applicant.findUnique({ where: { id: payload.sub } });
       if (!applicant) throw new UnauthorizedException('Applicant not found');
       return { ...applicant, role: 'APPLICANT' };
     }
 
+    if (payload.role === 'MENTOR') {
+      const mentor = await (this.prisma as any).mentor.findUnique({ where: { id: payload.sub } });
+      if (!mentor || !mentor.isActive) throw new UnauthorizedException('Mentor not found or inactive');
+      return { ...mentor, role: 'MENTOR' };
+    }
+
+    if (payload.role === 'COFOUNDER') {
+      const coFounder = await (this.prisma as any).coFounder.findUnique({ where: { id: payload.sub } });
+      if (!coFounder || !coFounder.isActive) throw new UnauthorizedException('Co-founder not found or inactive');
+      return { ...coFounder, role: 'COFOUNDER' };
+    }
+
     if (payload.role === 'INVESTOR') {
-      const investor = await this.prisma.investor.findUnique({
-        where: { id: payload.sub },
-      });
-      if (!investor || !investor.isApproved) {
-        throw new UnauthorizedException('Investor not found or not approved');
-      }
+      const investor = await this.prisma.investor.findUnique({ where: { id: payload.sub } });
+      if (!investor || !investor.isApproved) throw new UnauthorizedException('Investor not found or not approved');
       return { ...investor, role: 'INVESTOR' };
     }
 
-    const admin = await this.prisma.admin.findUnique({
-      where: { id: payload.sub },
-    });
-
-    if (!admin || !admin.isActive) {
-      throw new UnauthorizedException('Admin not found or inactive');
-    }
-
+    const admin = await this.prisma.admin.findUnique({ where: { id: payload.sub } });
+    if (!admin || !admin.isActive) throw new UnauthorizedException('Admin not found or inactive');
     return admin;
   }
 

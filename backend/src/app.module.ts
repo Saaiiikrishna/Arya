@@ -35,6 +35,9 @@ import { RewardsModule } from './modules/rewards/rewards.module';
 import { InterviewModule } from './modules/interview/interview.module';
 import { NotificationModule } from './modules/notifications/notification.module';
 import { AutomationModule } from './modules/automation/automation.module';
+import { MentorModule } from './modules/mentor';
+import { CoFounderModule } from './modules/cofounder/cofounder.module';
+import { DocumentaryModule } from './modules/documentary/documentary.module';
 
 /**
  * Fail-fast environment validation. Signing secrets must ALWAYS be strong
@@ -153,6 +156,9 @@ function validateEnv(config: Record<string, unknown>): Record<string, unknown> {
     InterviewModule,
     NotificationModule,
     AutomationModule,
+    MentorModule,
+    CoFounderModule,
+    DocumentaryModule,
   ],
   providers: [
     // Apply rate limiting globally; per-route @Throttle still tunes the tiers.

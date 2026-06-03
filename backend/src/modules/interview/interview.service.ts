@@ -293,6 +293,7 @@ export class InterviewService {
       throw new BadRequestException('Applicant is not assigned to a batch');
     }
 
+    if (!applicant.batchId) throw new BadRequestException('Applicant is not assigned to a batch');
     return this.prisma.videoSubmission.upsert({
       where: { applicantId },
       create: { applicantId, batchId: applicant.batchId, videoUrl1, videoUrl2, videoUrl3 },

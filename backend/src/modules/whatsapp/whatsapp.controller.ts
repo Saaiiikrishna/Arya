@@ -4,197 +4,29 @@ import {
   Post,
   Body,
   Query,
-  Res,
   Req,
+  Res,
+  Headers,
   UseGuards,
-  Logger,
   HttpCode,
   HttpStatus,
+  BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
-import type { Response, Request } from 'express';
-import * as crypto from 'crypto';
-import { ConfigService } from '@nestjs/config';
+import type { RawBodyRequest } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import { WhatsappService } from './whatsapp.service';
-import { AdminGuard } from '../auth/guards';
-import { PrismaService } from '../../prisma';
+import { AdminGuard } from '../auth/guards/admin.guard';
 
-// ─── Template Registry ─────────────────────────────────────────────────────
-// Each entry describes a Meta-approved template and its parameter layout.
-// This is the single source of truth referenced by the admin UI and broadcasts.
-export const WHATSAPP_TEMPLATES = [
-  // ── AUTHENTICATION ──────────────────────────────────────────────────────
-  {
-    name: 'otp_verification',
-    category: 'AUTHENTICATION',
-    description: 'OTP delivery',
-    params: [{ index: 1, label: 'OTP code' }],
-  },
-  // ── UTILITY ─────────────────────────────────────────────────────────────
-  {
-    name: 'welcome_founders_club',
-    category: 'UTILITY',
-    description: 'New applicant welcome message',
-    params: [{ index: 1, label: 'first name' }],
-  },
-  {
-    name: 'application_received',
-    category: 'UTILITY',
-    description: 'Application confirmation',
-    params: [{ index: 1, label: 'first name' }],
-  },
-  {
-    name: 'interview_scheduled',
-    category: 'UTILITY',
-    description: 'Interview booking',
-    params: [
-      { index: 1, label: 'name' },
-      { index: 2, label: 'date' },
-      { index: 3, label: 'time' },
-      { index: 4, label: 'meet link' },
-    ],
-  },
-  {
-    name: 'interview_decision_selected',
-    category: 'UTILITY',
-    description: 'Selection notification',
-    params: [
-      { index: 1, label: 'name' },
-      { index: 2, label: 'cohort number' },
-    ],
-  },
-  {
-    name: 'interview_decision_rejected',
-    category: 'UTILITY',
-    description: 'Rejection notification',
-    params: [{ index: 1, label: 'name' }],
-  },
-  {
-    name: 'team_assignment',
-    category: 'UTILITY',
-    description: 'Team formation',
-    params: [
-      { index: 1, label: 'name' },
-      { index: 2, label: 'team name' },
-      { index: 3, label: 'mentor name' },
-    ],
-  },
-  {
-    name: 'team_lock_confirmation',
-    category: 'UTILITY',
-    description: 'Team locked notification',
-    params: [
-      { index: 1, label: 'name' },
-      { index: 2, label: 'team name' },
-    ],
-  },
-  {
-    name: 'mentor_assigned',
-    category: 'UTILITY',
-    description: 'Mentor assignment',
-    params: [
-      { index: 1, label: 'name' },
-      { index: 2, label: 'mentor name' },
-      { index: 3, label: 'mentor contact' },
-    ],
-  },
-  {
-    name: 'co_founder_assigned',
-    category: 'UTILITY',
-    description: 'Co-founder assignment',
-    params: [
-      { index: 1, label: 'name' },
-      { index: 2, label: 'co-founder name' },
-    ],
-  },
-  {
-    name: 'mvp_milestone_complete',
-    category: 'UTILITY',
-    description: 'MVP sprint milestone completion',
-    params: [
-      { index: 1, label: 'name' },
-      { index: 2, label: 'team name' },
-    ],
-  },
-  {
-    name: 'pitch_invitation',
-    category: 'UTILITY',
-    description: 'Investor pitch event invitation',
-    params: [
-      { index: 1, label: 'name' },
-      { index: 2, label: 'team name' },
-      { index: 3, label: 'date' },
-      { index: 4, label: 'venue' },
-    ],
-  },
-  {
-    name: 'deadline_reminder',
-    category: 'UTILITY',
-    description: 'Task deadline reminder',
-    params: [
-      { index: 1, label: 'name' },
-      { index: 2, label: 'deadline name' },
-      { index: 3, label: 'days left' },
-      { index: 4, label: 'date' },
-    ],
-  },
-  {
-    name: 'weekly_checkin_reminder',
-    category: 'UTILITY',
-    description: "Co-founder weekly check-in reminder",
-    params: [
-      { index: 1, label: 'name' },
-      { index: 2, label: 'team name' },
-    ],
-  },
-  {
-    name: 'batch_opening',
-    category: 'UTILITY',
-    description: 'New batch announcement',
-    params: [
-      { index: 1, label: 'batch number' },
-      { index: 2, label: 'application URL' },
-    ],
-  },
-  // ── MARKETING ───────────────────────────────────────────────────────────
-  {
-    name: 'platform_announcement',
-    category: 'MARKETING',
-    description: 'Admin broadcast (footer: Reply STOP to unsubscribe)',
-    params: [
-      { index: 1, label: 'title' },
-      { index: 2, label: 'message body' },
-    ],
-  },
-  {
-    name: 'referral_milestone',
-    category: 'MARKETING',
-    description: 'Referral badge earned (footer: Reply STOP to unsubscribe)',
-    params: [
-      { index: 1, label: 'name' },
-      { index: 2, label: 'referral count' },
-      { index: 3, label: 'badge name' },
-    ],
-  },
-];
-
-// ─── Controller ────────────────────────────────────────────────────────────
 @Controller('api')
 export class WhatsappController {
-  private readonly logger = new Logger(WhatsappController.name);
+  constructor(private readonly whatsappService: WhatsappService) {}
 
-  constructor(
-    private readonly whatsappService: WhatsappService,
-    private readonly configService: ConfigService,
-    private readonly prisma: PrismaService,
-  ) {}
-
-  // ─── Public Webhook ──────────────────────────────────────────────────────
+  // ─── Webhook (public — Meta calls this) ──────────────────
 
   /**
    * GET /api/whatsapp/webhook
-   * Meta calls this to verify the webhook URL during setup.
-   * It sends hub.mode=subscribe, hub.verify_token, hub.challenge.
-   * We respond with hub.challenge if the verify token matches.
+   * Meta sends a challenge during webhook verification setup.
    */
   @Get('whatsapp/webhook')
   verifyWebhook(
@@ -203,171 +35,101 @@ export class WhatsappController {
     @Query('hub.challenge') challenge: string,
     @Res() res: Response,
   ) {
-    const verifyToken = this.configService.get<string>('WHATSAPP_VERIFY_TOKEN');
-
-    if (mode === 'subscribe' && token === verifyToken) {
-      this.logger.log('WhatsApp webhook verified successfully');
-      return res.status(200).send(challenge);
+    const result = this.whatsappService.verifyWebhook(mode, token, challenge);
+    if (result !== null) {
+      res.status(200).send(result);
+    } else {
+      res.status(403).send('Forbidden');
     }
-
-    this.logger.warn(`Webhook verification failed. Received token: ${token}`);
-    return res.status(403).json({ error: 'Forbidden' });
   }
 
   /**
    * POST /api/whatsapp/webhook
-   * Receives incoming events (delivery receipts, incoming messages, status updates).
-   * We validate the HMAC signature then process asynchronously.
+   * Receives all incoming events: message status updates, user replies.
+   * Must return 200 quickly — Meta retries if it times out.
    */
   @Post('whatsapp/webhook')
   @HttpCode(HttpStatus.OK)
-  async receiveWebhook(@Req() req: Request, @Res() res: Response) {
-    // Validate HMAC signature from Meta
-    // Fail closed: a missing secret or unverifiable body must be rejected,
-    // never silently accepted as an unsigned webhook.
-    const appSecret = this.configService.get<string>('WHATSAPP_APP_SECRET');
-    if (!appSecret) {
-      this.logger.error('WHATSAPP_APP_SECRET not set; rejecting webhook');
-      return res.status(500).json({ error: 'Webhook not configured' });
+  async receiveWebhook(
+    @Body() payload: any,
+    @Req() req: RawBodyRequest<Request>,
+    @Headers('x-hub-signature-256') sig: string,
+  ) {
+    if (!this.whatsappService.validateHmac(req.rawBody ?? Buffer.alloc(0), sig ?? '')) {
+      throw new ForbiddenException('Invalid webhook signature');
     }
-
-    const signature = req.headers['x-hub-signature-256'] as string;
-    if (!signature) {
-      this.logger.warn('Missing X-Hub-Signature-256 header');
-      return res.status(403).json({ error: 'Missing signature' });
-    }
-
-    const rawBody = (req as any).rawBody as Buffer;
-    if (!rawBody) {
-      this.logger.error('Cannot verify webhook signature: rawBody unavailable');
-      return res.status(403).json({ error: 'Cannot verify signature' });
-    }
-
-    const expectedSig =
-      'sha256=' + crypto.createHmac('sha256', appSecret).update(rawBody).digest('hex');
-    try {
-      const sigBuffer = Buffer.from(signature);
-      const expectedBuffer = Buffer.from(expectedSig);
-      if (
-        sigBuffer.length !== expectedBuffer.length ||
-        !crypto.timingSafeEqual(sigBuffer, expectedBuffer)
-      ) {
-        this.logger.warn('Invalid HMAC signature on webhook');
-        return res.status(403).json({ error: 'Invalid signature' });
-      }
-    } catch {
-      return res.status(403).json({ error: 'Signature validation error' });
-    }
-
-    // Respond immediately to Meta (within 20 s requirement)
-    res.status(200).json({ received: true });
-
-    // Process the event asynchronously
-    const body = req.body;
-    this.processWebhookEvent(body);
+    // Fire-and-forget — do not await; Meta needs the 200 immediately
+    this.whatsappService.handleWebhookEvent(payload).catch(() => {});
+    return { status: 'ok' };
   }
 
-  // ─── Admin Endpoints ─────────────────────────────────────────────────────
+  // ─── Admin Endpoints ──────────────────────────────────────
 
   /**
    * GET /api/admin/whatsapp/templates
-   * Returns the full template registry so the admin UI can display
-   * exact names, categories, and parameter layouts.
+   * Returns the template registry — what templates must exist in Meta Business Manager.
    */
   @UseGuards(AdminGuard)
   @Get('admin/whatsapp/templates')
   getTemplates() {
-    return { templates: WHATSAPP_TEMPLATES };
+    return this.whatsappService.getTemplateRegistry();
+  }
+
+  /**
+   * POST /api/admin/whatsapp/broadcast
+   * Admin broadcasts a platform_announcement template to all opted-in applicants.
+   * Supports optional batchId/teamId filter.
+   */
+  @UseGuards(AdminGuard)
+  @Post('admin/whatsapp/broadcast')
+  async broadcast(@Body() dto: {
+    title: string;
+    message: string;
+    batchId?: string;
+    teamId?: string;
+  }) {
+    if (!dto.title?.trim() || !dto.message?.trim()) {
+      throw new BadRequestException('title and message are required');
+    }
+    return this.whatsappService.adminBroadcast({
+      title: dto.title,
+      message: dto.message,
+      filter: { batchId: dto.batchId, teamId: dto.teamId },
+    });
+  }
+
+  /**
+   * GET /api/admin/whatsapp/send-log
+   * Paginated WhatsApp send history from the notification table.
+   */
+  @UseGuards(AdminGuard)
+  @Get('admin/whatsapp/send-log')
+  getSendLog(
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    const parsedLimit = Math.min(Math.max(parseInt(limit ?? '50', 10) || 50, 1), 200);
+    const parsedOffset = Math.max(parseInt(offset ?? '0', 10) || 0, 0);
+    return this.whatsappService.getSendLog(parsedLimit, parsedOffset);
   }
 
   /**
    * POST /api/admin/whatsapp/send
-   * Send a one-off template message to a specific phone number.
+   * One-off send to a specific phone number using any registered template.
    */
   @UseGuards(AdminGuard)
   @Post('admin/whatsapp/send')
-  async sendOneOff(
-    @Body()
-    body: {
-      to: string;
-      templateName: string;
-      components?: any[];
-      languageCode?: string;
-    },
-  ) {
-    const success = await this.whatsappService.sendMessage({
-      to: body.to,
-      templateName: body.templateName,
-      components: body.components,
-      languageCode: body.languageCode,
-    });
-
-    return { success, to: body.to, template: body.templateName };
-  }
-
-  // ─── Internal ────────────────────────────────────────────────────────────
-
-  private async processWebhookEvent(body: any) {
-    try {
-      if (body?.object !== 'whatsapp_business_account') return;
-
-      for (const entry of body?.entry ?? []) {
-        for (const change of entry?.changes ?? []) {
-          const value = change?.value;
-
-          // Incoming message (user replied to us)
-          for (const message of value?.messages ?? []) {
-            this.logger.log(
-              `Incoming WhatsApp message from ${message.from}: type=${message.type}`,
-            );
-
-            // Handle STOP replies — mark user as opted out
-            if (
-              message.type === 'text' &&
-              message.text?.body?.trim().toUpperCase() === 'STOP'
-            ) {
-              this.logger.log(
-                `User ${message.from} opted out of WhatsApp notifications`,
-              );
-              await this.optOutByPhone(message.from);
-            }
-          }
-
-          // Delivery / read status updates
-          for (const status of value?.statuses ?? []) {
-            this.logger.log(
-              `WhatsApp status update: msgId=${status.id} status=${status.status} recipient=${status.recipient_id}`,
-            );
-          }
-        }
-      }
-    } catch (err) {
-      this.logger.error('Error processing webhook event', err);
+  async sendOne(@Body() dto: {
+    phone: string;
+    templateName: string;
+    parameters: string[];
+  }) {
+    if (!dto.phone || !dto.templateName) {
+      throw new BadRequestException('phone and templateName are required');
     }
-  }
-
-  /**
-   * Record a STOP opt-out keyed by normalized (digits-only) phone in the
-   * dedicated WhatsappOptOut table, so the platform stops messaging that number.
-   * Meta delivers `from` as bare digits (e.g. "919876543210"); we store the same
-   * normalized form the send path looks up, so the match is an exact PK lookup
-   * and even numbers with no applicant record are honored. Best-effort: failures
-   * are logged and never propagated to the webhook flow.
-   */
-  private async optOutByPhone(from: string): Promise<void> {
-    try {
-      const normalized = (from ?? '').replace(/\D/g, '');
-      if (!normalized) return;
-
-      await this.prisma.whatsappOptOut.upsert({
-        where: { phone: normalized },
-        create: { phone: normalized },
-        update: {},
-      });
-
-      this.logger.log(`STOP opt-out recorded for ${normalized}`);
-    } catch (err) {
-      this.logger.error(`Failed to process STOP opt-out for ${from}`, err);
-    }
+    const components = dto.parameters?.length
+      ? [{ type: 'body' as const, parameters: dto.parameters.map(p => ({ type: 'text' as const, text: p })) }]
+      : [];
+    return { sent: await this.whatsappService.sendTemplate({ to: dto.phone, templateName: dto.templateName, components }) };
   }
 }

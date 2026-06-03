@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException, Logger, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma';
 import { NotificationService } from '../notifications/notification.service';
+import { EmailService } from '../email/email.service';
+import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { ApplicantStatus, DepartmentRole, TeamRequestStatus, SprintStatus } from '@prisma/client';
 
 const ADMIN_ROLES = ['ADMIN', 'SUPER_ADMIN', 'MODERATOR'];
@@ -31,6 +33,8 @@ export class TeamService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationService,
+    private readonly emailService: EmailService,
+    private readonly whatsappService: WhatsappService,
   ) {}
 
   /**
@@ -126,8 +130,8 @@ export class TeamService {
     this.logger.log(`Batch ${batch.batchNumber}: formed ${teams.length} teams`);
 
     // Notify every assigned member that their team was formed. Best-effort and
-    // fire-after-commit: the NotificationService methods already swallow errors,
-    // and we never block the response on delivery.
+    // fire-after-commit: the NotificationService methods already swallow errors
+    // (email + WhatsApp each member), and we never block the response on delivery.
     void this.notifyTeamsFormed(teams);
 
     return { teamsCreated: teams.length, teams };
@@ -369,10 +373,37 @@ export class TeamService {
       );
     }
 
-    return this.prisma.team.update({
+    const lockedTeam = await this.prisma.team.update({
       where: { id: teamId },
       data: { isLocked: true },
     });
+
+    // Notify all team members — non-fatal; team is already locked in DB
+    try {
+      const members = await this.prisma.applicant.findMany({
+        where: { teamId, status: { not: 'REMOVED' } },
+        select: { id: true, email: true, firstName: true, whatsappPhone: true, whatsappVerified: true },
+      });
+      await Promise.allSettled([
+        ...members.map((m) =>
+          this.emailService.sendTemplatedEmail(
+            m.email,
+            'team-locked',
+            { firstName: m.firstName, teamName: team.name },
+            m.id,
+          ),
+        ),
+        ...members
+          .filter((m) => m.whatsappPhone && m.whatsappVerified)
+          .map((m) =>
+            this.whatsappService.sendTeamLocked(m.whatsappPhone!, m.firstName, team.name, m.id),
+          ),
+      ]);
+    } catch (e: any) {
+      this.logger.error(`Post-lock notifications failed for team ${teamId}: ${e?.message}`);
+    }
+
+    return lockedTeam;
   }
 
   // ─── Training lifecycle (admin) ───────────────────────────
@@ -538,6 +569,13 @@ export class TeamService {
       }
     }
 
+    const CHANGE_TYPES = ['SEPARATION', 'JOIN_EXISTING', 'CREATE_NEW'];
+    const requiresMentor = CHANGE_TYPES.includes(body.type);
+
+    if (team.isLocked && requiresMentor) {
+      throw new BadRequestException('Team membership changes are not permitted after the team is locked');
+    }
+
     return this.prisma.teamRequest.create({
       data: {
         teamId,
@@ -546,7 +584,8 @@ export class TeamService {
         title: body.title,
         details: body.details,
         targetTeamId: body.targetTeamId ?? null,
-      },
+        mentorStatus: requiresMentor ? 'PENDING' : null,
+      } as any,
     });
   }
 
@@ -613,6 +652,11 @@ export class TeamService {
     const request = await this.prisma.teamRequest.findUnique({ where: { id: reqId } });
     if (!request) throw new NotFoundException('Request not found');
     if (request.status !== 'PENDING') throw new BadRequestException('Request has already been resolved');
+
+    const CHANGE_TYPES = ['SEPARATION', 'JOIN_EXISTING', 'CREATE_NEW'];
+    if (CHANGE_TYPES.includes(request.type) && (request as any).mentorStatus !== 'APPROVED') {
+      throw new BadRequestException('Mentor approval is required before admin can resolve this request');
+    }
 
     if (resolution === 'APPROVED') {
       await this.prisma.$transaction(async (tx) => {
@@ -712,5 +756,38 @@ export class TeamService {
         },
       });
     }
+  }
+
+  // ─── Founder: Resource Requests ───────────────────────────
+
+  async submitResourceRequest(teamId: string, callerId: string, dto: { type: string; description: string }) {
+    const applicant = await this.prisma.applicant.findUnique({ where: { id: callerId } });
+    if (!applicant || applicant.teamId !== teamId) throw new ForbiddenException('You are not in this team');
+
+    const assignment = await (this.prisma as any).coFounderAssignment.findFirst({
+      where: { teamId, isActive: true },
+    });
+    if (!assignment) throw new BadRequestException('No co-founder is assigned to your team yet — resource requests will be available once your co-founder is assigned');
+
+    return (this.prisma as any).resourceRequest.create({
+      data: {
+        coFounderId: assignment.coFounderId,
+        teamId,
+        type: dto.type || 'OTHER',
+        description: dto.description,
+      },
+    });
+  }
+
+  async getTeamResourceRequests(teamId: string, callerId: string, status?: string) {
+    const applicant = await this.prisma.applicant.findUnique({ where: { id: callerId } });
+    if (!applicant || applicant.teamId !== teamId) throw new ForbiddenException('You are not in this team');
+
+    const where: any = { teamId };
+    if (status) where.status = status;
+    return (this.prisma as any).resourceRequest.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+    });
   }
 }

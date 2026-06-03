@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { api } from '@/lib/api';
 import Layout from '@/components/Layout';
 import Link from 'next/link';
@@ -11,6 +11,47 @@ export default function InvestorShowcase() {
   const [selectedShowcase, setSelectedShowcase] = useState<any>(null);
   const [meetingForm, setMeetingForm] = useState({ investorId: '', date: '', message: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Documentary
+  const [docShowcase, setDocShowcase] = useState<any>(null);
+  const [docClips, setDocClips] = useState<any[]>([]);
+  const [docLoading, setDocLoading] = useState(false);
+  const [docStreamUrls, setDocStreamUrls] = useState<Record<string, string>>({});
+  const docSeqRef = useRef(0);
+
+  async function handleWatchDocumentary(showcase: any) {
+    const seq = ++docSeqRef.current;
+    setDocShowcase(showcase);
+    setDocClips([]);
+    setDocStreamUrls({});
+    setDocLoading(true);
+    const teamId = showcase.teamId ?? showcase.team?.id;
+    if (!teamId) { setDocLoading(false); return; }
+    try {
+      const clips = await api.getPublishedDocumentaryClips(teamId);
+      if (seq !== docSeqRef.current) return; // stale — user switched to another team
+      setDocClips(clips);
+    } catch {
+      if (seq !== docSeqRef.current) return;
+      setDocClips([]);
+    } finally {
+      if (seq === docSeqRef.current) setDocLoading(false);
+    }
+  }
+
+  async function handleGetStreamUrl(clipId: string) {
+    if (docStreamUrls[clipId]) {
+      window.open(docStreamUrls[clipId], '_blank', 'noopener');
+      return;
+    }
+    try {
+      const { url } = await api.getInvestorClipStreamUrl(clipId);
+      setDocStreamUrls((prev) => ({ ...prev, [clipId]: url }));
+      window.open(url, '_blank', 'noopener');
+    } catch {
+      alert('Unable to load video. Please try again.');
+    }
+  }
 
   useEffect(() => {
     api.getStartupShowcases()
@@ -91,10 +132,16 @@ export default function InvestorShowcase() {
                   </div>
                 </div>
 
-                <div className="p-4 border-t border-hairline bg-parchment/30">
-                  <button 
+                <div className="p-4 border-t border-hairline bg-parchment/30 flex gap-2">
+                  <button
+                    onClick={() => handleWatchDocumentary(showcase)}
+                    className="flex-1 btn btn-secondary bg-white hover:text-forest hover:border-forest transition-colors text-[10px]"
+                  >
+                    Watch Journey ▶
+                  </button>
+                  <button
                     onClick={() => setSelectedShowcase(showcase)}
-                    className="w-full btn btn-secondary bg-white hover:text-forest hover:border-forest transition-colors"
+                    className="flex-1 btn btn-secondary bg-white hover:text-forest hover:border-forest transition-colors"
                   >
                     Request Meeting
                   </button>
@@ -162,6 +209,56 @@ export default function InvestorShowcase() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Documentary Modal */}
+        {docShowcase && (
+          <div className="fixed inset-0 z-50 bg-ink/90 backdrop-blur-sm flex justify-center items-center p-4" onClick={() => setDocShowcase(null)}>
+            <div className="bg-white max-w-2xl w-full p-8 relative animate-fade-in max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+              <button onClick={() => setDocShowcase(null)} className="absolute top-4 right-6 text-2xl text-ink/40 hover:text-terracotta transition-colors">✕</button>
+              <p className="text-[10px] uppercase tracking-widest text-forest font-bold mb-2">90-Day Journey</p>
+              <h2 className="font-serif text-3xl font-bold mb-1">{docShowcase.team?.name}</h2>
+              <p className="text-sm text-ink/60 mb-8 pb-6 border-b border-hairline">Documentary clips — watch their story before you decide.</p>
+
+              {docLoading && (
+                <div className="text-center py-12 text-ink/50 uppercase tracking-widest text-xs">Loading clips…</div>
+              )}
+              {!docLoading && docClips.length === 0 && (
+                <div className="text-center py-12 border border-hairline bg-parchment/30">
+                  <p className="text-ink/60 text-sm">No documentary clips have been published for this team yet.</p>
+                  <p className="text-ink/40 text-xs mt-1 uppercase tracking-widest">Check back as the sprint progresses</p>
+                </div>
+              )}
+              {!docLoading && docClips.length > 0 && (
+                <div className="space-y-4">
+                  {docClips.map((clip: any) => (
+                    <div key={clip.id} className="flex items-center gap-4 border border-hairline p-4 hover:bg-parchment/30 transition-colors">
+                      <div className="w-16 h-12 bg-ink/5 border border-hairline flex items-center justify-center shrink-0">
+                        {clip.thumbnailUrl ? (
+                          <img src={clip.thumbnailUrl} alt={clip.title} className="w-full h-full object-cover" />
+                        ) : (
+                          <svg className="w-6 h-6 text-ink/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.845v6.31a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                          </svg>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-sm">{clip.title}</p>
+                        {clip.description && <p className="text-xs text-ink/50 mt-0.5 line-clamp-1">{clip.description}</p>}
+                        <p className="text-[10px] text-ink/30 uppercase tracking-widest mt-1">Week {clip.week}</p>
+                      </div>
+                      <button
+                        onClick={() => handleGetStreamUrl(clip.id)}
+                        className="shrink-0 text-[10px] uppercase tracking-widest font-bold border border-forest text-forest px-4 py-2 hover:bg-forest hover:text-white transition-colors"
+                      >
+                        Play ▶
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}

@@ -140,4 +140,28 @@ export class TeamController {
     const callerId = req.user.id || req.user.sub;
     return this.teamService.updateProjectAsLeader(teamId, callerId, body);
   }
+
+  // ─── Founder: Resource Requests ───────────────────────────
+
+  @UseGuards(JwtAuthGuard)
+  @Post('teams/:id/resource-requests')
+  async submitResourceRequest(
+    @Param('id') teamId: string,
+    @Req() req: any,
+    @Body() body: { type: string; description: string },
+  ) {
+    const callerId = req.user.id || req.user.sub;
+    return this.teamService.submitResourceRequest(teamId, callerId, body);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('teams/:id/resource-requests')
+  async getResourceRequests(
+    @Param('id') teamId: string,
+    @Req() req: any,
+    @Query('status') status?: string,
+  ) {
+    const callerId = req.user.id || req.user.sub;
+    return this.teamService.getTeamResourceRequests(teamId, callerId, status);
+  }
 }
