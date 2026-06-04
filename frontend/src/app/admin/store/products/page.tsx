@@ -216,9 +216,9 @@ export default function AdminProductsPage() {
   const categoryLabel = (c: ProductRow['category']): string | null => c ?? null;
 
   return (
-    <div className="text-ink animate-fade-in px-8 py-12 max-w-[1200px] mx-auto min-h-screen">
+    <div className="text-ink animate-fade-in px-4 sm:px-6 lg:px-8 py-8 sm:py-12 max-w-[1200px] 3xl:max-w-[1600px] mx-auto min-h-screen">
       {/* Header */}
-      <header className="border-b border-hairline pb-8 mb-10 flex justify-between items-end gap-6">
+      <header className="border-b border-hairline pb-8 mb-10 flex flex-wrap justify-between items-end gap-6">
         <div>
           <Link
             href="/admin/dashboard"
@@ -226,7 +226,7 @@ export default function AdminProductsPage() {
           >
             ← Command Center
           </Link>
-          <h1 className="font-serif text-5xl font-bold leading-none">Products</h1>
+          <h1 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-bold leading-none">Products</h1>
           <p className="text-ink/50 mt-2 font-serif italic">
             Catalog manager — products, SKUs, tabs, media &amp; DIY
           </p>
@@ -314,7 +314,8 @@ export default function AdminProductsPage() {
         </div>
       ) : (
         <>
-          <div className="border border-hairline bg-white">
+          <div className="border border-hairline bg-white overflow-x-auto">
+            <div className="min-w-[820px]">
             <div className="grid grid-cols-12 gap-4 px-6 py-3 bg-alabaster border-b border-hairline text-[9px] uppercase tracking-widest text-ink/40 font-bold">
               <div className="col-span-4">Product</div>
               <div className="col-span-2">Category</div>
@@ -401,6 +402,7 @@ export default function AdminProductsPage() {
                 </div>
               ))
             )}
+            </div>
           </div>
 
           {meta.totalPages > 1 && (
@@ -465,7 +467,7 @@ export default function AdminProductsPage() {
               A URL slug is generated automatically from the name.
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-[10px] uppercase tracking-widest text-ink/60 mb-2 font-bold">
                 Subtitle
@@ -489,7 +491,7 @@ export default function AdminProductsPage() {
               />
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className="block text-[10px] uppercase tracking-widest text-ink/60 mb-2 font-bold">
                 Status

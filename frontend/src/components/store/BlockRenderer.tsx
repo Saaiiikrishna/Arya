@@ -218,7 +218,9 @@ function renderBlock(block: ContentBlock, key: string): ReactNode {
       return (
         <section key={key} className="flex flex-col gap-3">
           {title && <BlockTitle>{title}</BlockTitle>}
-          <div className="overflow-hidden rounded-xl border border-hairline">
+          {/* overflow-x-auto so a wide spec table scrolls instead of overflowing
+              the card on narrow (360px) phones. 0px radius per the matte directive. */}
+          <div className="overflow-x-auto border border-hairline">
             <table className="w-full border-collapse text-left">
               <tbody>
                 {rows.map((row, i) => (
@@ -254,7 +256,7 @@ function renderBlock(block: ContentBlock, key: string): ReactNode {
             code={code}
             language={asString(payload.language) ?? undefined}
             title={asString(payload.title) ?? undefined}
-            className="rounded-xl"
+            className="rounded-none"
           />
         </section>
       );
@@ -268,7 +270,7 @@ function renderBlock(block: ContentBlock, key: string): ReactNode {
       return (
         <section
           key={key}
-          className={cn('flex gap-3 rounded-xl border p-4', box)}
+          className={cn('flex gap-3 border p-4', box)}
         >
           <Icon className={cn('mt-0.5 h-5 w-5 shrink-0', icon_cls)} aria-hidden />
           <div className="flex flex-col gap-1">

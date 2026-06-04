@@ -70,7 +70,7 @@ export default function AdminProductDetailPage({
 
   if (error || !product) {
     return (
-      <div className="text-ink px-8 py-12 max-w-[1200px] mx-auto min-h-screen">
+      <div className="text-ink px-4 sm:px-6 lg:px-8 py-8 sm:py-12 max-w-[1200px] 3xl:max-w-[1600px] mx-auto min-h-screen">
         <Link
           href="/admin/store/products"
           className="text-forest text-sm uppercase tracking-widest font-bold mb-8 inline-flex items-center gap-1"
@@ -128,7 +128,7 @@ export default function AdminProductDetailPage({
   ];
 
   return (
-    <div className="text-ink animate-fade-in px-8 py-12 max-w-[1200px] mx-auto min-h-screen">
+    <div className="text-ink animate-fade-in px-4 sm:px-6 lg:px-8 py-8 sm:py-12 max-w-[1200px] 3xl:max-w-[1600px] mx-auto min-h-screen">
       <Link
         href="/admin/store/products"
         className="text-forest text-sm uppercase tracking-widest font-bold mb-6 inline-flex items-center gap-1"
@@ -137,7 +137,7 @@ export default function AdminProductDetailPage({
       </Link>
 
       {/* Header */}
-      <header className="border-b border-hairline pb-8 mb-8 flex items-start justify-between gap-6">
+      <header className="border-b border-hairline pb-8 mb-8 flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
         <div className="min-w-0">
           <div className="flex items-center gap-3 flex-wrap mb-2">
             <span
@@ -151,7 +151,7 @@ export default function AdminProductDetailPage({
               {product.type}
             </span>
           </div>
-          <h1 className="font-serif text-4xl font-bold leading-tight">{product.name}</h1>
+          <h1 className="font-serif text-2xl sm:text-3xl lg:text-4xl font-bold leading-tight break-words">{product.name}</h1>
           <div className="mt-2 text-xs text-ink/50 flex items-center gap-3 flex-wrap">
             <code className="bg-alabaster px-2 py-0.5">/{product.slug}</code>
             {product.status === 'ACTIVE' && (

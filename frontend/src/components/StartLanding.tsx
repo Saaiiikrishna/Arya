@@ -69,7 +69,7 @@ export default function StartLanding() {
   return (
     <div className="mkt relative overflow-hidden bg-parchment">
       {/* ============================ HERO ============================ */}
-      <section className="relative min-h-[calc(100vh-80px)] flex items-center">
+      <section className="relative min-h-[calc(100dvh-80px)] flex items-center">
         {/* Ambient gradient orbs */}
         <div
           aria-hidden
@@ -87,8 +87,8 @@ export default function StartLanding() {
           style={{ background: 'radial-gradient(120% 80% at 50% -10%, rgba(19,48,34,0.06), transparent 60%)' }}
         />
 
-        <div className="relative z-10 max-w-screen-2xl mx-auto px-8 w-full py-24">
-          <div className="max-w-4xl">
+        <div className="relative z-10 max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 w-full py-16 sm:py-20 lg:py-24">
+          <div className="max-w-4xl 3xl:max-w-5xl">
             <motion.div
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
@@ -108,7 +108,7 @@ export default function StartLanding() {
               initial={{ opacity: 0, y: 24 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.05 }}
-              className="font-serif-display font-bold text-forest leading-[0.92] tracking-[-0.03em] text-6xl md:text-7xl lg:text-[6.5rem]"
+              className="font-serif-display font-bold text-forest leading-[0.92] tracking-[-0.03em] text-[2.75rem] sm:text-6xl md:text-7xl lg:text-[6.5rem] 3xl:text-[7.5rem]"
             >
               Build the thing you<br className="hidden md:block" />{' '}
               can&rsquo;t stop <span className="text-saffron italic">thinking</span> about.
@@ -118,7 +118,7 @@ export default function StartLanding() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.15 }}
-              className="mt-8 font-sans text-lg md:text-2xl leading-relaxed text-ink/75 max-w-2xl"
+              className="mt-6 sm:mt-8 font-sans text-base sm:text-lg md:text-2xl leading-relaxed text-ink/75 max-w-2xl"
             >
               A place to make real hardware, sharpen your craft, and find the people
               who stay up late building too.
@@ -128,7 +128,7 @@ export default function StartLanding() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.25 }}
-              className="mt-12 flex flex-col sm:flex-row flex-wrap gap-4"
+              className="mt-10 sm:mt-12 flex flex-col sm:flex-row flex-wrap gap-3 sm:gap-4"
             >
               {discordReady ? (
                 <a href={discordUrl} target={discordUrl.startsWith('http') ? '_blank' : undefined} rel="noopener noreferrer" className="mkt-btn">
@@ -155,7 +155,7 @@ export default function StartLanding() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 1, delay: 0.5 }}
-              className="mt-14 flex items-center gap-6 text-ink/45 font-sans text-[10px] uppercase tracking-[0.18em]"
+              className="mt-12 sm:mt-14 flex flex-wrap items-center gap-x-5 gap-y-2 sm:gap-6 text-ink/45 font-sans text-[10px] uppercase tracking-[0.18em]"
             >
               <span className="flex items-center gap-2"><Cpu className="w-3.5 h-3.5" /> Microcontrollers</span>
               <span className="hidden sm:flex items-center gap-2"><Terminal className="w-3.5 h-3.5" /> Firmware</span>
@@ -166,19 +166,19 @@ export default function StartLanding() {
       </section>
 
       {/* ============================ ETHOS ============================ */}
-      <section className="relative py-28 px-8">
-        <div className="max-w-screen-2xl mx-auto">
-          <motion.div {...reveal} className="max-w-2xl mb-16">
+      <section className="relative py-20 sm:py-24 lg:py-28 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-[1600px] mx-auto">
+          <motion.div {...reveal} className="max-w-2xl mb-12 sm:mb-16">
             <p className="font-sans text-[11px] uppercase tracking-[0.24em] text-saffron-deep font-bold mb-4">
               Why you&rsquo;ll stay
             </p>
-            <h2 className="font-serif text-4xl md:text-5xl text-forest tracking-tight leading-tight">
+            <h2 className="font-serif text-3xl sm:text-4xl md:text-5xl text-forest tracking-tight leading-tight">
               It starts as a side project.<br />
               <span className="italic text-terracotta-warm">It becomes who you are.</span>
             </h2>
           </motion.div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6">
             {ethos.map((item, i) => (
               <motion.div
                 key={item.title}
@@ -188,7 +188,7 @@ export default function StartLanding() {
                 transition={{ duration: 0.6, delay: i * 0.08, ease: [0.22, 1, 0.36, 1] }}
                 className="mkt-card p-7 flex flex-col"
               >
-                <div className="w-12 h-12 rounded-2xl bg-saffron/12 flex items-center justify-center mb-6">
+                <div className="w-12 h-12 rounded-full bg-saffron/12 flex items-center justify-center mb-6">
                   <item.icon className="w-6 h-6 text-saffron-deep" strokeWidth={1.6} />
                 </div>
                 <h3 className="font-serif text-2xl text-forest mb-3 leading-snug">{item.title}</h3>
@@ -200,21 +200,21 @@ export default function StartLanding() {
       </section>
 
       {/* ====================== STORE / MAKER BAND ====================== */}
-      <section className="relative py-32 px-8 overflow-hidden bg-forest text-parchment">
+      <section className="relative py-24 sm:py-28 lg:py-32 px-4 sm:px-6 lg:px-8 overflow-hidden bg-forest text-parchment">
         <div
           aria-hidden
           className="mkt-glow-pulse pointer-events-none absolute -bottom-40 -left-20 w-[36rem] h-[36rem] rounded-full"
           style={{ background: 'radial-gradient(circle, rgba(244,163,0,0.18), transparent 64%)' }}
         />
-        <div className="relative z-10 max-w-screen-2xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+        <div className="relative z-10 max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-2 gap-10 sm:gap-12 lg:gap-16 items-center">
           <motion.div {...reveal}>
             <p className="font-sans text-[11px] uppercase tracking-[0.24em] text-saffron-glow font-bold mb-5">
               From idea to in-your-hands
             </p>
-            <h2 className="font-serif-display font-bold text-5xl md:text-6xl leading-[0.95] tracking-[-0.025em] mb-8">
+            <h2 className="font-serif-display font-bold text-4xl sm:text-5xl md:text-6xl 3xl:text-7xl leading-[0.95] tracking-[-0.025em] mb-6 sm:mb-8">
               Buy it ready.<br /><span className="italic text-alabaster">Or build it yourself.</span>
             </h2>
-            <p className="font-sans text-parchment/70 text-lg leading-relaxed max-w-xl mb-10">
+            <p className="font-sans text-parchment/70 text-base sm:text-lg leading-relaxed max-w-xl mb-8 sm:mb-10">
               Every kit can be yours assembled and tested — or you take the parts list, the wiring,
               the code, and the step-by-step, and you make it with your own two hands. Your call.
             </p>
@@ -230,7 +230,7 @@ export default function StartLanding() {
             whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true, amount: 0.3 }}
             transition={{ duration: 0.7 }}
-            className="grid grid-cols-2 gap-5"
+            className="grid grid-cols-2 gap-4 sm:gap-5"
           >
             {[
               { k: 'Kits', v: 'Solder-free starts', icon: CircuitBoard },
@@ -238,9 +238,9 @@ export default function StartLanding() {
               { k: 'Code', v: 'Copy, flash, tweak', icon: Terminal },
               { k: 'Guides', v: 'Step by patient step', icon: Wrench },
             ].map((c) => (
-              <div key={c.k} className="mkt-glass p-7">
-                <c.icon className="w-7 h-7 text-saffron-glow mb-5" strokeWidth={1.5} />
-                <div className="font-serif text-2xl text-parchment mb-1">{c.k}</div>
+              <div key={c.k} className="mkt-glass p-5 sm:p-7">
+                <c.icon className="w-7 h-7 text-saffron-glow mb-4 sm:mb-5" strokeWidth={1.5} />
+                <div className="font-serif text-xl sm:text-2xl text-parchment mb-1">{c.k}</div>
                 <div className="font-sans text-[11px] uppercase tracking-[0.16em] text-parchment/55">{c.v}</div>
               </div>
             ))}
@@ -249,16 +249,16 @@ export default function StartLanding() {
       </section>
 
       {/* ====================== JOURNAL TEASER ====================== */}
-      <section className="relative py-28 px-8">
-        <div className="max-w-screen-2xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+      <section className="relative py-20 sm:py-24 lg:py-28 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-10 sm:gap-12 items-center">
           <motion.div {...reveal} className="lg:col-span-7">
             <p className="font-sans text-[11px] uppercase tracking-[0.24em] text-saffron-deep font-bold mb-4">
               Read how it&rsquo;s done
             </p>
-            <h2 className="font-serif text-4xl md:text-5xl text-forest tracking-tight leading-tight mb-6">
+            <h2 className="font-serif text-3xl sm:text-4xl md:text-5xl text-forest tracking-tight leading-tight mb-6">
               Teardowns, write-ups, and the<br className="hidden md:block" /> mistakes nobody warns you about.
             </h2>
-            <p className="font-sans text-ink/65 text-lg leading-relaxed max-w-2xl mb-9">
+            <p className="font-sans text-ink/65 text-base sm:text-lg leading-relaxed max-w-2xl mb-8 sm:mb-9">
               Field notes from real builds. Got something worth sharing? Write it up — get it
               in front of everyone here.
             </p>
@@ -297,7 +297,7 @@ export default function StartLanding() {
       </section>
 
       {/* ====================== COMMUNITY / DISCORD ====================== */}
-      <section className="relative py-32 px-8 overflow-hidden">
+      <section className="relative py-24 sm:py-28 lg:py-32 px-4 sm:px-6 lg:px-8 overflow-hidden">
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0"
@@ -308,24 +308,24 @@ export default function StartLanding() {
             <MessageCircle className="w-3.5 h-3.5 text-saffron-deep" />
             <span className="font-sans text-[10px] uppercase tracking-[0.22em] font-bold text-forest/80">Pull up a chair</span>
           </div>
-          <h2 className="font-serif-display font-bold text-5xl md:text-7xl text-forest leading-[0.95] tracking-[-0.025em] mb-8">
+          <h2 className="font-serif-display font-bold text-4xl sm:text-5xl md:text-7xl 3xl:text-8xl text-forest leading-[0.95] tracking-[-0.025em] mb-6 sm:mb-8">
             The hardest part is<br /><span className="italic text-saffron">starting alone.</span>
           </h2>
-          <p className="font-sans text-ink/70 text-lg md:text-xl leading-relaxed max-w-2xl mx-auto mb-12">
+          <p className="font-sans text-ink/70 text-base sm:text-lg md:text-xl leading-relaxed max-w-2xl mx-auto mb-10 sm:mb-12">
             So don&rsquo;t. Drop in, show what you&rsquo;re working on, ask the dumb question, answer
             someone else&rsquo;s. This is where it all happens between the builds.
           </p>
           {discordReady ? (
-            <a href={discordUrl} target={discordUrl.startsWith('http') ? '_blank' : undefined} rel="noopener noreferrer" className="mkt-btn text-sm px-12 py-5">
-              <MessageCircle className="w-5 h-5" />
-              <span>Join the Community on Discord</span>
-              <ArrowRight className="w-5 h-5" />
+            <a href={discordUrl} target={discordUrl.startsWith('http') ? '_blank' : undefined} rel="noopener noreferrer" className="mkt-btn max-w-full text-sm px-6 py-4 sm:px-12 sm:py-5">
+              <MessageCircle className="w-5 h-5 shrink-0" />
+              <span className="text-center">Join the Community on Discord</span>
+              <ArrowRight className="w-5 h-5 shrink-0" />
             </a>
           ) : (
-            <button type="button" disabled aria-disabled="true" title="Coming soon" className="mkt-btn text-sm px-12 py-5 opacity-50 cursor-not-allowed">
-              <MessageCircle className="w-5 h-5" />
-              <span>Join the Community on Discord</span>
-              <ArrowRight className="w-5 h-5" />
+            <button type="button" disabled aria-disabled="true" title="Coming soon" className="mkt-btn max-w-full text-sm px-6 py-4 sm:px-12 sm:py-5 opacity-50 cursor-not-allowed">
+              <MessageCircle className="w-5 h-5 shrink-0" />
+              <span className="text-center">Join the Community on Discord</span>
+              <ArrowRight className="w-5 h-5 shrink-0" />
             </button>
           )}
         </motion.div>

@@ -86,8 +86,11 @@ export default function CartLineItem({
     >
       <div
         className={cn(
+          // Product thumbnail (80×80) is NOT an avatar → 0px radius in both modes.
+          // The mkt path keeps just `overflow-hidden` (clips the image to a sharp
+          // square); the strict path adds a 1px hairline frame.
           'relative h-20 w-20 shrink-0 overflow-hidden bg-parchment-dark',
-          mkt ? 'rounded-xl' : 'border border-hairline',
+          mkt ? '' : 'border border-hairline',
         )}
       >
         {imageUrl ? (
@@ -123,13 +126,10 @@ export default function CartLineItem({
         )}
 
         <div className="mt-2 flex items-center justify-between gap-3">
-          {/* Quantity stepper */}
-          <div
-            className={cn(
-              'inline-flex items-center',
-              mkt ? 'rounded-full border border-hairline' : 'border border-hairline',
-            )}
-          >
+          {/* Quantity stepper — the control strip is NOT a circle, so it is a flat
+              0px hairline frame in both modes (matches the matte mkt-btn language).
+              The individual +/- buttons keep their circular hover halo below. */}
+          <div className="inline-flex items-center border border-hairline">
             <button
               type="button"
               className={stepBtn}

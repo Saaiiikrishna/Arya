@@ -112,13 +112,13 @@ function CartContents() {
   });
 
   return (
-    <div className="mkt min-h-[60vh] bg-parchment px-6 py-14 sm:px-8 lg:py-20">
-      <div className="mx-auto max-w-screen-xl">
-        <header className="mb-10">
+    <div className="mkt min-h-[60vh] bg-parchment px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
+      <div className="mx-auto max-w-screen-xl 3xl:max-w-[100rem]">
+        <header className="mb-8 sm:mb-10">
           <span className="font-sans text-[11px] font-semibold uppercase tracking-[0.18em] text-saffron-deep">
             Your selection
           </span>
-          <h1 className="mt-2 font-serif text-4xl text-forest sm:text-5xl">Shopping cart</h1>
+          <h1 className="mt-2 font-serif text-3xl text-forest sm:text-4xl lg:text-5xl">Shopping cart</h1>
         </header>
 
         {/* ── Loading ─────────────────────────────────────────── */}
@@ -133,7 +133,7 @@ function CartContents() {
 
         {/* ── Empty ───────────────────────────────────────────── */}
         {isEmpty && (
-          <div className="mkt-card mx-auto max-w-xl px-8 py-16 text-center">
+          <div className="mkt-card mx-auto max-w-xl px-6 py-16 text-center sm:px-8">
             <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-saffron-glow/25 text-saffron-deep">
               <ShoppingBag className="h-7 w-7" aria-hidden />
             </div>
@@ -158,10 +158,10 @@ function CartContents() {
               </div>
             )}
 
-            <div className="grid grid-cols-1 gap-10 lg:grid-cols-[1fr_360px]">
+            <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_22rem] lg:gap-10 xl:grid-cols-[1fr_24rem]">
               {/* Line items + coupon */}
-              <div>
-                <div className="mkt-card px-6 py-2 sm:px-8">
+              <div className="min-w-0">
+                <div className="mkt-card px-4 py-2 sm:px-6 lg:px-8">
                   {items.map((raw, i) => {
                     const item = raw as Record<string, unknown>;
                     const id =
@@ -209,7 +209,7 @@ function CartContents() {
                 </div>
 
                 {/* Coupon */}
-                <div className="mkt-card mt-6 px-6 py-6 sm:px-8">
+                <div className="mkt-card mt-6 px-4 py-6 sm:px-6 lg:px-8">
                   <div className="mb-3 flex items-center gap-2 text-forest">
                     <Tag className="h-4 w-4" aria-hidden />
                     <span className="font-sans text-[11px] font-semibold uppercase tracking-[0.1em]">
@@ -218,7 +218,7 @@ function CartContents() {
                   </div>
 
                   {appliedCode ? (
-                    <div className="flex items-center justify-between gap-3 rounded-full border border-success/40 bg-success/5 px-4 py-2.5">
+                    <div className="flex items-center justify-between gap-3 border border-success/40 bg-success/5 px-4 py-2.5">
                       <span className="font-sans text-sm font-semibold text-success">
                         {appliedCode} applied
                       </span>
@@ -238,17 +238,20 @@ function CartContents() {
                         type="text"
                         value={couponInput}
                         onChange={(e) => {
-                          setCouponInput(e.target.value);
+                          // Normalise to uppercase in state (not just via CSS
+                          // text-transform) so the SUBMITTED code matches what the
+                          // user sees, regardless of platform autoCapitalize support.
+                          setCouponInput(e.target.value.toUpperCase());
                           if (couponError) setCouponError(null);
                         }}
                         placeholder="Enter code"
                         autoCapitalize="characters"
-                        className="flex-1 rounded-full border border-hairline bg-white/70 px-4 py-2.5 font-sans text-sm uppercase tracking-[0.05em] text-ink outline-none transition-colors placeholder:normal-case placeholder:tracking-normal placeholder:text-ink/40 focus:border-saffron"
+                        className="flex-1 border border-hairline bg-alabaster px-4 py-2.5 font-sans text-sm uppercase tracking-[0.05em] text-ink outline-none transition-colors placeholder:normal-case placeholder:tracking-normal placeholder:text-ink/40 focus:border-saffron"
                       />
                       <button
                         type="submit"
                         disabled={couponBusy || mutating || !couponInput.trim()}
-                        className="mkt-btn-ghost disabled:cursor-not-allowed disabled:opacity-50"
+                        className="mkt-btn-ghost mkt-btn-sm disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {couponBusy ? (
                           <Loader2 className="h-4 w-4 animate-spin" aria-hidden />

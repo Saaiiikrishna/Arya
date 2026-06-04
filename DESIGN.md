@@ -86,9 +86,9 @@ A specific component for this design system. It uses `headline-lg` in Newsreader
 
 ---
 
-## 7. Public Marketing Layer (Scoped Exception)
+## 7. Public Marketing Layer
 
-> **Scope:** This section applies **only** to the public, top-of-funnel marketing surfaces:
+> **Scope:** This section applies to the public, top-of-funnel marketing surfaces:
 > the home landing (`/`), the programme landing (`/startup`), the storefront (`/store`,
 > `/store/[slug]`, `/store/[slug]/build`), and the journal (`/articles`, `/articles/[slug]`).
 > **The application (`/hub/*`), all `/admin/*`
@@ -96,35 +96,61 @@ A specific component for this design system. It uses `headline-lg` in Newsreader
 > Sections 1–6 above — 0px corners, no shadows, matte CTAs. No exceptions there.**
 
 The marketing layer's job is conversion: it must feel premium, modern, and tactile to a first-time
-visitor. To do that it is permitted a small, **deliberately bounded** set of departures from Organic
-Brutalism. These are implemented as `mkt-*` utility classes in `globals.css` and are only ever used
-inside a `.mkt` wrapper, which guarantees they cannot leak into the app/admin design.
+visitor. It is implemented as `mkt-*` utility classes in `globals.css`, used inside a `.mkt` wrapper
+so it cannot leak into the app/admin design.
+
+### Owner decision: buttons are MATTE and CONSISTENT everywhere
+The glossy/gradient/glow CTA look has been **REMOVED**. Action buttons are now **consistent across the
+entire platform** — same colour, same shape — on marketing surfaces and operational screens alike. The
+marketing CTA is no longer a special case: it matches the core `.btn-primary`.
+
+*   **Primary CTA (`.mkt-btn`):** solid saffron background (`--color-saffron`), parchment text, **0px
+    corners**, uppercase tracked label, **NO box-shadow, NO gradient, NO glow, NO sheen**. Hover shifts
+    the background to `--color-saffron-deep` (a background shift, never a shadow). Active = subtle 1px
+    translate.
+*   **Secondary CTA (`.mkt-btn-ghost`):** transparent background + 1px `--color-forest` border, 0px
+    corners, same sizing/typography. Hover = `rgba(19,48,34,0.05)` wash. **No backdrop-blur / glass.**
 
 ### What the marketing layer MAY do
-*   **Rounded geometry:** Pills (`rounded-full`) and softly-rounded cards/containers (12–24px radius)
-    are allowed for hero badges, CTAs, feature cards, and media frames. The hero pill on the
-    (moved) Manifesto at `/startup` is in-scope here.
-    *   **Note:** Circular dots and pills (status dots, avatars, the `rounded-full` on a true circle)
-        already fall under the global *rounded-full-for-circles* allowance and are permitted on every
-        surface — they are not a marketing-only exception.
-*   **Glossy, not matte, CTAs:** Primary actions use a saffron→marigold gradient with an inner top
-    highlight, a soft saffron glow, and a **subtle animated sheen** that sweeps across on hover
-    (`.mkt-btn`). A secondary glass variant (`.mkt-btn-ghost`) is available.
-*   **Premium glass:** Frosted, rounded glass cards (`.mkt-card`, `.mkt-glass`) with brand-tinted
-    translucency and `backdrop-blur`.
-*   **Soft depth & glow:** Bounded `box-shadow`/glow is allowed **only** on `mkt-*` elements to sell
-    the glossy effect. Keep it tasteful (low alpha, brand-tinted).
-*   **Ambient motion:** Slow floating accents (`.mkt-float`), gradient orbs, and `motion` scroll
-    reveals. Keep every animation ≤ 700ms and **honor `prefers-reduced-motion`**.
+*   **Rounded geometry — limited:** Rounding is now restricted to **small eyebrow pills** (`.mkt-pill`,
+    `rounded-full`) and **true circles** (status dots, avatars). Cards, containers, buttons, inputs,
+    and media frames are **0px**, matching the core system.
+    *   **Note:** Circular dots and pills already fall under the global *rounded-full-for-circles*
+        allowance and are permitted on every surface — they are not a marketing-only exception.
+*   **Matte surfaces, not glass:**
+    *   `.mkt-card` — the DESIGN.md "frame" rule: `--color-alabaster` surface + 1px `--color-hairline`
+        border + 0px radius. Subtle hover shifts the border to saffron (no shadow, no translate).
+    *   `.mkt-glass` (on dark forest bands) — a low-opacity white surface + 1px subtle border, 0px
+        radius, **no backdrop-blur**.
+    *   `.mkt-pill` — solid alabaster/white + 1px hairline, **no backdrop-blur, no inset glow**.
+    *   `.mkt-input` — 0px radius + 1px hairline + clean surface; focus shifts the border to saffron.
+*   **Ambient motion:** Slow floating accents (`.mkt-float`) and **subtle** low-opacity gradient orbs
+    (`.mkt-glow-pulse`), plus `motion` scroll reveals. Keep every animation ≤ 700ms and **honor
+    `prefers-reduced-motion`**.
 
 ### What stays the same (even here)
 *   **Palette is unchanged:** forest / parchment / alabaster / terracotta / saffron / marigold / ink.
     No new brand hues.
 *   **Type system is unchanged:** Newsreader / Fraunces (display) + Public Sans; labels uppercase
     with letter-spacing.
-*   **Restraint:** Glossy/rounded is for *marketing emphasis*, not everywhere. Body surfaces still lean
-    on parchment, hairlines, and editorial typography. Don't gamify.
+*   **No box-shadow:** depth comes from tonal surface layering and 1px hairlines (`--color-hairline`
+    #C2C8C2), exactly as Sections 1–6 mandate.
+
+### Responsive & ultra-wide strategy
+Marketing surfaces are **mobile-first** and must render cleanly from 360px phones through the primary
+1920×1080 target and up to 4K (3840px), with **no horizontal overflow at any width**.
+
+*   **Breakpoints:** Tailwind defaults (`sm` 640 / `md` 768 / `lg` 1024 / `xl` 1280 / `2xl` 1536) plus a
+    custom **`3xl` token = `120rem` (1920px)**, registered in `@theme` as `--breakpoint-3xl: 120rem`.
+    Use `3xl:` variants to scale type, spacing, and grid columns up on large displays.
+*   **Centered max-width content:** Cap the inner content column (~1600–1800px) and center it so text
+    lines don't stretch unreadably on ultra-wide / 4K. **Full-bleed bands** (colour fields, hero
+    backgrounds) may span the full viewport; the readable content inside them stays within the capped,
+    centered container.
+*   **Responsive rhythm:** responsive padding (`px-4 sm:px-6 lg:px-8`), responsive type scales, grid
+    columns that step up per breakpoint, and hero heights built on `min-h-[100dvh]` math.
 
 ### Rule of thumb
-If a screen requires login or is operational (admin, hub, apply, investor portal) → **Sections 1–6,
-strictly**. If a screen's job is to convince a stranger to join, buy, or read → **`.mkt` layer allowed**.
+Buttons look the same everywhere now. If a screen requires login or is operational (admin, hub, apply,
+investor portal) → **Sections 1–6, strictly**. Public marketing surfaces may use the `.mkt` matte
+surfaces and ambient motion above, but the **CTA system is shared and matte across the whole platform**.

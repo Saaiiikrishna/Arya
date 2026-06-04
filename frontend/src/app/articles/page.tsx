@@ -187,7 +187,7 @@ function ArticlesIndex() {
         style={{ background: 'radial-gradient(circle, rgba(244,163,0,0.18), transparent 62%)' }}
       />
 
-      <div className="relative z-10 mx-auto max-w-screen-2xl px-6 py-14 md:px-8 md:py-20">
+      <div className="relative z-10 mx-auto max-w-screen-2xl px-4 py-14 sm:px-6 md:px-8 md:py-20 3xl:max-w-[110rem]">
         {/* ── Header ─────────────────────────────────────────────── */}
         <motion.div
           initial={{ opacity: 0, y: 22 }}
@@ -202,10 +202,10 @@ function ArticlesIndex() {
                 The Journal
               </span>
             </div>
-            <h1 className="font-serif-display font-bold text-5xl md:text-6xl text-forest leading-[0.95] tracking-[-0.025em]">
+            <h1 className="font-serif-display font-bold text-4xl sm:text-5xl md:text-6xl text-forest leading-[0.95] tracking-[-0.025em]">
               Build logs &amp; teardowns
             </h1>
-            <p className="mt-5 font-sans text-ink/70 text-lg leading-relaxed">
+            <p className="mt-5 font-sans text-ink/70 text-base sm:text-lg leading-relaxed">
               Hard-won lessons, step-by-step builds, and field notes from the
               community. Read deeply — then publish your own.
             </p>
@@ -235,10 +235,10 @@ function ArticlesIndex() {
                 onChange={(e) => setSearchInput(e.target.value)}
                 placeholder="Search the journal…"
                 aria-label="Search articles"
-                className="w-full rounded-full border border-hairline bg-white/70 py-3 pl-11 pr-4 font-sans text-sm text-ink placeholder:text-ink/40 outline-none backdrop-blur transition-colors focus:border-saffron"
+                className="w-full border border-hairline bg-alabaster py-3 pl-11 pr-4 font-sans text-sm text-ink placeholder:text-ink/40 outline-none transition-colors focus:border-saffron"
               />
             </div>
-            <button type="submit" className="mkt-btn shrink-0 !px-6 !py-3">
+            <button type="submit" className="mkt-btn mkt-btn-sm shrink-0">
               <span>Search</span>
             </button>
           </form>
@@ -339,14 +339,16 @@ function ArticlesIndex() {
             <div className="mx-auto flex max-w-md flex-col items-center gap-4 rounded-2xl border border-terracotta/30 bg-terracotta/[0.04] px-8 py-14 text-center">
               <AlertCircle className="h-8 w-8 text-terracotta" aria-hidden />
               <p className="font-sans text-sm text-ink/75">{error}</p>
-              <button type="button" onClick={() => void load()} className="mkt-btn-ghost !py-2.5 !px-5">
+              <button type="button" onClick={() => void load()} className="mkt-btn-ghost mkt-btn-sm">
                 <span>Try again</span>
               </button>
             </div>
           ) : gridArticles.length === 0 && featured.length === 0 ? (
             // DESIGN: intentional mkt-* exception — a static empty-state panel
-            // (glass info card, no hover lift). In-scope inside `.mkt` (DESIGN.md §7).
-            <div className="mx-auto flex max-w-md flex-col items-center gap-4 rounded-2xl border border-hairline bg-white/50 px-8 py-16 text-center backdrop-blur">
+            // (matte info card, no hover lift). The rounded-2xl is in-scope inside
+            // the `.mkt` wrapper (DESIGN.md §7); the surface is matte (bg-alabaster
+            // + 1px hairline), NOT frosted glass, per the matte directive.
+            <div className="mx-auto flex max-w-md flex-col items-center gap-4 rounded-2xl border border-hairline bg-alabaster px-8 py-16 text-center">
               <Newspaper className="h-9 w-9 text-ink/25" aria-hidden />
               <h3 className="font-serif text-xl text-forest">
                 {hasActiveFilters ? 'No articles match those filters' : 'No articles yet'}
@@ -357,14 +359,14 @@ function ArticlesIndex() {
                   : 'The journal is just getting started. Be the first to publish.'}
               </p>
               {hasActiveFilters ? (
-                <button type="button" onClick={clearFilters} className="mkt-btn-ghost !py-2.5 !px-5">
+                <button type="button" onClick={clearFilters} className="mkt-btn-ghost mkt-btn-sm">
                   <span>Clear filters</span>
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={() => router.push('/articles/submit')}
-                  className="mkt-btn !py-2.5 !px-5"
+                  className="mkt-btn mkt-btn-sm"
                 >
                   <PenLine className="h-4 w-4" />
                   <span>Write the first article</span>
@@ -373,7 +375,7 @@ function ArticlesIndex() {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 3xl:grid-cols-4">
                 {gridArticles.map((a, i) => (
                   <ArticleCard
                     key={a.id}

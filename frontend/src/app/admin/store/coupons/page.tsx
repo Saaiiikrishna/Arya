@@ -288,15 +288,15 @@ export default function AdminStoreCouponsPage() {
   const labelCls = 'block text-[10px] uppercase tracking-widest text-ink/60 mb-2 font-bold';
 
   return (
-    <div className="text-ink animate-fade-in px-8 py-12 max-w-[1200px] mx-auto min-h-screen">
+    <div className="text-ink animate-fade-in px-4 sm:px-6 lg:px-8 py-8 sm:py-12 max-w-[1200px] 3xl:max-w-[1600px] mx-auto min-h-screen">
       {/* Header */}
-      <header className="border-b border-hairline pb-8 mb-10 flex justify-between items-end">
+      <header className="border-b border-hairline pb-8 mb-10 flex flex-wrap justify-between items-end gap-4">
         <div>
           <Link href="/admin/dashboard" className="text-sm uppercase tracking-widest text-forest font-medium mb-3 inline-block">
             ← Command Center
           </Link>
-          <h1 className="font-serif text-5xl font-bold leading-none flex items-center gap-3">
-            <Ticket className="w-9 h-9 text-forest/70" /> Coupons
+          <h1 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-bold leading-none flex items-center gap-3">
+            <Ticket className="w-7 h-7 sm:w-9 sm:h-9 text-forest/70" /> Coupons
           </h1>
           <p className="text-ink/50 mt-2 font-serif italic">Storefront promotional codes &amp; redemption limits</p>
         </div>
@@ -359,7 +359,8 @@ export default function AdminStoreCouponsPage() {
         </div>
       ) : (
         <>
-          <div className="border border-hairline bg-white">
+          <div className="border border-hairline bg-white overflow-x-auto">
+            <div className="min-w-[900px]">
             <div className="grid grid-cols-12 gap-4 px-6 py-3 bg-alabaster border-b border-hairline text-[9px] uppercase tracking-widest text-ink/40 font-bold">
               <div className="col-span-3">Code</div>
               <div className="col-span-2">Discount</div>
@@ -432,6 +433,7 @@ export default function AdminStoreCouponsPage() {
                 </div>
               </div>
             ))}
+            </div>
           </div>
 
           <div className="mt-6 flex items-center justify-between">
@@ -474,7 +476,7 @@ export default function AdminStoreCouponsPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className={labelCls}>Code *</label>
               <input
@@ -513,7 +515,7 @@ export default function AdminStoreCouponsPage() {
             />
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className={labelCls}>{form.type === 'PERCENT' ? 'Percentage (%) *' : 'Amount (₹) *'}</label>
               <input
@@ -555,7 +557,7 @@ export default function AdminStoreCouponsPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className={labelCls}>Per-Customer Limit *</label>
               <input
@@ -600,7 +602,7 @@ export default function AdminStoreCouponsPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className={labelCls}>Valid From</label>
               <input

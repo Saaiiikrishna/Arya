@@ -20,24 +20,6 @@
   border-bottom: 1px solid var(--color-border);
 }
 
-.logoIcon {
-  font-size: 1.5rem;
-  background: var(--gradient-primary);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.logoText {
-  font-size: 1.25rem;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  background: var(--gradient-primary);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
 .nav {
   flex: 1;
   padding: var(--space-md);
@@ -48,6 +30,7 @@
 }
 
 .navItem {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-md);
@@ -93,6 +76,92 @@
   white-space: nowrap;
 }
 
+/*
+ * Mobile top bar + hamburger (below the lg breakpoint only). At lg+ the fixed
+ * sidebar is always visible and this bar is hidden via `display: none`.
+ * 0px radius / hairline depth preserved.
+ */
+.mobileBar {
+  display: none;
+}
+
+/*
+ * Backdrop behind the off-canvas drawer on mobile. Glassmorphism per DESIGN.md
+ * (surface tint + blur), no shadow. Hidden by default; shown only when the
+ * drawer is open AND the viewport is below lg.
+ */
+.backdrop {
+  display: none;
+}
+
+/*
+ * Small screens: the full-height fixed sidebar would cover the whole viewport
+ * on a phone, so below the lg breakpoint it becomes an off-canvas drawer that
+ * slides in from the left. A fixed top bar with a hamburger toggles it; the
+ * drawer closes on backdrop tap or on navigation (handled in TSX). 0px radius /
+ * hairline depth is preserved.
+ */
+@media (max-width: 1023px) {
+  .mobileBar {
+    position: sticky;
+    top: 0;
+    z-index: 90;
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-md) var(--space-lg);
+    background: var(--color-bg-secondary);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .hamburger {
+    width: 40px;
+    height: 40px;
+    flex: 0 0 auto;
+    border: 1px solid var(--color-border);
+    border-radius: 0;
+    background: transparent;
+    color: var(--color-text-primary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition-fast);
+  }
+
+  .hamburger:hover {
+    background: rgba(19, 48, 34, 0.06);
+  }
+
+  .sidebar {
+    /* Off-canvas drawer: slid out of view until `.sidebarOpen` is applied. */
+    transform: translateX(-100%);
+    transition: transform var(--transition-normal);
+    z-index: 110;
+  }
+
+  .sidebarOpen {
+    transform: translateX(0);
+  }
+
+  .backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 105;
+    background: rgba(29, 28, 22, 0.5);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+}
+
+/* On lg+ the drawer mechanics are irrelevant — keep the sidebar in place. */
+@media (min-width: 1024px) {
+  .sidebar {
+    transform: none;
+  }
+}
+
 .footer {
   padding: var(--space-md) var(--space-lg);
   border-top: 1px solid var(--color-border);
@@ -111,7 +180,7 @@
   width: 36px;
   height: 36px;
   border-radius: var(--radius-full);
-  background: var(--gradient-primary);
+  background: var(--color-forest);
   display: flex;
   align-items: center;
   justify-content: center;

@@ -119,7 +119,7 @@ function AuthCard() {
   const labelCls = 'font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-ink/55';
 
   return (
-    <div className="mkt-card mx-auto max-w-md px-7 py-9 sm:px-9">
+    <div className="mkt-card mx-auto max-w-md px-5 py-9 sm:px-9">
       {/* Mode toggle — 0px corners per DESIGN.md (no rounded carve-out here). */}
       <div className="mb-7 flex rounded-none border border-hairline bg-white/50 p-1">
         {(['login', 'register'] as const).map((m) => (
@@ -296,13 +296,13 @@ function OrderHistory() {
     'there';
 
   return (
-    <div className="mx-auto max-w-screen-lg">
-      <header className="mb-10 flex flex-wrap items-end justify-between gap-4">
-        <div>
+    <div className="mx-auto max-w-screen-lg 3xl:max-w-[100rem]">
+      <header className="mb-8 flex flex-wrap items-end justify-between gap-4 sm:mb-10">
+        <div className="min-w-0">
           <span className="font-sans text-[11px] font-semibold uppercase tracking-[0.18em] text-saffron-deep">
             Your account
           </span>
-          <h1 className="mt-2 font-serif text-4xl text-forest sm:text-5xl">Hi, {displayName}</h1>
+          <h1 className="mt-2 break-words font-serif text-3xl text-forest sm:text-4xl lg:text-5xl">Hi, {displayName}</h1>
           {customer?.email && (
             <p className="mt-1 font-sans text-sm text-ink/55">{customer.email}</p>
           )}
@@ -339,8 +339,11 @@ function OrderHistory() {
           </button>
         </div>
       ) : orders.length === 0 ? (
-        <div className="mkt-card px-8 py-14 text-center">
-          <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-none bg-saffron-glow/25 text-saffron-deep">
+        <div className="mkt-card px-6 py-14 text-center sm:px-8">
+          {/* Icon-in-circle empty-state marker — rounded-full is a true circle
+              (allowed), kept consistent with /cart, CartDrawer, and the orders
+              error panel which all use a circular icon badge. */}
+          <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-saffron-glow/25 text-saffron-deep">
             <Package className="h-6 w-6" aria-hidden />
           </div>
           <h3 className="font-serif text-xl text-forest">No orders yet</h3>
@@ -362,10 +365,10 @@ function OrderHistory() {
               <li key={order.id}>
                 <Link
                   href={`/orders/${encodeURIComponent(order.id)}`}
-                  className="mkt-card group flex items-center justify-between gap-4 px-6 py-5"
+                  className="mkt-card group flex items-center justify-between gap-3 px-4 py-5 sm:gap-4 sm:px-6"
                 >
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
                       <span className="font-mono text-sm text-forest">{number}</span>
                       <span
                         className={cn(
@@ -440,7 +443,7 @@ export default function AccountPage() {
   return (
     <Layout activeTab="store">
       <StoreCartProvider>
-        <div className="mkt min-h-[60vh] bg-parchment px-6 py-14 sm:px-8 lg:py-20">
+        <div className="mkt min-h-[60vh] bg-parchment px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
           <AccountContents />
         </div>
       </StoreCartProvider>

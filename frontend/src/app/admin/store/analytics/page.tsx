@@ -190,19 +190,19 @@ export default function AdminStoreAnalyticsPage() {
   }
 
   return (
-    <div className="text-ink animate-fade-in px-8 py-12 max-w-[1200px] mx-auto min-h-screen">
+    <div className="text-ink animate-fade-in px-4 sm:px-6 lg:px-8 py-8 sm:py-12 max-w-[1200px] 3xl:max-w-[1600px] mx-auto min-h-screen">
       {/* Header */}
       <header className="border-b border-hairline pb-8 mb-10 flex justify-between items-end flex-wrap gap-4">
         <div>
           <Link href="/admin/dashboard" className="text-sm uppercase tracking-widest text-forest font-medium mb-3 inline-block">
             ← Command Center
           </Link>
-          <h1 className="font-serif text-5xl font-bold leading-none flex items-center gap-3">
-            <BarChart3 className="w-9 h-9 text-forest/70" /> Store Analytics
+          <h1 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-bold leading-none flex items-center gap-3">
+            <BarChart3 className="w-7 h-7 sm:w-9 sm:h-9 text-forest/70" /> Store Analytics
           </h1>
           <p className="text-ink/50 mt-2 font-serif italic">Revenue, orders, inventory &amp; returns at a glance</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center flex-wrap gap-3">
           <span
             className={`inline-flex items-center gap-1.5 px-3 py-2 border text-[10px] uppercase tracking-widest font-bold transition-colors ${
               liveFlash ? 'border-forest bg-forest/10 text-forest' : 'border-hairline text-ink/40'

@@ -64,7 +64,7 @@ export default function DashboardPage() {
   const activeBatch = stats.activeBatch;
 
   return (
-    <div className="text-ink animate-fade-in px-8 py-12 max-w-[1200px] mx-auto min-h-screen">
+    <div className="text-ink animate-fade-in px-4 sm:px-6 lg:px-8 py-8 sm:py-12 max-w-[1200px] 3xl:max-w-[1600px] mx-auto min-h-screen">
       {/* Header */}
       <header className="border-b border-hairline pb-8 mb-12 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
         <div>
@@ -84,7 +84,7 @@ export default function DashboardPage() {
               </button>
             )}
           </div>
-          <h1 className="font-serif text-5xl font-bold leading-none">Command Center</h1>
+          <h1 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-bold leading-none">Command Center</h1>
         </div>
         <div className="text-left md:text-right flex flex-col md:items-end">
           {(() => {

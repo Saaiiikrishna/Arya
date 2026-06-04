@@ -433,17 +433,17 @@ export default function AdminInventoryPage() {
   ];
 
   return (
-    <div className="text-ink animate-fade-in px-8 py-12 max-w-[1280px] mx-auto min-h-screen">
+    <div className="text-ink animate-fade-in px-4 sm:px-6 lg:px-8 py-8 sm:py-12 max-w-[1280px] 3xl:max-w-[1600px] mx-auto min-h-screen">
       {/* Header */}
-      <header className="border-b border-hairline pb-8 mb-10 flex justify-between items-end gap-6">
+      <header className="border-b border-hairline pb-8 mb-10 flex flex-wrap justify-between items-end gap-6">
         <div>
           <Link href="/admin/dashboard" className="text-sm uppercase tracking-widest text-forest font-medium mb-3 inline-block">
             ← Command Center
           </Link>
-          <h1 className="font-serif text-5xl font-bold leading-none">Inventory</h1>
+          <h1 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-bold leading-none">Inventory</h1>
           <p className="text-ink/50 mt-2 font-serif italic">Warehouses, live stock, movements &amp; reorder control</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
           <button
             onClick={() => setShowAdjust(true)}
             className="px-5 py-3 border border-forest text-forest text-[10px] uppercase tracking-widest font-bold hover:bg-forest hover:text-parchment transition-colors flex items-center gap-2"
@@ -460,12 +460,12 @@ export default function AdminInventoryPage() {
       </header>
 
       {/* Tabs */}
-      <div className="flex border-b border-hairline mb-8 flex-wrap">
+      <div className="flex border-b border-hairline mb-8 overflow-x-auto">
         {TABS.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             onClick={() => setTab(key)}
-            className={`px-6 py-3 text-[11px] uppercase tracking-widest font-bold transition-colors border-b-2 -mb-px flex items-center gap-2 ${
+            className={`px-6 py-3 text-[11px] uppercase tracking-widest font-bold transition-colors border-b-2 -mb-px flex items-center gap-2 shrink-0 whitespace-nowrap ${
               tab === key ? 'border-forest text-forest' : 'border-transparent text-ink/40 hover:text-ink'
             }`}
           >
@@ -524,7 +524,8 @@ export default function AdminInventoryPage() {
               <button onClick={loadMatrix} className="underline text-[10px] uppercase tracking-widest font-bold">Retry</button>
             </div>
           ) : (
-            <div className="border border-hairline bg-white">
+            <div className="border border-hairline bg-white overflow-x-auto">
+              <div className="min-w-[760px]">
               <div className="grid grid-cols-12 gap-4 px-6 py-3 bg-alabaster border-b border-hairline text-[9px] uppercase tracking-widest text-ink/40 font-bold">
                 <div className="col-span-4">SKU</div>
                 <div className="col-span-3">Warehouse</div>
@@ -563,6 +564,7 @@ export default function AdminInventoryPage() {
                   </div>
                 ))
               )}
+              </div>
             </div>
           )}
 
@@ -618,7 +620,8 @@ export default function AdminInventoryPage() {
               </button>
             </div>
           ) : (
-            <div className="border border-hairline bg-white">
+            <div className="border border-hairline bg-white overflow-x-auto">
+              <div className="min-w-[760px]">
               <div className="grid grid-cols-12 gap-4 px-6 py-3 bg-alabaster border-b border-hairline text-[9px] uppercase tracking-widest text-ink/40 font-bold">
                 <div className="col-span-3">Code / Name</div>
                 <div className="col-span-3">Location</div>
@@ -661,6 +664,7 @@ export default function AdminInventoryPage() {
                   </div>
                 </div>
               ))}
+              </div>
             </div>
           )}
         </section>
@@ -694,7 +698,8 @@ export default function AdminInventoryPage() {
               <p className="font-serif italic">No stock movements recorded yet.</p>
             </div>
           ) : (
-            <div className="border border-hairline bg-white">
+            <div className="border border-hairline bg-white overflow-x-auto">
+              <div className="min-w-[820px]">
               <div className="grid grid-cols-12 gap-4 px-6 py-3 bg-alabaster border-b border-hairline text-[9px] uppercase tracking-widest text-ink/40 font-bold">
                 <div className="col-span-2">When</div>
                 <div className="col-span-3">SKU</div>
@@ -727,6 +732,7 @@ export default function AdminInventoryPage() {
                   </div>
                 </div>
               ))}
+              </div>
             </div>
           )}
 
@@ -778,7 +784,8 @@ export default function AdminInventoryPage() {
               <p className="font-serif italic">All stock is above reorder thresholds. Nothing to reorder.</p>
             </div>
           ) : (
-            <div className="border border-hairline bg-white">
+            <div className="border border-hairline bg-white overflow-x-auto">
+              <div className="min-w-[760px]">
               <div className="grid grid-cols-12 gap-4 px-6 py-3 bg-alabaster border-b border-hairline text-[9px] uppercase tracking-widest text-ink/40 font-bold">
                 <div className="col-span-4">SKU</div>
                 <div className="col-span-2">Warehouse</div>
@@ -800,6 +807,7 @@ export default function AdminInventoryPage() {
                   <div className="col-span-2 text-right tabular-nums font-bold text-forest">{r.suggestedOrderQty}</div>
                 </div>
               ))}
+              </div>
             </div>
           )}
           {reorder.length > 0 && (
@@ -819,7 +827,7 @@ export default function AdminInventoryPage() {
               <button onClick={() => setShowWarehouseForm(false)} className="text-ink/40 hover:text-ink transition-colors"><X className="w-5 h-5" /></button>
             </div>
             <div className="p-8 space-y-5">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className={LABEL}>Code *</label>
                   <input value={whForm.code} onChange={(e) => setWhForm({ ...whForm, code: e.target.value })} placeholder="WH-MUM" className={INPUT} />
@@ -829,7 +837,7 @@ export default function AdminInventoryPage() {
                   <input value={whForm.name} onChange={(e) => setWhForm({ ...whForm, name: e.target.value })} placeholder="Mumbai Hub" className={INPUT} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className={LABEL}>City</label>
                   <input value={whForm.city} onChange={(e) => setWhForm({ ...whForm, city: e.target.value })} className={INPUT} />
@@ -840,7 +848,7 @@ export default function AdminInventoryPage() {
                   <p className="text-[9px] text-ink/35 mt-1">{STATE_CODE_HINT} — required for the warehouse to be allocatable.</p>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className={LABEL}>GSTIN</label>
                   <input value={whForm.gstin} onChange={(e) => setWhForm({ ...whForm, gstin: e.target.value })} placeholder="27AAACU1234A1Z5" className={INPUT} />
@@ -850,7 +858,7 @@ export default function AdminInventoryPage() {
                   <input value={whForm.postalCode} onChange={(e) => setWhForm({ ...whForm, postalCode: e.target.value })} className={INPUT} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4 items-end">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
                 <div>
                   <label className={LABEL}>Priority</label>
                   <input type="number" min={0} value={whForm.priority} onChange={(e) => setWhForm({ ...whForm, priority: e.target.value })} placeholder="0" className={INPUT} />
@@ -874,7 +882,7 @@ export default function AdminInventoryPage() {
       {/* ═══ MODAL: Adjust Stock ═══ */}
       {showAdjust && (
         <div className="fixed inset-0 bg-ink/50 backdrop-blur-[20px] flex items-center justify-center z-50 p-4">
-          <div className="bg-alabaster border border-hairline w-full max-w-lg">
+          <div className="bg-alabaster border border-hairline w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-hairline px-8 py-5">
               <h2 className="font-serif text-2xl font-bold flex items-center gap-2"><SlidersHorizontal className="w-5 h-5 text-forest/60" /> Adjust Stock</h2>
               <button onClick={() => setShowAdjust(false)} className="text-ink/40 hover:text-ink transition-colors"><X className="w-5 h-5" /></button>
@@ -897,7 +905,7 @@ export default function AdminInventoryPage() {
                   {activeWarehouses.map((w) => <option key={w.id} value={w.id}>{w.code} · {w.name}</option>)}
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className={LABEL}>Quantity Δ *</label>
                   <input type="number" step={1} value={adjustForm.quantityDelta} onChange={(e) => setAdjustForm({ ...adjustForm, quantityDelta: e.target.value })} placeholder="+10 or -3" className={INPUT} />
@@ -928,7 +936,7 @@ export default function AdminInventoryPage() {
       {/* ═══ MODAL: Transfer Stock ═══ */}
       {showTransfer && (
         <div className="fixed inset-0 bg-ink/50 backdrop-blur-[20px] flex items-center justify-center z-50 p-4">
-          <div className="bg-alabaster border border-hairline w-full max-w-lg">
+          <div className="bg-alabaster border border-hairline w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-hairline px-8 py-5">
               <h2 className="font-serif text-2xl font-bold flex items-center gap-2"><ArrowRightLeft className="w-5 h-5 text-forest/60" /> Transfer Stock</h2>
               <button onClick={() => setShowTransfer(false)} className="text-ink/40 hover:text-ink transition-colors"><X className="w-5 h-5" /></button>
@@ -943,7 +951,7 @@ export default function AdminInventoryPage() {
                   onClear={() => setTransferForm({ ...transferForm, skuId: '', skuLabel: '' })}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className={LABEL}>From Warehouse *</label>
                   <select value={transferForm.fromWarehouseId} onChange={(e) => setTransferForm({ ...transferForm, fromWarehouseId: e.target.value })} className={INPUT}>

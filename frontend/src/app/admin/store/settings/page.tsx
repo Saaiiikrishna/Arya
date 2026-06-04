@@ -316,7 +316,7 @@ export default function AdminStoreSettingsPage() {
 
   // ─── tab panels ───────────────────────────────────────────
   const ctaPanel = (
-    <div className="border border-hairline bg-white p-8 max-w-[640px] space-y-5">
+    <div className="border border-hairline bg-white p-4 sm:p-8 max-w-[640px] space-y-5">
       <div>
         <h3 className="font-serif text-xl font-bold mb-1">Landing CTAs</h3>
         <p className="text-xs text-ink/50">Destination links surfaced on the public landing page.</p>
@@ -350,12 +350,12 @@ export default function AdminStoreSettingsPage() {
   );
 
   const sellerPanel = (
-    <div className="border border-hairline bg-white p-8 max-w-[640px] space-y-5">
+    <div className="border border-hairline bg-white p-4 sm:p-8 max-w-[640px] space-y-5">
       <div>
         <h3 className="font-serif text-xl font-bold mb-1">Seller &amp; Fulfilment</h3>
         <p className="text-xs text-ink/50">Identity used for GST invoicing and the active courier for shipments.</p>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className={labelCls}>Seller GSTIN</label>
           <input type="text" className={inputCls} placeholder="36AAACU1234A1Z5"
@@ -369,7 +369,7 @@ export default function AdminStoreSettingsPage() {
           <p className="text-[9px] text-ink/40 mt-1">2-digit GST state code (overrides GSTIN prefix).</p>
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className={labelCls}>Default GST Rate (%)</label>
           <input
@@ -419,7 +419,7 @@ export default function AdminStoreSettingsPage() {
 
   const classesPanel = (
     <div className="border border-hairline bg-white">
-      <div className="flex items-center justify-between px-6 py-4 border-b border-hairline">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-hairline">
         <div>
           <h3 className="font-serif text-xl font-bold">Tax Classes</h3>
           <p className="text-xs text-ink/50 mt-0.5">First resolver in the chain (TaxClass → HSN rate → default).</p>
@@ -434,7 +434,8 @@ export default function AdminStoreSettingsPage() {
           <p className="font-serif italic">No tax classes defined.</p>
         </div>
       ) : (
-        <>
+        <div className="overflow-x-auto">
+          <div className="min-w-[720px]">
           <div className="grid grid-cols-12 gap-4 px-6 py-3 bg-alabaster border-b border-hairline text-[9px] uppercase tracking-widest text-ink/40 font-bold">
             <div className="col-span-4">Name</div>
             <div className="col-span-2">HSN</div>
@@ -467,14 +468,15 @@ export default function AdminStoreSettingsPage() {
               </div>
             </div>
           ))}
-        </>
+          </div>
+        </div>
       )}
     </div>
   );
 
   const ratesPanel = (
     <div className="border border-hairline bg-white">
-      <div className="flex items-center justify-between px-6 py-4 border-b border-hairline">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-hairline">
         <div>
           <h3 className="font-serif text-xl font-bold">HSN Tax Rates</h3>
           <p className="text-xs text-ink/50 mt-0.5">Fallback rate looked up by a SKU&apos;s HSN code when it has no tax class.</p>
@@ -489,7 +491,8 @@ export default function AdminStoreSettingsPage() {
           <p className="font-serif italic">No HSN tax rates defined.</p>
         </div>
       ) : (
-        <>
+        <div className="overflow-x-auto">
+          <div className="min-w-[720px]">
           <div className="grid grid-cols-12 gap-4 px-6 py-3 bg-alabaster border-b border-hairline text-[9px] uppercase tracking-widest text-ink/40 font-bold">
             <div className="col-span-2">HSN</div>
             <div className="col-span-2">GST</div>
@@ -515,7 +518,8 @@ export default function AdminStoreSettingsPage() {
               </div>
             </div>
           ))}
-        </>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -532,14 +536,14 @@ export default function AdminStoreSettingsPage() {
   }
 
   return (
-    <div className="text-ink animate-fade-in px-8 py-12 max-w-[1200px] mx-auto min-h-screen">
+    <div className="text-ink animate-fade-in px-4 sm:px-6 lg:px-8 py-8 sm:py-12 max-w-[1200px] 3xl:max-w-[1600px] mx-auto min-h-screen">
       {/* Header */}
       <header className="border-b border-hairline pb-8 mb-8">
         <Link href="/admin/dashboard" className="text-sm uppercase tracking-widest text-forest font-medium mb-3 inline-block">
           ← Command Center
         </Link>
-        <h1 className="font-serif text-5xl font-bold leading-none flex items-center gap-3">
-          <SettingsIcon className="w-9 h-9 text-forest/70" /> Store Settings
+        <h1 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-bold leading-none flex items-center gap-3">
+          <SettingsIcon className="w-7 h-7 sm:w-9 sm:h-9 text-forest/70" /> Store Settings
         </h1>
         <p className="text-ink/50 mt-2 font-serif italic">Landing links, seller identity, courier &amp; GST tax configuration</p>
       </header>
@@ -586,7 +590,7 @@ export default function AdminStoreSettingsPage() {
             <label className={labelCls}>Name *</label>
             <input type="text" className={inputCls} placeholder="GST 18%" value={classForm.name} onChange={(e) => setClassForm({ ...classForm, name: e.target.value })} />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className={labelCls}>Total GST (%) *</label>
               <input type="number" min={0} max={100} step={0.01} className={inputCls} placeholder="18" value={classForm.totalPct} onChange={(e) => setClassForm({ ...classForm, totalPct: e.target.value })} />
@@ -625,7 +629,7 @@ export default function AdminStoreSettingsPage() {
               <X className="w-4 h-4 shrink-0 mt-0.5" /> {rateError}
             </div>
           )}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className={labelCls}>HSN Code *</label>
               <input

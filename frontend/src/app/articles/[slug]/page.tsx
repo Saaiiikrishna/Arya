@@ -239,7 +239,7 @@ export default function ArticleDetailPage({ params }: PageProps) {
           style={{ background: 'radial-gradient(circle, rgba(255,176,104,0.16), transparent 62%)' }}
         />
 
-        <div className="relative z-10 mx-auto max-w-3xl px-6 py-12 md:px-8 md:py-16">
+        <div className="relative z-10 mx-auto max-w-3xl px-4 py-12 sm:px-6 md:px-8 md:py-16">
           <button
             type="button"
             onClick={() => router.push('/articles')}
@@ -318,7 +318,7 @@ export default function ArticleDetailPage({ params }: PageProps) {
               )}
 
               {/* Title */}
-              <h1 className="font-serif-display font-bold text-4xl md:text-5xl text-forest leading-[1.02] tracking-[-0.02em]">
+              <h1 className="font-serif-display font-bold text-3xl sm:text-4xl md:text-5xl text-forest leading-[1.02] tracking-[-0.02em]">
                 {article.title}
               </h1>
 
@@ -385,10 +385,10 @@ export default function ArticleDetailPage({ params }: PageProps) {
 
         {/* Related — full-width strip below the reading column */}
         {!loading && !notFound && !error && article && related.length > 0 && (
-          <div className="relative z-10 mx-auto max-w-screen-2xl px-6 pb-20 md:px-8">
+          <div className="relative z-10 mx-auto max-w-screen-2xl px-4 pb-20 sm:px-6 md:px-8 3xl:max-w-[110rem]">
             <div className="border-t border-hairline pt-12">
               <h2 className="mb-6 font-serif text-2xl text-forest">Keep reading</h2>
-              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 3xl:grid-cols-4">
                 {related.map((r) => (
                   <ArticleCard
                     key={r.id}

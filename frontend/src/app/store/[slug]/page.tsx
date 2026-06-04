@@ -288,7 +288,7 @@ export default function ProductDetailPage({
 
 function PageShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mkt relative min-h-[calc(100vh-80px)] bg-parchment">
+    <div className="mkt relative min-h-[calc(100dvh-80px)] overflow-hidden bg-parchment">
       <div
         aria-hidden
         className="mkt-float mkt-glow-pulse pointer-events-none absolute -top-32 right-0 h-[30rem] w-[30rem] rounded-full"
@@ -297,7 +297,7 @@ function PageShell({ children }: { children: React.ReactNode }) {
             'radial-gradient(circle, rgba(244,163,0,0.16), transparent 64%)',
         }}
       />
-      <div className="relative z-10 mx-auto max-w-screen-xl px-6 py-10 md:px-8 md:py-14">
+      <div className="relative z-10 mx-auto max-w-screen-xl 3xl:max-w-[1600px] px-4 py-10 sm:px-6 md:px-8 md:py-14">
         {children}
       </div>
     </div>
@@ -477,7 +477,7 @@ function ProductView({
         <span className="truncate text-ink/70">{product.name}</span>
       </nav>
 
-      <div className="grid grid-cols-1 gap-10 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:gap-10 3xl:gap-14">
         {/* Gallery */}
         <div>
           <MediaGallery media={media} mkt aspect="aspect-square" />
@@ -490,7 +490,7 @@ function ProductView({
               {eyebrow}
             </span>
           )}
-          <h1 className="font-serif-display text-4xl font-bold leading-[1.02] tracking-[-0.02em] text-forest md:text-5xl">
+          <h1 className="font-serif-display text-3xl font-bold leading-[1.02] tracking-[-0.02em] text-forest sm:text-4xl md:text-5xl">
             {product.name}
           </h1>
 
@@ -557,14 +557,14 @@ function ProductView({
                       type="button"
                       onClick={() => setSelectedSkuId(sku.id)}
                       aria-pressed={active}
-                      // Rounded corners are the DESIGN.md §7 mkt-* premium-layer
-                      // exception (this is a public marketing surface inside `.mkt`),
-                      // not the 0px default that governs the rest of the app.
+                      // 0px radius per the DESIGN DIRECTIVE — interactive chips are
+                      // neither pills nor circles, so they follow the matte mkt-card
+                      // geometry (0 corners, 1px hairline, surface = alabaster).
                       className={cn(
-                        'flex flex-col items-start gap-0.5 rounded-xl border px-4 py-2.5 text-left transition-colors',
+                        'flex flex-col items-start gap-0.5 border px-4 py-2.5 text-left transition-colors',
                         active
                           ? 'border-saffron bg-saffron-glow/20'
-                          : 'border-hairline bg-white/50 hover:border-saffron/50',
+                          : 'border-hairline bg-alabaster hover:border-saffron/50',
                         !sku.inStock && 'opacity-60',
                       )}
                     >
@@ -588,10 +588,10 @@ function ProductView({
 
           {/* Quantity + add to cart */}
           <div className="mt-1 flex flex-col gap-3">
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3 sm:gap-4">
               {/* Pill stepper: rounded per the DESIGN.md §7 mkt-* marketing-layer
                   exception (matches the catalog page's filter pills inside `.mkt`). */}
-              <div className="inline-flex items-center rounded-full border border-hairline bg-white/60">
+              <div className="inline-flex shrink-0 items-center rounded-full border border-hairline bg-alabaster/60">
                 <button
                   type="button"
                   onClick={() => setQty((q) => Math.max(1, q - 1))}
@@ -921,7 +921,7 @@ function ReviewsSection({
                   setSort(e.target.value as ReviewSort);
                   setPage(1);
                 }}
-                className="rounded-full border border-hairline bg-white/70 px-4 py-2 font-sans text-sm text-forest backdrop-blur focus:border-saffron focus:outline-none focus:ring-2 focus:ring-saffron/30"
+                className="mkt-input px-4 py-2 text-forest"
               >
                 {REVIEW_SORTS.map((opt) => (
                   <option key={opt.value} value={opt.value}>
@@ -1170,7 +1170,7 @@ function WriteReviewForm({
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Sum it up in a line"
           disabled={submitting}
-          className="rounded-xl border border-hairline bg-white/70 px-4 py-2.5 font-sans text-sm text-ink backdrop-blur placeholder:text-ink/40 focus:border-saffron focus:outline-none focus:ring-2 focus:ring-saffron/30 disabled:opacity-60"
+          className="mkt-input px-4 py-2.5 disabled:opacity-60"
         />
       </div>
 
@@ -1191,7 +1191,7 @@ function WriteReviewForm({
           onChange={(e) => setBody(e.target.value)}
           placeholder="What did you like or dislike? How did it perform?"
           disabled={submitting}
-          className="resize-none rounded-xl border border-hairline bg-white/70 px-4 py-3 font-sans text-sm text-ink backdrop-blur placeholder:text-ink/40 focus:border-saffron focus:outline-none focus:ring-2 focus:ring-saffron/30 disabled:opacity-60"
+          className="mkt-input resize-none px-4 py-3 disabled:opacity-60"
         />
       </div>
 

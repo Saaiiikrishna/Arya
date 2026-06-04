@@ -106,14 +106,14 @@ export default function CartDrawer({ open, onClose }: CartDrawerProps) {
 
           {/* Panel — slides in from the right. */}
           <motion.aside
-            className="relative z-10 flex h-full w-full max-w-md flex-col border-l border-hairline bg-parchment/95 backdrop-blur-[20px]"
+            className="relative z-10 flex h-full w-full flex-col border-l border-hairline bg-parchment/95 backdrop-blur-[20px] sm:max-w-md"
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
           >
             {/* Header */}
-            <div className="flex items-center justify-between gap-4 border-b border-hairline px-6 py-5">
+            <div className="flex items-center justify-between gap-4 border-b border-hairline px-5 py-5 sm:px-6">
               <div className="flex items-center gap-2.5 text-forest">
                 <ShoppingBag className="h-5 w-5" aria-hidden />
                 <h2 className="font-serif text-xl text-forest">Your cart</h2>
@@ -129,7 +129,7 @@ export default function CartDrawer({ open, onClose }: CartDrawerProps) {
             </div>
 
             {/* Body */}
-            <div className="flex-1 overflow-y-auto px-6">
+            <div className="flex-1 overflow-y-auto px-5 sm:px-6">
               {loading && (
                 <div className="flex items-center justify-center py-24 text-ink/50">
                   <Loader2 className="h-6 w-6 animate-spin" aria-hidden />
@@ -244,7 +244,7 @@ export default function CartDrawer({ open, onClose }: CartDrawerProps) {
 
             {/* Footer — summary + actions (only when there's something to buy) */}
             {!loading && !isEmpty && (
-              <div className="border-t border-hairline px-6 py-5">
+              <div className="border-t border-hairline px-5 py-5 sm:px-6">
                 <PriceSummary
                   subtotal={cart?.subtotal ?? 0}
                   discount={cart?.discount ?? 0}

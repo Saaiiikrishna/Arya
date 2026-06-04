@@ -7,9 +7,11 @@ import { Newspaper } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
 /**
- * Public articles card — rounded glass `mkt-card` (DESIGN.md §7). Shows a cover
- * image, title, excerpt, optional author + publish date. Presentational + prop-
- * driven; the parent maps an article list item onto these props.
+ * Public articles card — matte `mkt-card` (alabaster surface, 1px hairline, 0px
+ * radius; border shifts to saffron on hover — no shadow/glass per DESIGN.md §7).
+ * Shows a cover image, title, excerpt, optional author + publish date.
+ * Presentational + prop-driven; the parent maps an article list item onto these
+ * props.
  */
 export interface ArticleCardProps {
   title: string;
@@ -92,8 +94,9 @@ export default function ArticleCard({
             src={coverUrl as string}
             alt={title}
             fill
-            // 3-up on desktop, 2-up tablet, 1-up mobile (matches the journal grid).
-            sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+            // 4-up at ≥1920, 3-up desktop, 2-up tablet, 1-up mobile (matches the
+            // journal / related / search grids, which step to 4 cols at 3xl).
+            sizes="(min-width: 1920px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
             priority={priority}
             onError={() => setImgFailed(true)}
             className="object-cover transition-transform duration-500 group-hover:scale-[1.04]"
