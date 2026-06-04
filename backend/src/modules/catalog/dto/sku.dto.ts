@@ -7,11 +7,13 @@ import {
   IsUUID,
   IsNumber,
   Min,
+  Max,
   MaxLength,
   registerDecorator,
   type ValidationOptions,
   type ValidationArguments,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 
 /** Bounds on the free-form variantAttributes map (anti-bloat / anti-DoS). */
 const MAX_VARIANT_KEYS = 20;
@@ -240,4 +242,29 @@ export class CreatePriceTierDto {
   @IsNumber()
   @Min(0)
   unitPrice!: number;
+}
+
+/**
+ * Query DTO for the admin SKU typeahead (`GET /admin/store/skus`). Powers the
+ * SkuPicker so admin forms select a SKU by code/name rather than pasting a raw
+ * UUID. The free-text `search` matches skuCode / name / productName
+ * (case-insensitive); `limit` is clamped server-side (see the service) and also
+ * bounded here so an unbounded scan can never be requested. Lives in the `dto/`
+ * folder (discoverable by the directory scan) and is validated by the global
+ * ValidationPipe (whitelist + implicit conversion).
+ */
+export class SkuSearchQueryDto {
+  /** Free-text query over SKU code / name / product name (case-insensitive). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  search?: string;
+
+  /** Page size cap for the typeahead results (1–50, default applied in service). */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  limit?: number;
 }

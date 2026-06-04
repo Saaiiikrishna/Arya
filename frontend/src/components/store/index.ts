@@ -27,6 +27,9 @@ export type { StockBadgeProps } from './StockBadge';
 export { default as ProductCard } from './ProductCard';
 export type { ProductCardProps } from './ProductCard';
 
+export { default as Stars, StarInput } from './Stars';
+export type { StarsProps, StarInputProps } from './Stars';
+
 export { default as ArticleCard } from './ArticleCard';
 export type { ArticleCardProps } from './ArticleCard';
 
@@ -48,6 +51,9 @@ export type { CodeBlockProps } from './CodeBlock';
 
 export { default as BlockRenderer } from './BlockRenderer';
 export type { BlockRendererProps, ContentBlock, BlockType } from './BlockRenderer';
+
+export { default as JsonLd } from './JsonLd';
+export type { JsonLdProps } from './JsonLd';
 
 export { default as CartLineItem } from './CartLineItem';
 export type { CartLineItemProps } from './CartLineItem';

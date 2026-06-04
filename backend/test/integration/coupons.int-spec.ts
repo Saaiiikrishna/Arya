@@ -34,6 +34,12 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await truncateAll(prisma);
+  // Pool-settle barrier (mirrors the other int-specs): a trivial round-trip hands
+  // back a healthy pooled connection at the start of every test. The concurrent
+  // redeem test pulls three connections from the singleton pool via
+  // Promise.allSettled; without this, one could receive a connection a prior test
+  // left `idle in transaction (aborted)` and fail on 25P02 rather than the CAS.
+  await prisma.$queryRaw`SELECT 1`;
 });
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -98,7 +104,7 @@ async function seedOrder(customerId: string) {
     fullName: 'Test Buyer',
     line1: '1 Test Rd',
     city: 'Bengaluru',
-    stateCode: 'KA',
+    stateCode: '29', // Karnataka — GST state codes are two-digit numeric strings
     postalCode: '560001',
     country: 'IN',
   };

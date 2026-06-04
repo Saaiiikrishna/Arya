@@ -19,10 +19,11 @@
 
 import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { motion } from 'motion/react';
 import { ArrowLeft, AlertCircle, Loader2, Newspaper, CalendarDays, UserRound } from 'lucide-react';
 import Layout from '@/components/Layout';
-import { ArticleCard, MediaGallery, type GalleryMedia } from '@/components/store';
+import { ArticleCard, MediaGallery, JsonLd, type GalleryMedia } from '@/components/store';
 // Imported directly (not via the barrel) so this page does not depend on the
 // store barrel having been updated to re-export the renderer.
 import BlockRenderer, { type ContentBlock } from '@/components/store/BlockRenderer';
@@ -100,6 +101,47 @@ function authorNameOf(article: ArticleDetail): string | null {
     if (name && name.trim()) return name.trim();
   }
   return null;
+}
+
+/**
+ * Build a schema.org BlogPosting structured-data object (rendered as JSON-LD).
+ *
+ * Only confidently-populatable fields are emitted; absent ones are omitted. ISO
+ * dates come from the parsed publishedAt; the cover (already resolved to a URL) is
+ * used as the article `image`. The object is OUR OWN data → safe to JSON-LD.
+ */
+function buildArticleJsonLd(
+  article: ArticleDetail,
+  coverUrl: string | null,
+  authorName: string | null,
+  publishedIso: string | null,
+): Record<string, unknown> {
+  const data: Record<string, unknown> = {
+    '@context': 'https://schema.org',
+    '@type': 'BlogPosting',
+    headline: article.title,
+  };
+
+  if (typeof article.excerpt === 'string' && article.excerpt.trim()) {
+    data.description = article.excerpt.trim();
+  }
+  if (coverUrl) data.image = [coverUrl];
+  if (authorName) data.author = { '@type': 'Person', name: authorName };
+  if (publishedIso) {
+    data.datePublished = publishedIso;
+    // No dedicated updatedAt is exposed publicly — mirror datePublished so the
+    // required dateModified hint is present rather than omitted.
+    const updated =
+      typeof article.updatedAt === 'string' && article.updatedAt.trim()
+        ? article.updatedAt.trim()
+        : publishedIso;
+    data.dateModified = updated;
+  }
+  if (Array.isArray(article.tags) && article.tags.length) {
+    data.keywords = article.tags.join(', ');
+  }
+
+  return data;
 }
 
 export default function ArticleDetailPage({ params }: PageProps) {
@@ -249,6 +291,16 @@ export default function ArticleDetailPage({ params }: PageProps) {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
             >
+              {/* schema.org BlogPosting structured data (JSON-LD) for SEO. */}
+              <JsonLd
+                data={buildArticleJsonLd(
+                  article,
+                  coverUrl,
+                  authorName,
+                  dateInfo?.iso ?? null,
+                )}
+              />
+
               {/* Tags */}
               {article.tags && article.tags.length > 0 && (
                 <div className="mb-5 flex flex-wrap gap-1.5">
@@ -296,12 +348,19 @@ export default function ArticleDetailPage({ params }: PageProps) {
               {/* Cover — the parent reserves a 16/9 box (matching ArticleCard) so
                   the image load does not cause Cumulative Layout Shift. */}
               {coverUrl && (
-                <div className="mt-9 aspect-[16/9] overflow-hidden rounded-2xl border border-hairline bg-parchment-dark">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
+                <div className="relative mt-9 aspect-[16/9] overflow-hidden rounded-2xl border border-hairline bg-parchment-dark">
+                  {/* next/image: the resolved cover host (S3/CDN/localhost) is in
+                      next.config remotePatterns, so the original raw <img> bypass
+                      is unnecessary. `fill` is safe — the parent reserves the 16/9
+                      box and clips overflow. `priority` because this hero cover is
+                      the above-the-fold LCP element on the article page. */}
+                  <Image
                     src={coverUrl}
                     alt={article.title}
-                    className="h-full w-full object-cover"
+                    fill
+                    sizes="(min-width: 768px) 48rem, 100vw"
+                    priority
+                    className="object-cover"
                   />
                 </div>
               )}

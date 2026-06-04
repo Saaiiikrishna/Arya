@@ -29,6 +29,7 @@ import {
 import { api } from '@/lib/api';
 import Pagination from '@/components/store/Pagination';
 import Money, { formatPaise } from '@/components/store/Money';
+import SkuPicker from '@/components/store/SkuPicker';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -100,20 +101,22 @@ const EMPTY_SUPPLIER = {
 // looser 2-digit check here to stay aligned with the backend contract.
 const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 
+// PO line SKU selection is served by the SkuPicker typeahead (GET /admin/store/skus)
+// — any SKU is selectable by code/name/product, not just those on a loaded stock
+// matrix page, so the previous matrix-derived directory (and its truncation cap)
+// are gone.
+
 interface DraftLine {
   skuId: string;
+  /** Display label for the SkuPicker-resolved SKU (e.g. "ABC-001 — Widget"). */
+  skuLabel: string;
   orderedQty: string;
   unitCostRupees: string;
   lotNo: string;
   taxBps: string;
 }
 
-const EMPTY_LINE: DraftLine = { skuId: '', orderedQty: '', unitCostRupees: '', lotNo: '', taxBps: '' };
-
-// The create-PO SKU picker is sourced from the first stock-matrix page (no SKU-list
-// endpoint exists). Above this cap the picker may be incomplete — the form warns and
-// falls back to free-text UUID entry. Matches the limit requested in loadCreateRefs.
-const SKU_MATRIX_CAP = 200;
+const EMPTY_LINE: DraftLine = { skuId: '', skuLabel: '', orderedQty: '', unitCostRupees: '', lotNo: '', taxBps: '' };
 
 export default function AdminPurchasingPage() {
   const [tab, setTab] = useState<Tab>('suppliers');
@@ -149,9 +152,7 @@ export default function AdminPurchasingPage() {
 
   // ── Create-PO form ────────────────────────────────────────────────────────────
   const [warehouses, setWarehouses] = useState<{ id: string; code: string; name: string; isActive: boolean }[]>([]);
-  const [skuDirectory, setSkuDirectory] = useState<{ id: string; label: string }[]>([]);
   const [refsError, setRefsError] = useState<string | null>(null);
-  const [skuTruncated, setSkuTruncated] = useState(false);
   const [createForm, setCreateForm] = useState<{ supplierId: string; warehouseId: string; notes: string; lines: DraftLine[] }>(
     { supplierId: '', warehouseId: '', notes: '', lines: [{ ...EMPTY_LINE }] },
   );
@@ -200,31 +201,17 @@ export default function AdminPurchasingPage() {
     }
   }, [orderPage, orderStatusFilter]);
 
-  // Warehouses + SKU directory (derived from the stock matrix — no SKU-list endpoint).
+  // Receiving warehouses for the create-PO form. SKU selection per line is served
+  // by the SkuPicker typeahead (GET /admin/store/skus), so no SKU directory is
+  // pre-loaded here.
   const loadCreateRefs = useCallback(async () => {
     setRefsError(null);
-    setSkuTruncated(false);
     try {
-      const [wh, matrix] = await Promise.all([
-        api.adminListWarehouses(false),
-        api.adminGetStockMatrix({ limit: SKU_MATRIX_CAP }),
-      ]);
+      const wh = await api.adminListWarehouses(false);
       setWarehouses(Array.isArray(wh) ? wh : []);
-      const matrixRows: any[] = matrix?.data ?? [];
-      const map = new Map<string, { id: string; label: string }>();
-      for (const r of matrixRows) {
-        if (r.sku) map.set(r.sku.id, { id: r.sku.id, label: `${r.sku.skuCode} — ${r.sku.name}` });
-      }
-      setSkuDirectory(Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label)));
-      // The picker is sourced from the first matrix page only. If we hit the cap or
-      // the reported total exceeds it, the SKU list may be incomplete — warn so the
-      // operator falls back to the free-text UUID entry for missing SKUs.
-      const total = Number(matrix?.meta?.total ?? matrixRows.length);
-      setSkuTruncated(matrixRows.length >= SKU_MATRIX_CAP || total > SKU_MATRIX_CAP);
     } catch (e: any) {
-      setRefsError(e?.message || 'Failed to load suppliers, warehouses or SKUs for this form');
+      setRefsError(e?.message || 'Failed to load warehouses for this form');
       setWarehouses([]);
-      setSkuDirectory([]);
     }
   }, []);
 
@@ -528,8 +515,6 @@ export default function AdminPurchasingPage() {
       </span>
     );
   };
-
-  const skuLabel = (id: string) => skuDirectory.find((s) => s.id === id)?.label;
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
@@ -905,12 +890,6 @@ export default function AdminPurchasingPage() {
               </div>
             )}
 
-            {skuTruncated && !refsError && (
-              <div className="border border-marigold/40 bg-marigold/10 p-4 mb-6 text-sm text-warning">
-                Showing the first {SKU_MATRIX_CAP} SKUs only — the picker may be incomplete. For a SKU not listed, paste its UUID into the SKU field.
-              </div>
-            )}
-
             <div className="grid grid-cols-2 gap-4 mb-6">
               <div>
                 <label className={LABEL}>Supplier *</label>
@@ -951,14 +930,12 @@ export default function AdminPurchasingPage() {
                 {createForm.lines.map((l, idx) => (
                   <div key={idx} className="grid grid-cols-12 gap-3 items-start">
                     <div className="col-span-4">
-                      {skuDirectory.length > 0 ? (
-                        <select value={l.skuId} onChange={(e) => updateLine(idx, { skuId: e.target.value })} className={INPUT_SM}>
-                          <option value="">Select SKU…</option>
-                          {skuDirectory.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-                        </select>
-                      ) : (
-                        <input value={l.skuId} onChange={(e) => updateLine(idx, { skuId: e.target.value })} placeholder="SKU UUID" className={INPUT_SM} />
-                      )}
+                      <SkuPicker
+                        value={l.skuId}
+                        selectedLabel={l.skuLabel}
+                        onSelect={(s) => updateLine(idx, { skuId: s.id, skuLabel: `${s.skuCode}${s.name ? ` — ${s.name}` : ''}` })}
+                        onClear={() => updateLine(idx, { skuId: '', skuLabel: '' })}
+                      />
                     </div>
                     <div className="col-span-2">
                       <input type="number" min={1} step={1} value={l.orderedQty} onChange={(e) => updateLine(idx, { orderedQty: e.target.value })} placeholder="100" className={`${INPUT_SM} text-right tabular-nums`} />
@@ -982,9 +959,6 @@ export default function AdminPurchasingPage() {
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
-                    {l.skuId && skuLabel(l.skuId) && (
-                      <div className="col-span-12 -mt-1 text-[9px] text-ink/35 pl-1">{skuLabel(l.skuId)}</div>
-                    )}
                   </div>
                 ))}
               </div>

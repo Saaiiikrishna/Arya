@@ -25,6 +25,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../prisma';
 import { EmailService } from '../email/email.service';
+import { StoreAuthService } from '../store-auth';
 import {
   CreateArticleDto,
   UpdateArticleDto,
@@ -95,6 +96,10 @@ export class ArticlesService implements OnModuleInit {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly email: EmailService,
+    // StoreAuthService owns the Discord article-announcement webhook poster
+    // (it already holds the SiteSettings-backed webhook config + URL validation).
+    // StoreAuthModule is imported by ArticlesModule and exports this service.
+    private readonly storeAuth: StoreAuthService,
   ) {
     this.s3 = new S3Client({
       region: this.config.get<string>('AWS_REGION', 'ap-south-1'),
@@ -199,42 +204,98 @@ export class ArticlesService implements OnModuleInit {
   /**
    * Public paginated list of PUBLISHED articles. Filters: tag (array overlap),
    * category (treated as a tag — articles carry tags, not a category column),
-   * and a bounded ILIKE search over title/excerpt.
+   * and a free-text search.
    *
-   * Ordered PURELY by recency (publishedAt desc, createdAt desc) so pagination is
-   * correct and consistent across pages. Featured-first is NOT applied here: with
-   * a column-less featured flag (it is the reserved FEATURED_TAG, not an orderBy-
-   * able column) the only way to honor it would be an in-memory re-sort of the
-   * already-paginated page slice — which silently reorders just the current page
-   * and breaks featured-first across pages (a featured article on page 3 never
-   * gets promoted). The page-1 "featured strip" is derived by the frontend from
-   * the returned `isFeatured` flag, so the list makes no false cross-page promise.
+   * When NO search term is present, the list is ordered PURELY by recency
+   * (publishedAt desc, createdAt desc) so pagination is correct and consistent
+   * across pages. Featured-first is NOT applied here: with a column-less featured
+   * flag (it is the reserved FEATURED_TAG, not an orderBy-able column) the only
+   * way to honor it would be an in-memory re-sort of the already-paginated page
+   * slice — which silently reorders just the current page and breaks
+   * featured-first across pages (a featured article on page 3 never gets
+   * promoted). The page-1 "featured strip" is derived by the frontend from the
+   * returned `isFeatured` flag, so the list makes no false cross-page promise.
+   *
+   * When a search term IS present, results are ranked/filtered with Postgres
+   * full-text search over the SQL-only `articles.search_vector` GENERATED tsvector
+   * column (websearch_to_tsquery + ts_rank, GIN-backed) via {@link searchPublicIds}
+   * and ordered by relevance (ts_rank desc, recency as a stable tiebreaker). The
+   * raw query resolves only the ranked, paginated ids + the match count; the rows
+   * are then loaded with the SAME select (and the same cover-presign step) as the
+   * recency path so the response shape is identical regardless of search mode.
    */
   async listPublic(query: ArticleListQueryDto) {
     const { page, limit, skip } = this.resolvePaging(query.page, query.limit);
 
+    // hasEvery / @> semantics: ALL requested tags must be present (tag AND
+    // category). `category` has no dedicated column on Article, so honor it as a
+    // tag match — the same treatment the recency path uses — so the public
+    // category filter still works against the existing schema.
+    const tagFilters: string[] = [];
+    if (query.tag) tagFilters.push(query.tag);
+    if (query.category) tagFilters.push(query.category);
+
+    const searchTerm = query.search?.trim();
+
+    // ── SEARCH PATH ── full-text rank/filter via the SQL-only search_vector.
+    if (searchTerm) {
+      const { ids, total } = await this.searchPublicIds(
+        searchTerm,
+        tagFilters,
+        limit,
+        skip,
+      );
+
+      if (ids.length === 0) {
+        return {
+          data: [],
+          meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+        };
+      }
+
+      // Load the ranked page with the normal include/select. `findMany IN (...)`
+      // does NOT preserve the input order, so re-sort into the ts_rank order the
+      // raw query returned (relevance is the contract for a search).
+      //
+      // The `status: PUBLISHED` filter is defensive/redundant: searchPublicIds
+      // already gates on status = 'PUBLISHED'. It closes a tiny TOCTOU window
+      // where a concurrent admin archive between the raw query and this findMany
+      // could otherwise surface a now-ARCHIVED row, and makes the
+      // published-only intent explicit at the read site.
+      const rows = await this.prisma.article.findMany({
+        where: { id: { in: ids }, status: ArticleStatus.PUBLISHED },
+        select: {
+          id: true,
+          slug: true,
+          title: true,
+          excerpt: true,
+          coverS3Key: true,
+          tags: true,
+          authorName: true,
+          publishedAt: true,
+        },
+      });
+      const order = new Map(ids.map((id, i) => [id, i]));
+      rows.sort(
+        (a, b) =>
+          (order.get(a.id) ?? Number.MAX_SAFE_INTEGER) -
+          (order.get(b.id) ?? Number.MAX_SAFE_INTEGER),
+      );
+
+      const data = await this.presignListCovers(rows);
+      return {
+        data,
+        meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+      };
+    }
+
+    // ── RECENCY PATH ── no search term: pure recency order (stable pagination).
     const where: Prisma.ArticleWhereInput = {
       status: ArticleStatus.PUBLISHED,
     };
-
-    const tagFilters: string[] = [];
-    if (query.tag) tagFilters.push(query.tag);
-    // `category` has no dedicated column on Article; honor it as a tag match so
-    // the public category filter still works against the existing schema.
-    if (query.category) tagFilters.push(query.category);
     if (tagFilters.length > 0) {
       // hasEvery → all requested tags must be present (tag AND category).
       where.tags = { hasEvery: tagFilters };
-    }
-
-    if (query.search) {
-      const term = query.search.trim();
-      if (term) {
-        where.OR = [
-          { title: { contains: term, mode: 'insensitive' } },
-          { excerpt: { contains: term, mode: 'insensitive' } },
-        ];
-      }
     }
 
     const [rows, total] = await Promise.all([
@@ -262,22 +323,98 @@ export class ArticlesService implements OnModuleInit {
       this.prisma.article.count({ where }),
     ]);
 
-    // Resolve a presigned read URL for each cover so ArticleCard can render the
-    // thumbnail without the storefront needing direct bucket access. Batched with
-    // Promise.all; a sign failure (or absent key) tolerates null so one bad cover
-    // never fails the whole list. coverS3Key is kept on the item too (callers that
-    // resolve their own URL can still use it).
-    const data = await Promise.all(
-      rows.map(async (r) => {
-        const item = ArticlesService.toPublicListItem(r);
-        return { ...item, coverUrl: await this.presignCoverRead(r.coverS3Key) };
-      }),
-    );
+    const data = await this.presignListCovers(rows);
 
     return {
       data,
       meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
+  }
+
+  /**
+   * Full-text rank/filter of PUBLISHED articles against the SQL-only
+   * `articles.search_vector` GENERATED tsvector column (GIN-indexed, NOT modeled
+   * in Prisma — hence raw SQL, the approved pattern; see the
+   * 20260616000000_fulltext_search migration).
+   *
+   * websearch_to_tsquery('english', term) parses a user-friendly query string
+   * (quoted phrases, OR, -negation) safely — the term is a BOUND parameter, never
+   * interpolated. The `search_vector @@ query` predicate uses the GIN index; rows
+   * are ordered by ts_rank(search_vector, query) DESC with publishedAt/createdAt
+   * as a deterministic tiebreaker so equal-rank rows paginate stably.
+   *
+   * Tag/category filters (ALL-must-match) reuse the related-articles array-literal
+   * idiom: an explicit `ARRAY[$1,$2,...]::text[]` built from individually-bound
+   * placeholders via Prisma.join, matched with the `@>` contains operator (the
+   * `hasEvery` equivalent) so the GIN tags index is used and binding is
+   * injection-safe.
+   *
+   * Returns the ranked, paginated ids plus the total match count (a windowed
+   * COUNT(*) OVER() so the count reflects the SAME ts_query + filters as the page).
+   */
+  private async searchPublicIds(
+    term: string,
+    tagFilters: string[],
+    limit: number,
+    skip: number,
+  ): Promise<{ ids: string[]; total: number }> {
+    // Optional ALL-tags-match filter (tag AND category). Built as a bound
+    // ARRAY[...]::text[] literal + `@>` (contains) — the GIN-friendly `hasEvery`
+    // equivalent, mirroring getRelatedBySlug. Empty → no tag predicate.
+    const tagPredicate =
+      tagFilters.length > 0
+        ? Prisma.sql`AND a.tags @> ARRAY[${Prisma.join(tagFilters)}]::text[]`
+        : Prisma.empty;
+
+    const rows = await this.prisma.$queryRaw<
+      Array<{ id: string; total: bigint }>
+    >(Prisma.sql`
+      SELECT a.id,
+             count(*) OVER() AS total
+      FROM articles a,
+           websearch_to_tsquery('english', ${term}) AS query
+      WHERE a.status = 'PUBLISHED'
+        AND a.search_vector @@ query
+        ${tagPredicate}
+      ORDER BY ts_rank(a.search_vector, query) DESC,
+               a.published_at DESC NULLS LAST,
+               a.created_at DESC
+      LIMIT ${limit}
+      OFFSET ${skip}
+    `);
+
+    const ids = rows.map((r) => r.id);
+    // count(*) OVER() is constant across the windowed rows; 0 rows → 0 matches.
+    const total = rows.length > 0 ? Number(rows[0].total) : 0;
+    return { ids, total };
+  }
+
+  /**
+   * Resolve a presigned read URL for each row's cover so ArticleCard can render
+   * the thumbnail without the storefront needing direct bucket access. Batched
+   * with Promise.all; a sign failure (or absent key) tolerates null so one bad
+   * cover never fails the whole list. coverS3Key is kept on the item too (callers
+   * that resolve their own URL can still use it). Shared by both list paths so the
+   * search and recency responses have an identical shape.
+   */
+  private presignListCovers(
+    rows: Array<{
+      id: string;
+      slug: string;
+      title: string;
+      excerpt: string | null;
+      coverS3Key: string | null;
+      tags: string[];
+      authorName: string | null;
+      publishedAt: Date | null;
+    }>,
+  ) {
+    return Promise.all(
+      rows.map(async (r) => {
+        const item = ArticlesService.toPublicListItem(r);
+        return { ...item, coverUrl: await this.presignCoverRead(r.coverS3Key) };
+      }),
+    );
   }
 
   /**
@@ -339,6 +476,14 @@ export class ArticlesService implements OnModuleInit {
       throw new NotFoundException('Article not found');
     }
 
+    // Presign the cover read URL exactly as the list/related paths do. The
+    // arya-documents bucket is private, so returning ONLY the raw coverS3Key
+    // (as this detail endpoint previously did) makes the frontend's
+    // resolveMediaUrl build a public virtual-hosted URL that 403s in prod. The
+    // helper is best-effort: a missing key / sign failure yields null so a broken
+    // cover never fails the detail fetch.
+    const coverUrl = await this.presignCoverRead(article.coverS3Key);
+
     return {
       id: article.id,
       slug: article.slug,
@@ -346,10 +491,14 @@ export class ArticlesService implements OnModuleInit {
       body: article.body,
       excerpt: article.excerpt,
       coverS3Key: article.coverS3Key,
+      coverUrl,
       authorName: article.authorName,
       tags: ArticlesService.visibleTags(article.tags),
       isFeatured: article.tags.includes(FEATURED_TAG),
       publishedAt: article.publishedAt,
+      // Exposed so the detail page's JSON-LD `dateModified` reflects the real
+      // last-edit time instead of always falling back to publishedAt.
+      updatedAt: article.updatedAt,
       media: article.media.map((m) => ({
         id: m.id,
         type: m.type,
@@ -1043,7 +1192,32 @@ export class ArticlesService implements OnModuleInit {
       `Good news — your article <strong>${this.escape(published.title)}</strong> has been approved and published on Aryavartham.`,
     );
 
+    // Announce the freshly-published article to Discord (best-effort, fire-and-
+    // forget — NOT awaited, never inside a transaction). postDiscordArticle is a
+    // no-op unless an admin has configured the webhook URL in SiteSettings, so
+    // this is fully config-gated; a webhook failure can never affect the publish.
+    void this.storeAuth.postDiscordArticle({
+      title: published.title,
+      url: `${this.frontendBaseUrl()}/articles/${published.slug}`,
+      excerpt: published.excerpt,
+    });
+
     return published;
+  }
+
+  /**
+   * Resolve the canonical public site origin for building shareable article links.
+   * FRONTEND_URL may be a comma-separated CORS origin list (see realtime
+   * constants); take the first entry and strip any trailing slash so the joined
+   * `/articles/<slug>` path is well-formed.
+   */
+  private frontendBaseUrl(): string {
+    const raw = this.config.get<string>(
+      'FRONTEND_URL',
+      'https://aryavartham.com',
+    );
+    const first = raw.split(',')[0]?.trim() || 'https://aryavartham.com';
+    return first.replace(/\/+$/, '');
   }
 
   /**

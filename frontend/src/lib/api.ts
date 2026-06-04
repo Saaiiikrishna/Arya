@@ -1452,6 +1452,22 @@ class ApiClient {
     });
   }
 
+  /**
+   * SKU typeahead for the admin SkuPicker — searches skuCode / name / productName
+   * (case-insensitive) and returns a lightweight projection. `limit` is clamped
+   * server-side (1–50). Powers SkuPicker in the inventory + purchasing forms,
+   * replacing raw SKU-UUID text entry.
+   */
+  async adminSearchSkus(search: string, limit?: number) {
+    const params = new URLSearchParams();
+    if (search.trim()) params.set('search', search.trim());
+    if (limit !== undefined) params.set('limit', String(limit));
+    const qs = params.toString();
+    return this.request<{ id: string; skuCode: string; name: string | null; productName: string | null }[]>(
+      `/admin/store/skus${qs ? `?${qs}` : ''}`,
+    );
+  }
+
   // ─── Store Admin: Product media ───────────────────────────────────────────
 
   async adminPresignProductMedia(productId: string, data: { fileName: string; mimeType: string; [k: string]: any }) {
@@ -1539,7 +1555,7 @@ class ApiClient {
     return this.request<any>(`/admin/store/warehouses/${id}`);
   }
 
-  async adminCreateWarehouse(data: { name: string; code?: string; [k: string]: any }) {
+  async adminCreateWarehouse(data: { code: string; name: string; [k: string]: any }) {
     return this.request<any>('/admin/store/warehouses', { method: 'POST', body: data });
   }
 
@@ -1648,7 +1664,7 @@ class ApiClient {
   async adminCreatePurchaseOrder(data: {
     supplierId: string;
     warehouseId: string;
-    lines: Array<{ skuId: string; orderedQty: number; unitCostPaise: number; lotNo?: string; taxBps?: number; [k: string]: any }>;
+    lines: Array<{ skuId: string; orderedQty: number; unitCostPaise: number; lotNo?: number; taxBps?: number; [k: string]: any }>;
     [k: string]: any;
   }) {
     return this.request<any>('/admin/store/purchase-orders', { method: 'POST', body: data });
@@ -1959,6 +1975,36 @@ class ApiClient {
   /** Hard-remove an article. */
   async adminDeleteArticle(id: string) {
     return this.request<any>(`/admin/store/articles/${id}`, { method: 'DELETE' });
+  }
+
+  // ─── Store Admin: Reviews moderation ──────────────────────────────────────
+  //
+  // GET  /admin/store/reviews?status=&page=&limit= (AdminGuard)
+  // PATCH /admin/store/reviews/:id  { status: 'APPROVED' | 'REJECTED' }
+  // On approve the backend adds the rating to Product.ratingSum/ratingCount under
+  // an advisory lock + CAS (idempotent); on un-approve it subtracts. The actor is
+  // pinned server-side from the JWT — never sent in the body.
+
+  async adminListReviews(params: {
+    status?: string;
+    page?: number;
+    limit?: number;
+  } = {}) {
+    const qs = new URLSearchParams(
+      Object.entries(params)
+        .filter(([, v]) => v !== undefined && v !== null && v !== '')
+        .map(([k, v]) => [k, String(v)]),
+    ).toString();
+    return this.request<{ data: any[]; meta: any }>(
+      `/admin/store/reviews${qs ? `?${qs}` : ''}`,
+    );
+  }
+
+  async adminModerateReview(id: string, status: 'APPROVED' | 'REJECTED') {
+    return this.request<any>(`/admin/store/reviews/${id}`, {
+      method: 'PATCH',
+      body: { status },
+    });
   }
 }
 

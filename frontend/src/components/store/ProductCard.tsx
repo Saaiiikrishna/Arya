@@ -1,10 +1,13 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { ImageOff } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import Money from './Money';
 import StockBadge from './StockBadge';
+import Stars from './Stars';
 
 /**
  * Public storefront product card — rounded glass `mkt-card` (DESIGN.md §7 premium
@@ -33,6 +36,17 @@ export interface ProductCardProps {
   eyebrow?: string | null;
   /** One-line subtitle under the name. */
   subtitle?: string | null;
+  /** Average rating (0..5, may be fractional). Stars render only when ratingCount>0. */
+  ratingAverage?: number | null;
+  /** Number of approved ratings. The star row is hidden when this is 0/absent. */
+  ratingCount?: number | null;
+  /**
+   * Eager-load the thumbnail (sets next/image `priority`, disabling lazy-load).
+   * Set this on the first above-the-fold card in a catalog grid — it is frequently
+   * the Largest Contentful Paint element, so prioritising it improves LCP. Leave
+   * `false` (the default) for all other cards so they lazy-load as usual.
+   */
+  priority?: boolean;
   className?: string;
 }
 
@@ -47,6 +61,9 @@ export default function ProductCard({
   stockQty,
   eyebrow,
   subtitle,
+  ratingAverage,
+  ratingCount,
+  priority = false,
   className,
 }: ProductCardProps) {
   const isRange =
@@ -54,19 +71,43 @@ export default function ProductCard({
   const onSale =
     compareAtPaise != null && priceFrom != null && compareAtPaise > priceFrom;
 
+  // next/image optimizes the remote thumbnail (a known CDN/S3 URL). If the host
+  // is not in next.config remotePatterns, or the fetch errors, we fall back to
+  // the same placeholder used when no image exists — so a bad/un-listed URL
+  // degrades gracefully instead of breaking the card.
+  const [imgFailed, setImgFailed] = useState(false);
+  // Reset the failure flag when the image prop changes, WITHOUT an effect. React
+  // recycles a card's component instance when a list re-renders with new data
+  // (same key/position, new product); without this reset a card whose previous
+  // image failed would stay stuck on the placeholder even though the new product
+  // has a valid image. This is the React-recommended "adjust state during render"
+  // pattern (track the prev prop, reset synchronously) rather than a useEffect —
+  // the latter trips `react-hooks/set-state-in-effect` and renders the stale
+  // placeholder for one frame before correcting.
+  const [prevImageUrl, setPrevImageUrl] = useState(imageUrl);
+  if (imageUrl !== prevImageUrl) {
+    setPrevImageUrl(imageUrl);
+    setImgFailed(false);
+  }
+  const showImage = !!imageUrl && !imgFailed;
+
   return (
     <Link
       href={href}
       className={cn('mkt-card group block overflow-hidden', className)}
     >
       <div className="relative aspect-[4/5] w-full overflow-hidden bg-parchment-dark">
-        {imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={imageUrl}
+        {showImage ? (
+          <Image
+            src={imageUrl as string}
             alt={imageAlt || name}
-            loading="lazy"
-            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
+            fill
+            // Matches the catalog grid: 4-up at ≥1024px (25vw), 3-up at ≥640px
+            // (33vw), 2-up below that (50vw) — see store/page.tsx grid-cols classes.
+            sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw"
+            priority={priority}
+            onError={() => setImgFailed(true)}
+            className="object-cover transition-transform duration-500 group-hover:scale-[1.04]"
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-ink/25">
@@ -97,6 +138,15 @@ export default function ProductCard({
         </h3>
         {subtitle && (
           <p className="font-sans text-xs text-ink/55 line-clamp-1">{subtitle}</p>
+        )}
+
+        {ratingCount != null && ratingCount > 0 && (
+          <Stars
+            value={ratingAverage ?? 0}
+            count={ratingCount}
+            size="h-3.5 w-3.5"
+            className="mt-1"
+          />
         )}
 
         <div className="mt-2 flex items-baseline gap-2">

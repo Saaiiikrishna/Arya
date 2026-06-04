@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { LogOut } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { useSettings } from '@/lib/settings';
 import styles from '../AdminSidebar.module.css';
@@ -27,6 +28,7 @@ const navItems = [
   { href: '/admin/store/coupons', label: 'Coupons', icon: '🎟️' },
   { href: '/admin/store/analytics', label: 'Store Analytics', icon: '📈' },
   { href: '/admin/store/articles', label: 'Articles', icon: '✍️' },
+  { href: '/admin/store/reviews', label: 'Reviews', icon: '⭐' },
   { href: '/admin/store/settings', label: 'Store Settings', icon: '🏬' },
 ];
 
@@ -51,18 +53,26 @@ export default function AdminSidebar() {
       </div>
 
       <nav className={styles.nav}>
-        {navItems.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`${styles.navItem} ${
-              pathname?.startsWith(item.href) ? styles.active : ''
-            }`}
-          >
-            <span className={styles.navIcon}>{item.icon}</span>
-            <span className={styles.navLabel}>{item.label}</span>
-          </Link>
-        ))}
+        {navItems.map((item) => {
+          // Exact match OR a true descendant (href + '/') so a leaf route never
+          // lights up a sibling that merely shares its string prefix. e.g.
+          // `/admin/store/orders` highlights on `/admin/store/orders/[id]` but
+          // `/admin/store` would NOT spuriously match `/admin/store-foo`.
+          const isActive =
+            pathname === item.href || pathname?.startsWith(`${item.href}/`);
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`${styles.navItem} ${isActive ? styles.active : ''}`}
+            >
+              <span className={styles.navIcon} aria-hidden>
+                {item.icon}
+              </span>
+              <span className={styles.navLabel}>{item.label}</span>
+            </Link>
+          );
+        })}
       </nav>
 
       <div className="p-4 border-t border-hairline flex flex-col gap-4">
@@ -86,7 +96,7 @@ export default function AdminSidebar() {
           title="Logout"
         >
           <span className="font-sans text-[10px] uppercase tracking-widest font-bold group-hover:tracking-[0.25em] transition-all">Logout</span>
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+          <LogOut className="w-3.5 h-3.5" aria-hidden />
         </button>
       </div>
     </aside>

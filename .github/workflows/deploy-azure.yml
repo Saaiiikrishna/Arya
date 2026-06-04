@@ -5,6 +5,12 @@ on:
     branches:
       - main
 
+# Cancel any in-progress deploy on the same ref so concurrent pushes to main
+# don't interleave and produce a partially-updated environment.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   ACR_NAME: aryaprodacr
   RESOURCE_GROUP: arya-prod-rg
@@ -35,6 +41,9 @@ jobs:
         run: |
           ACR_USERNAME=$(az acr credential show --name ${{ env.ACR_NAME }} --query username -o tsv)
           ACR_PASSWORD=$(az acr credential show --name ${{ env.ACR_NAME }} --query "passwords[0].value" -o tsv)
+          # Mask both credential components in logs (defence in depth). The username
+          # is a credential component even though it matches the registry name.
+          echo "::add-mask::${ACR_USERNAME}"
           echo "::add-mask::${ACR_PASSWORD}"
           echo "acr_username=${ACR_USERNAME}" >> $GITHUB_OUTPUT
           echo "acr_password=${ACR_PASSWORD}" >> $GITHUB_OUTPUT
@@ -100,7 +109,8 @@ jobs:
                 "JWT_EXPIRATION=15m" \
                 "JWT_REFRESH_SECRET=${{ secrets.JWT_REFRESH_SECRET }}" \
                 "JWT_REFRESH_EXPIRATION=7d" \
-                "AWS_REGION=ap-south-2" \
+                "JWT_CUSTOMER_SECRET=${{ secrets.JWT_CUSTOMER_SECRET }}" \
+                "AWS_REGION=ap-south-1" \
                 "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" \
                 "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" \
                 "AWS_SES_FROM_EMAIL=no-reply@aryavartham.com" \
@@ -109,10 +119,12 @@ jobs:
                 "NODE_ENV=production" \
                 "PORT=3001" \
                 "FRONTEND_URL=https://aryavartham.com" \
-                "BATCH_CAPACITY=1000" \
+                "BATCH_CAPACITY=100" \
                 "RAZORPAY_KEY_ID=${{ secrets.RAZORPAY_KEY_ID }}" \
                 "RAZORPAY_KEY_SECRET=${{ secrets.RAZORPAY_KEY_SECRET }}" \
                 "RAZORPAY_WEBHOOK_SECRET=${{ secrets.RAZORPAY_WEBHOOK_SECRET }}" \
+                "RAZORPAY_STORE_WEBHOOK_SECRET=${{ secrets.RAZORPAY_STORE_WEBHOOK_SECRET }}" \
+                "COURIER_WEBHOOK_SECRET=${{ secrets.COURIER_WEBHOOK_SECRET }}" \
                 "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}" \
                 "GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}" \
                 "WHATSAPP_API_TOKEN=${{ secrets.WHATSAPP_API_TOKEN }}" \
@@ -141,7 +153,8 @@ jobs:
                 "JWT_EXPIRATION=15m" \
                 "JWT_REFRESH_SECRET=${{ secrets.JWT_REFRESH_SECRET }}" \
                 "JWT_REFRESH_EXPIRATION=7d" \
-                "AWS_REGION=ap-south-2" \
+                "JWT_CUSTOMER_SECRET=${{ secrets.JWT_CUSTOMER_SECRET }}" \
+                "AWS_REGION=ap-south-1" \
                 "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" \
                 "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" \
                 "AWS_SES_FROM_EMAIL=no-reply@aryavartham.com" \
@@ -150,10 +163,12 @@ jobs:
                 "NODE_ENV=production" \
                 "PORT=3001" \
                 "FRONTEND_URL=https://aryavartham.com" \
-                "BATCH_CAPACITY=1000" \
+                "BATCH_CAPACITY=100" \
                 "RAZORPAY_KEY_ID=${{ secrets.RAZORPAY_KEY_ID }}" \
                 "RAZORPAY_KEY_SECRET=${{ secrets.RAZORPAY_KEY_SECRET }}" \
                 "RAZORPAY_WEBHOOK_SECRET=${{ secrets.RAZORPAY_WEBHOOK_SECRET }}" \
+                "RAZORPAY_STORE_WEBHOOK_SECRET=${{ secrets.RAZORPAY_STORE_WEBHOOK_SECRET }}" \
+                "COURIER_WEBHOOK_SECRET=${{ secrets.COURIER_WEBHOOK_SECRET }}" \
                 "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}" \
                 "GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}" \
                 "WHATSAPP_API_TOKEN=${{ secrets.WHATSAPP_API_TOKEN }}" \
@@ -238,7 +253,5 @@ jobs:
             az containerapp revision deactivate --name arya-frontend-web --resource-group ${{ env.RESOURCE_GROUP }} --revision "$rev" || true
           done
 
-      - name: Configure Health Probes
-        run: |
-          az containerapp update --name arya-frontend-web --resource-group ${{ env.RESOURCE_GROUP }} \
-            --set-env-vars "HOSTNAME=0.0.0.0"
+      # HOSTNAME=0.0.0.0 is already baked into the frontend Dockerfile via ENV — no
+      # post-deploy update needed. Removing it avoids an extra redundant revision per deploy.

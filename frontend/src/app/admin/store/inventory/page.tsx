@@ -24,12 +24,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   Warehouse, Plus, X, RefreshCw, ArrowRightLeft, SlidersHorizontal,
-  PackageSearch, ScrollText, AlertTriangle, Power, Search, Building2, Radio,
+  PackageSearch, ScrollText, AlertTriangle, Power, Search, Building2, Radio, Loader2,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAdminStockSocket, StockUpdatedPayload } from '@/lib/storeSockets';
 import Pagination from '@/components/store/Pagination';
 import StockBadge from '@/components/store/StockBadge';
+import SkuPicker from '@/components/store/SkuPicker';
 
 // ─── Types (loose — backend returns decorated rows) ──────────────────────────
 
@@ -151,24 +152,16 @@ export default function AdminInventoryPage() {
   });
 
   const [adjustForm, setAdjustForm] = useState({
-    skuId: '', warehouseId: '', quantityDelta: '', reason: 'MANUAL_ADJUST', note: '',
+    skuId: '', skuLabel: '', warehouseId: '', quantityDelta: '', reason: 'MANUAL_ADJUST', note: '',
   });
 
   const [transferForm, setTransferForm] = useState({
-    skuId: '', fromWarehouseId: '', toWarehouseId: '', quantity: '', note: '',
+    skuId: '', skuLabel: '', fromWarehouseId: '', toWarehouseId: '', quantity: '', note: '',
   });
 
-  // ── SKU directory derived from matrix + reorder rows (no SKU-list endpoint) ──
-  const skuDirectory = useMemo(() => {
-    const map = new Map<string, { id: string; label: string }>();
-    for (const r of rows) {
-      if (r.sku) map.set(r.sku.id, { id: r.sku.id, label: `${r.sku.skuCode} — ${r.sku.name}` });
-    }
-    for (const r of reorder) {
-      if (r.sku) map.set(r.sku.id, { id: r.sku.id, label: `${r.sku.skuCode} — ${r.sku.name}` });
-    }
-    return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
-  }, [rows, reorder]);
+  // SKU selection in the adjust/transfer modals is now served by the SkuPicker
+  // typeahead (GET /admin/store/skus) — no longer a directory derived from the
+  // loaded matrix/reorder rows, so any SKU is selectable, not just visible ones.
 
   // ─── Data loaders ──────────────────────────────────────────────────────────
 
@@ -320,7 +313,7 @@ export default function AdminInventoryPage() {
         if (Number.isNaN(p) || p < 0) { alert('Priority must be a non-negative number'); setActionLoading(false); return; }
         body.priority = p;
       }
-      await api.adminCreateWarehouse(body as { name: string });
+      await api.adminCreateWarehouse(body as { code: string; name: string });
       setShowWarehouseForm(false);
       setWhForm({ code: '', name: '', city: '', stateCode: '', gstin: '', postalCode: '', priority: '', isDefault: false });
       await loadWarehouses();
@@ -366,7 +359,7 @@ export default function AdminInventoryPage() {
       if (adjustForm.note.trim()) body.note = adjustForm.note.trim();
       await api.adminAdjustStock(body);
       setShowAdjust(false);
-      setAdjustForm({ skuId: '', warehouseId: '', quantityDelta: '', reason: 'MANUAL_ADJUST', note: '' });
+      setAdjustForm({ skuId: '', skuLabel: '', warehouseId: '', quantityDelta: '', reason: 'MANUAL_ADJUST', note: '' });
       await loadMatrix();
     } catch (e: any) {
       alert(e?.message || 'Failed to adjust stock');
@@ -401,7 +394,7 @@ export default function AdminInventoryPage() {
       if (transferForm.note.trim()) body.note = transferForm.note.trim();
       await api.adminTransferStock(body);
       setShowTransfer(false);
-      setTransferForm({ skuId: '', fromWarehouseId: '', toWarehouseId: '', quantity: '', note: '' });
+      setTransferForm({ skuId: '', skuLabel: '', fromWarehouseId: '', toWarehouseId: '', quantity: '', note: '' });
       await loadMatrix();
     } catch (e: any) {
       alert(e?.message || 'Failed to transfer stock');
@@ -543,7 +536,7 @@ export default function AdminInventoryPage() {
 
               {matrixLoading ? (
                 <div className="p-12 text-center">
-                  <div className="w-6 h-6 border-2 border-forest border-t-transparent rounded-full animate-spin mx-auto" />
+                  <Loader2 className="w-6 h-6 text-forest animate-spin mx-auto" />
                 </div>
               ) : rows.length === 0 ? (
                 <div className="p-12 text-center text-ink/40">
@@ -614,7 +607,7 @@ export default function AdminInventoryPage() {
             </div>
           ) : warehousesLoading ? (
             <div className="p-12 text-center">
-              <div className="w-6 h-6 border-2 border-forest border-t-transparent rounded-full animate-spin mx-auto" />
+              <Loader2 className="w-6 h-6 text-forest animate-spin mx-auto" />
             </div>
           ) : warehouses.length === 0 ? (
             <div className="border border-hairline bg-white p-12 text-center text-ink/40">
@@ -693,7 +686,7 @@ export default function AdminInventoryPage() {
             </div>
           ) : movementsLoading && !movementsLoaded ? (
             <div className="p-12 text-center">
-              <div className="w-6 h-6 border-2 border-forest border-t-transparent rounded-full animate-spin mx-auto" />
+              <Loader2 className="w-6 h-6 text-forest animate-spin mx-auto" />
             </div>
           ) : movements.length === 0 ? (
             <div className="border border-hairline bg-white p-12 text-center text-ink/40">
@@ -777,7 +770,7 @@ export default function AdminInventoryPage() {
             </div>
           ) : reorderLoading && !reorderLoaded ? (
             <div className="p-12 text-center">
-              <div className="w-6 h-6 border-2 border-forest border-t-transparent rounded-full animate-spin mx-auto" />
+              <Loader2 className="w-6 h-6 text-forest animate-spin mx-auto" />
             </div>
           ) : reorder.length === 0 ? (
             <div className="border border-success/25 bg-success/5 p-12 text-center text-success">
@@ -889,15 +882,13 @@ export default function AdminInventoryPage() {
             <div className="p-8 space-y-5">
               <div>
                 <label className={LABEL}>SKU *</label>
-                {skuDirectory.length > 0 ? (
-                  <select value={adjustForm.skuId} onChange={(e) => setAdjustForm({ ...adjustForm, skuId: e.target.value })} className={INPUT}>
-                    <option value="">Select a SKU…</option>
-                    {skuDirectory.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-                  </select>
-                ) : (
-                  <input value={adjustForm.skuId} onChange={(e) => setAdjustForm({ ...adjustForm, skuId: e.target.value })} placeholder="SKU UUID" className={INPUT} />
-                )}
-                <p className="text-[9px] text-ink/35 mt-1">SKUs are sourced from the stock matrix. Load a matrix page first to populate the picker.</p>
+                <SkuPicker
+                  value={adjustForm.skuId}
+                  selectedLabel={adjustForm.skuLabel}
+                  onSelect={(s) => setAdjustForm({ ...adjustForm, skuId: s.id, skuLabel: `${s.skuCode}${s.name ? ` — ${s.name}` : ''}` })}
+                  onClear={() => setAdjustForm({ ...adjustForm, skuId: '', skuLabel: '' })}
+                />
+                <p className="text-[9px] text-ink/35 mt-1">Search any SKU by code, name or product — not just those on the loaded matrix page.</p>
               </div>
               <div>
                 <label className={LABEL}>Warehouse *</label>
@@ -945,14 +936,12 @@ export default function AdminInventoryPage() {
             <div className="p-8 space-y-5">
               <div>
                 <label className={LABEL}>SKU *</label>
-                {skuDirectory.length > 0 ? (
-                  <select value={transferForm.skuId} onChange={(e) => setTransferForm({ ...transferForm, skuId: e.target.value })} className={INPUT}>
-                    <option value="">Select a SKU…</option>
-                    {skuDirectory.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-                  </select>
-                ) : (
-                  <input value={transferForm.skuId} onChange={(e) => setTransferForm({ ...transferForm, skuId: e.target.value })} placeholder="SKU UUID" className={INPUT} />
-                )}
+                <SkuPicker
+                  value={transferForm.skuId}
+                  selectedLabel={transferForm.skuLabel}
+                  onSelect={(s) => setTransferForm({ ...transferForm, skuId: s.id, skuLabel: `${s.skuCode}${s.name ? ` — ${s.name}` : ''}` })}
+                  onClear={() => setTransferForm({ ...transferForm, skuId: '', skuLabel: '' })}
+                />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>

@@ -2,11 +2,13 @@
 
 import React, { ReactNode } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { User, LogOut } from 'lucide-react';
+import { User, LogOut, ShoppingBag } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { useSettings } from '@/lib/settings';
 import { useScroll, useTransform } from 'motion/react';
+import { useStoreCart } from '@/lib/storeCart';
+import CartDrawer from '@/components/store/CartDrawer';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -29,6 +31,7 @@ interface LayoutProps {
 export default function Layout({ children, activeTab = 'manifesto', onTabChange, showNav = true }: LayoutProps) {
   const router = useRouter();
   const { user, isAuthenticated } = useAuth();
+  const { count: cartCount, isOpen: cartOpen, openCart, closeCart } = useStoreCart();
 
   const handleNavigation = (id: string) => {
     // If the Layout component allows callback overrides, call it. Otherwise route natively.
@@ -41,6 +44,15 @@ export default function Layout({ children, activeTab = 'manifesto', onTabChange,
 
   const { settings } = useSettings();
   const logoMode = settings?.logoMode || 'text';
+
+  // Defense-in-depth: only render an avatar from an http(s) URL. Rejects
+  // javascript:/data: schemes before they reach the DOM (modern browsers block
+  // javascript: in <img src>, but guard at the source rather than rely on that).
+  const safeAvatarUrl =
+    user?.avatarUrl &&
+    (user.avatarUrl.startsWith('https://') || user.avatarUrl.startsWith('http://'))
+      ? user.avatarUrl
+      : undefined;
 
   // Scroll animations
   const { scrollY } = useScroll();
@@ -55,9 +67,17 @@ export default function Layout({ children, activeTab = 'manifesto', onTabChange,
   const shortLogoX = useTransform(scrollY, [0, 80], [50, 0]);
   const shortLogoOpacity = useTransform(scrollY, [20, 80], [0, 1]);
 
-  // Pointer events derived from opacity — must be at top level (Rules of Hooks)
-  const fullLogoPointerEvents = useTransform(fullLogoOpacity, v => v > 0.5 ? 'auto' : 'none');
-  const shortLogoPointerEvents = useTransform(shortLogoOpacity, v => v > 0.5 ? 'auto' : 'none');
+  // Pointer events derived from opacity — must be at top level (Rules of Hooks).
+  // Typed as CSSProperties['pointerEvents'] so the inline style accepts the
+  // MotionValue without an `as any` escape hatch.
+  const fullLogoPointerEvents = useTransform(
+    fullLogoOpacity,
+    (v): React.CSSProperties['pointerEvents'] => (v > 0.5 ? 'auto' : 'none'),
+  );
+  const shortLogoPointerEvents = useTransform(
+    shortLogoOpacity,
+    (v): React.CSSProperties['pointerEvents'] => (v > 0.5 ? 'auto' : 'none'),
+  );
 
   return (
     <div className="min-h-screen flex flex-col selection:bg-forest selection:text-parchment">
@@ -82,7 +102,7 @@ export default function Layout({ children, activeTab = 'manifesto', onTabChange,
                     style={{
                       x: fullLogoX,
                       opacity: fullLogoOpacity,
-                      pointerEvents: fullLogoPointerEvents as any,
+                      pointerEvents: fullLogoPointerEvents,
                     }}
                   />
                   <motion.img
@@ -92,7 +112,7 @@ export default function Layout({ children, activeTab = 'manifesto', onTabChange,
                     style={{
                       x: shortLogoX,
                       opacity: shortLogoOpacity,
-                      pointerEvents: shortLogoPointerEvents as any,
+                      pointerEvents: shortLogoPointerEvents,
                     }}
                   />
                 </div>
@@ -121,18 +141,33 @@ export default function Layout({ children, activeTab = 'manifesto', onTabChange,
                 </button>
               ))}
             </div>
-            <div className="flex items-center">
-              {isAuthenticated && user?.avatarUrl ? (
-                <img 
-                  src={user.avatarUrl} 
-                  alt="Profile" 
+            <div className="flex items-center gap-5">
+              {/* Cart — opens the slide-over drawer; badge shows total item count. */}
+              <button
+                type="button"
+                onClick={openCart}
+                aria-label={cartCount > 0 ? `Open cart, ${cartCount} items` : 'Open cart'}
+                className="relative cursor-pointer text-forest transition-colors hover:text-terracotta-warm"
+              >
+                <ShoppingBag className="w-6 h-6" />
+                {cartCount > 0 && (
+                  <span className="absolute -top-2 -right-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-terracotta px-1 font-sans text-[10px] font-bold leading-none text-parchment tabular-nums">
+                    {cartCount > 99 ? '99+' : cartCount}
+                  </span>
+                )}
+              </button>
+
+              {isAuthenticated && safeAvatarUrl ? (
+                <img
+                  src={safeAvatarUrl}
+                  alt="Profile"
                   className="w-8 h-8 rounded-full border border-hairline cursor-pointer hover:ring-2 hover:ring-forest/20 transition-all"
                   onClick={() => router.push('/profile')}
                 />
               ) : (
-                <User 
-                  className="w-6 h-6 text-forest cursor-pointer hover:text-terracotta-warm transition-colors" 
-                  onClick={() => router.push(isAuthenticated ? '/profile' : '/login')} 
+                <User
+                  className="w-6 h-6 text-forest cursor-pointer hover:text-terracotta-warm transition-colors"
+                  onClick={() => router.push(isAuthenticated ? '/profile' : '/login')}
                 />
               )}
             </div>
@@ -243,6 +278,10 @@ export default function Layout({ children, activeTab = 'manifesto', onTabChange,
           </div>
         </div>
       </footer>
+
+      {/* Slide-over cart drawer (portal). State lives in the store-cart context so
+          the header badge and the drawer stay in sync app-wide. */}
+      <CartDrawer open={cartOpen} onClose={closeCart} />
     </div>
   );
 }

@@ -128,6 +128,14 @@ export interface ProductSummary {
    * error. List consumers read it as a string; detail consumers narrow to the object.
    */
   category?: string | Record<string, unknown> | null;
+  /**
+   * Denormalised average rating (0..5, may be fractional) derived server-side from
+   * `Product.ratingSum / Product.ratingCount`. Present on both list and detail
+   * payloads; `null`/absent when the product has no approved ratings yet.
+   */
+  ratingAverage?: number | null;
+  /** Count of APPROVED ratings (the `Product.ratingCount` denormalised column). */
+  ratingCount?: number | null;
   [k: string]: unknown;
 }
 
@@ -233,6 +241,46 @@ export interface ArticleDetail extends ArticleSummary {
   media?: Array<Record<string, unknown>>;
   author?: Record<string, unknown> | null;
   [k: string]: unknown;
+}
+
+// ── Reviews ─────────────────────────────────────────────────────────────────
+// Fixed contract (REVIEW API CONTRACT). All shapes match the backend DTOs the
+// reviews-backend unit emits. `rating` is always an integer 1..5.
+
+/** A single APPROVED, public-facing product review row. */
+export interface ProductReview {
+  id: string;
+  rating: number;
+  title?: string | null;
+  // Non-nullable: the backend PublicReviewDto maps `body` directly from
+  // Review.body (@db.Text NOT NULL), so it is always a present string.
+  body: string;
+  isVerifiedPurchase: boolean;
+  helpfulCount: number;
+  authorName?: string | null;
+  createdAt: string;
+  [k: string]: unknown;
+}
+
+/** Aggregate rating summary for a product (average + count + per-star breakdown). */
+export interface ReviewSummary {
+  average: number;
+  count: number;
+  breakdown: { 5: number; 4: number; 3: number; 2: number; 1: number };
+  [k: string]: unknown;
+}
+
+/**
+ * The public reviews list envelope: paginated data + the rating summary.
+ *
+ * `summary` is typed OPTIONAL: the backend always emits it, but `ListResponse<T>`
+ * carries an open `[k: string]: unknown` index so TypeScript cannot enforce its
+ * presence at the call site. A required annotation would let careless callers skip
+ * the guard and crash on a malformed/empty response; optional forces the
+ * resilience-minded `if (res.summary)` check that the consumer already performs.
+ */
+export interface ProductReviewListResponse extends ListResponse<ProductReview> {
+  summary?: ReviewSummary;
 }
 
 class StoreApiClient {
@@ -468,6 +516,42 @@ class StoreApiClient {
     return data;
   }
 
+  /**
+   * Fetch the Discord OAuth2 authorize URL to redirect the customer to. Returns
+   * null when Discord is not configured (the backend replies 404 in that case) so
+   * the caller can hide the "Continue with Discord" button — config-gated feature.
+   * Never throws: any error (including the 404) resolves to null.
+   */
+  async getDiscordAuthUrl(): Promise<string | null> {
+    try {
+      const res = await this.request<{ url?: string }>('/store/auth/discord/url', {
+        auth: false,
+      });
+      return res?.url ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Exchange a Discord OAuth2 authorization code (from the callback redirect) for
+   * a CUSTOMER token pair and persist the session (same slots as login/register).
+   * `state` is the anti-CSRF nonce Discord round-trips back to the callback; the
+   * backend verifies + single-use-consumes it before exchanging the code.
+   */
+  async loginWithDiscord(
+    code: string,
+    state: string,
+  ): Promise<CustomerAuthResult> {
+    const data = await this.request<CustomerAuthResult>('/store/auth/discord', {
+      method: 'POST',
+      body: { code, state },
+      auth: false,
+    });
+    this.applyAuth(data);
+    return data;
+  }
+
   /** Manual refresh (the request layer also auto-refreshes on 401). */
   async refreshCustomer(): Promise<boolean> {
     return this.refreshCustomerToken();
@@ -539,6 +623,57 @@ class StoreApiClient {
 
   async getAvailability(skuId: string): Promise<unknown> {
     return this.request(`/store/availability/${encodeURIComponent(skuId)}`, { auth: false });
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  //  REVIEWS (public list + helpful; customer create)
+  // ════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Public list of APPROVED reviews for a product, plus the aggregate `summary`
+   * ({ average, count, breakdown }). `params` supports page / limit / sort
+   * (e.g. 'recent' | 'helpful' | 'rating_desc' — server-validated). Public read,
+   * so no auth header.
+   */
+  async listProductReviews(
+    productId: string,
+    params: Record<string, unknown> = {},
+  ): Promise<ProductReviewListResponse> {
+    return this.request(
+      `/store/products/${encodeURIComponent(productId)}/reviews${this.qs(params)}`,
+      { auth: false },
+    );
+  }
+
+  /**
+   * Submit a review for a product (CustomerJwtGuard — requires a logged-in
+   * customer). Creates a PENDING review awaiting moderation; one per customer per
+   * product (server-enforced @@unique). `isVerifiedPurchase` is set server-side.
+   */
+  async submitReview(
+    productId: string,
+    // `body` is required: the backend CreateReviewDto has `body!: string` with
+    // @MinLength(1), so a missing body is a 400 — enforce it at compile time.
+    payload: { rating: number; title?: string; body: string },
+  ): Promise<ProductReview> {
+    return this.request(`/store/products/${encodeURIComponent(productId)}/reviews`, {
+      method: 'POST',
+      body: payload,
+    });
+  }
+
+  /**
+   * Mark a review as helpful. CUSTOMER-authed: the backend route is now
+   * CustomerJwtGuard-gated for TRUE per-user dedupe (one vote per customer per
+   * review, server-enforced via a junction unique). `auth` defaults to true so the
+   * store client attaches the customer access token; no request body is needed —
+   * the customer id is pinned from the JWT server-side. A repeat vote is an
+   * idempotent 200 returning the current count. Returns the updated helpful count.
+   */
+  async markReviewHelpful(reviewId: string): Promise<{ id: string; helpfulCount: number } & Record<string, unknown>> {
+    return this.request(`/store/reviews/${encodeURIComponent(reviewId)}/helpful`, {
+      method: 'POST',
+    });
   }
 
   // ════════════════════════════════════════════════════════════════════════

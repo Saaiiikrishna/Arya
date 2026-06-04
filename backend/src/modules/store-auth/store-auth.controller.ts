@@ -7,6 +7,7 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  NotFoundException,
 } from '@nestjs/common';
 import { ThrottlerGuard, Throttle } from '@nestjs/throttler';
 import { StoreAuthService } from './store-auth.service';
@@ -18,6 +19,7 @@ import {
   RequestOtpDto,
   VerifyOtpDto,
   GoogleAuthDto,
+  DiscordAuthDto,
   ConvertGuestDto,
 } from './dto';
 import { CustomerJwtGuard } from './guards';
@@ -64,6 +66,33 @@ export class StoreAuthController {
   @Throttle({ short: { limit: 5, ttl: 60000 } })
   async google(@Body() dto: GoogleAuthDto) {
     return this.storeAuthService.googleLogin(dto.token);
+  }
+
+  /**
+   * Discord OAuth2 authorize URL the storefront redirects to. Returns 404 when
+   * Discord is not configured so the frontend hides the "Continue with Discord"
+   * button (config-gated feature, mirroring the existing disabled-CTA pattern).
+   */
+  @Get('discord/url')
+  @Throttle({ short: { limit: 30, ttl: 60000 } })
+  async discordUrl() {
+    // Async: mints + persists the single-use anti-CSRF `state` nonce embedded in
+    // the returned authorize URL.
+    const url = await this.storeAuthService.getDiscordAuthUrl();
+    if (!url) {
+      throw new NotFoundException('Discord login is not configured');
+    }
+    return { url };
+  }
+
+  /** Discord OAuth2 authorization code → CUSTOMER token pair. */
+  @Post('discord')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ short: { limit: 5, ttl: 60000 } })
+  async discord(@Body() dto: DiscordAuthDto) {
+    // `state` is the anti-CSRF nonce returned alongside the code; the service
+    // verifies + single-use-consumes it before exchanging the code.
+    return this.storeAuthService.discordLogin(dto.code, dto.state);
   }
 
   /** Customer-specific refresh: rotate the pair, validating against Customer. */

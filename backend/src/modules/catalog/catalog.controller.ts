@@ -29,6 +29,7 @@ import {
   CreateSkuDto,
   UpdateSkuDto,
   CreatePriceTierDto,
+  SkuSearchQueryDto,
   CreateCategoryDto,
   UpdateCategoryDto,
   DeleteCategoryQueryDto,
@@ -160,6 +161,16 @@ export class CatalogController {
 
   // ─── ADMIN: SKUS + PRICE TIERS ────────────────────────────
 
+  // SKU typeahead for the admin SkuPicker (replaces raw SKU-UUID text inputs in
+  // the inventory + purchasing forms). AdminGuard is applied at the class level
+  // (CatalogAdminGuard); standard (medium) admin throttle tier. Returns a
+  // lightweight projection { id, skuCode, name, productName }.
+  @Throttle({ medium: { limit: 100, ttl: 60000 } })
+  @Get('admin/store/skus')
+  adminSearchSkus(@Query() query: SkuSearchQueryDto) {
+    return this.catalog.adminSearchSkus(query.search, query.limit);
+  }
+
   @Post('admin/store/products/:id/skus')
   createSku(
     @Param('id', new ParseUUIDPipe()) productId: string,
@@ -286,6 +297,26 @@ export class CatalogController {
    * needed, configure `app.set('trust proxy', <hops>)` in main.ts and `req.ip`
    * will then reflect the trusted hop only.
    */
+  /**
+   * Validate + bound a client-supplied X-Session-Id header before it flows into
+   * the queued analytics payload. Accepts only a conservative session-id charset
+   * (alphanumerics, `-`, `_`, `.`, `:`) up to 128 chars; anything else (missing,
+   * over-long, or containing unexpected characters) collapses to `'anonymous'`.
+   * Defensive: the value is otherwise stored verbatim by the visitor worker.
+   */
+  private static safeSessionId(raw: string | undefined): string {
+    if (typeof raw !== 'string') return 'anonymous';
+    const trimmed = raw.trim();
+    if (
+      trimmed.length === 0 ||
+      trimmed.length > 128 ||
+      !/^[A-Za-z0-9._:-]+$/.test(trimmed)
+    ) {
+      return 'anonymous';
+    }
+    return trimmed;
+  }
+
   private trackView(req: Request, path: string): void {
     try {
       const headers: import('http').IncomingHttpHeaders = req.headers;
@@ -295,8 +326,13 @@ export class CatalogController {
       };
       // Session id comes from the X-Session-Id header the storefront sends
       // (same convention as the existing TrackingController). No cookie parser
-      // is wired on these public routes.
-      const sessionId: string = headerStr('x-session-id') ?? 'anonymous';
+      // is wired on these public routes. The header is client-controlled, so it
+      // is bounded + charset-restricted before it can flow into the queued
+      // analytics payload — an over-long or junk value falls back to 'anonymous'
+      // rather than bloating the queue / visitor store.
+      const sessionId: string = CatalogController.safeSessionId(
+        headerStr('x-session-id'),
+      );
       void this.visitor
         .trackPageView({
           sessionId,

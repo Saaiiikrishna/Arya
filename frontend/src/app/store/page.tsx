@@ -95,6 +95,16 @@ function resolveCategoryLabel(p: ProductSummary): string | null {
   return typeof p.category === 'string' ? p.category : null;
 }
 
+/** Read the denormalised rating average/count off the (open-index) list item. */
+function resolveRating(p: ProductSummary): { average: number | null; count: number | null } {
+  const avg = (p as Record<string, unknown>).ratingAverage;
+  const count = (p as Record<string, unknown>).ratingCount;
+  return {
+    average: typeof avg === 'number' && Number.isFinite(avg) ? avg : null,
+    count: typeof count === 'number' && Number.isFinite(count) ? count : null,
+  };
+}
+
 export default function StorePage() {
   // ── Filter / query state ──────────────────────────────────
   const [searchInput, setSearchInput] = useState('');
@@ -473,19 +483,27 @@ export default function StorePage() {
                 transition={{ duration: 0.4 }}
                 className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4"
               >
-                {products.map((p) => (
-                  <ProductCard
-                    key={p.id}
-                    name={p.name}
-                    href={`/store/${p.slug}`}
-                    imageUrl={resolveImage(p)}
-                    imageAlt={resolveAlt(p)}
-                    priceFrom={p.priceFrom ?? null}
-                    priceTo={p.priceTo ?? null}
-                    eyebrow={p.brand ?? resolveCategoryLabel(p) ?? null}
-                    subtitle={p.subtitle ?? null}
-                  />
-                ))}
+                {products.map((p, i) => {
+                  const rating = resolveRating(p);
+                  return (
+                    <ProductCard
+                      key={p.id}
+                      name={p.name}
+                      href={`/store/${p.slug}`}
+                      imageUrl={resolveImage(p)}
+                      imageAlt={resolveAlt(p)}
+                      priceFrom={p.priceFrom ?? null}
+                      priceTo={p.priceTo ?? null}
+                      eyebrow={p.brand ?? resolveCategoryLabel(p) ?? null}
+                      subtitle={p.subtitle ?? null}
+                      ratingAverage={rating.average}
+                      ratingCount={rating.count}
+                      // Eager-load the first card's image — the top-left grid cell is
+                      // the above-the-fold LCP element on the catalog.
+                      priority={i === 0}
+                    />
+                  );
+                })}
               </motion.div>
 
               <div className="mt-12">

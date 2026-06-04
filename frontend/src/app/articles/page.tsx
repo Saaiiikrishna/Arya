@@ -294,7 +294,7 @@ function ArticlesIndex() {
               Featured
             </h2>
             <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-              {featured.map((a) => (
+              {featured.map((a, i) => (
                 <ArticleCard
                   key={a.id}
                   title={a.title}
@@ -304,6 +304,8 @@ function ArticlesIndex() {
                   date={a.publishedAt}
                   author={authorOf(a)}
                   tags={a.tags}
+                  // First featured cover is the above-the-fold LCP element here.
+                  priority={i === 0}
                 />
               ))}
             </div>
@@ -372,7 +374,7 @@ function ArticlesIndex() {
           ) : (
             <>
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                {gridArticles.map((a) => (
+                {gridArticles.map((a, i) => (
                   <ArticleCard
                     key={a.id}
                     title={a.title}
@@ -382,6 +384,10 @@ function ArticlesIndex() {
                     date={a.publishedAt}
                     author={authorOf(a)}
                     tags={a.tags}
+                    // When there is no featured strip the first grid card is the
+                    // above-the-fold LCP element; otherwise the featured card above
+                    // already carries priority, so this stays lazy.
+                    priority={i === 0 && featured.length === 0}
                   />
                 ))}
               </div>

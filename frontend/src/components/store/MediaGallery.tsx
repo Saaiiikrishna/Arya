@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import { ImageOff, Play } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
@@ -71,12 +72,10 @@ export default function MediaGallery({
             className="h-full w-full object-contain"
           />
         ) : (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <StageImage
             key={current.url}
-            src={current.url}
+            url={current.url}
             alt={current.altText || current.caption || 'Product media'}
-            className="h-full w-full object-cover"
           />
         )}
       </div>
@@ -112,8 +111,7 @@ export default function MediaGallery({
               {m.type === 'VIDEO' ? (
                 <>
                   {m.poster ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={m.poster} alt="" className="h-full w-full object-cover" />
+                    <ThumbImage url={m.poster} alt="" />
                   ) : (
                     <div className="h-full w-full bg-forest/10" />
                   )}
@@ -122,17 +120,58 @@ export default function MediaGallery({
                   </span>
                 </>
               ) : (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={m.url}
-                  alt={m.altText || ''}
-                  className="h-full w-full object-cover"
-                />
+                <ThumbImage url={m.url} alt={m.altText || ''} />
               )}
             </button>
           ))}
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Main-stage image via next/image (`fill`). On an un-listed host or load error it
+ * falls back to the placeholder icon so a bad URL never breaks the stage. `sizes`
+ * reflects that the stage is roughly half the viewport on the PDP two-column
+ * layout and full-width on mobile.
+ */
+function StageImage({ url, alt }: { url: string; alt: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return (
+      <div className="flex h-full w-full items-center justify-center text-ink/25">
+        <ImageOff className="h-10 w-10" aria-hidden />
+      </div>
+    );
+  }
+  return (
+    <Image
+      src={url}
+      alt={alt}
+      fill
+      sizes="(min-width: 1024px) 50vw, 100vw"
+      onError={() => setFailed(true)}
+      className="object-cover"
+    />
+  );
+}
+
+/**
+ * Fixed 64x64 thumbnail via next/image (`fill` inside the 16x16 rem-ish button).
+ * Falls back to a neutral tile on error.
+ */
+function ThumbImage({ url, alt }: { url: string; alt: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return <div className="h-full w-full bg-forest/10" />;
+  return (
+    <Image
+      src={url}
+      alt={alt}
+      fill
+      sizes="64px"
+      onError={() => setFailed(true)}
+      className="object-cover"
+    />
   );
 }
