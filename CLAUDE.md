@@ -228,7 +228,7 @@ Built (commerce / storefront — see `docs/COMMERCE_ARCHITECTURE.md`): store-aut
 **Not yet built** (see TODO):
 - Mux/CloudFront integration for documentary streaming (currently S3 presigned URLs)
 - WhatsApp decision (keep or remove) — P3 (module shell exists, no controllers)
-- Commerce follow-ups: Socket.io **Redis adapter** for cross-replica real-time fan-out (gateways currently in-process); integration test suite on real Postgres+Redis; `ArticleStatus` DRAFT/ARCHIVED states (enum is `SUBMITTED|APPROVED|REJECTED|PUBLISHED`); admin product-LIST endpoint (admin list currently reuses the public ACTIVE-only list)
+- Commerce follow-ups DONE (`6256c31`/`8f27a5d`): Socket.io Redis adapter (cross-replica fan-out, `src/redis-io.adapter.ts`); real-Postgres integration suite (`npm run test:int`, 4 suites/23 tests vs `arya_test`); `ArticleStatus` now has DRAFT + ARCHIVED; admin product-LIST endpoint (`GET /admin/store/products`, all statuses) + presigned list thumbnails. Remaining: populate default warehouse state/GSTIN via `/admin/store/settings` before first prod invoice (ops); optional deeper checkout/refund e2e with a Razorpay test-mode client.
 
 ---
 

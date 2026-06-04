@@ -42,13 +42,14 @@
 - [x] Articles backend: submission → moderation → publish, media (15img/3vid), view metrics, related, author-vs-admin visibility
 - [x] Frontend: storeApi/storeAuth/sockets + component kit; public storefront (catalog, product detail w/ dynamic tabs, DIY build, cart, Razorpay checkout, account, order tracking); public articles (list/detail/submit); admin `/admin/store/*` dashboards
 
-#### Storefront follow-ups (not blocking)
-- [ ] Socket.io **Redis adapter** for cross-replica real-time fan-out (store + chat gateways)
-- [ ] Integration test suite on real Postgres + Redis (checkout/refund/coupon/invoice/tax/oversell paths)
-- [ ] `ArticleStatus` DRAFT + ARCHIVED states (enum migration; current SUBMITTED|APPROVED|REJECTED|PUBLISHED)
-- [ ] Dedicated admin product-LIST endpoint (admin list currently reuses the public ACTIVE-only list)
-- [ ] Backend list endpoints to presign thumbnail read URLs (catalog/article covers)
-- [ ] Populate default warehouse state/GSTIN via `/admin/store/settings` before the first production invoice
+#### Storefront follow-ups
+- [x] Socket.io **Redis adapter** for cross-replica real-time fan-out (store + chat gateways) — `6256c31`
+- [x] Integration test suite on real Postgres (oversell/coupon/tax/invoice paths; 4 suites/23 tests) — `8f27a5d`
+- [x] `ArticleStatus` DRAFT + ARCHIVED states (enum migration `20260613000000`) + save-draft/archive/restore UI — `6256c31`
+- [x] Dedicated admin product-LIST endpoint (`GET /admin/store/products`, all statuses) — `6256c31`
+- [x] Backend list endpoints presign thumbnail read URLs (catalog + article covers) — `6256c31`
+- [ ] (ops, not code) Populate default warehouse state/GSTIN via `/admin/store/settings` before the first production invoice
+- [ ] (optional) Deeper checkout/refund e2e on real PG+Redis with a Razorpay test-mode client (current int-suite mocks external SDKs)
 
 ---
 
