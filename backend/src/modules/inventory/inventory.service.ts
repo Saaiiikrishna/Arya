@@ -528,6 +528,77 @@ export class InventoryService {
   }
 
   /**
+   * Receive purchased stock into a (sku, warehouse) on PO receipt. Unlike
+   * `restock`, this UPSERTS the StockLevel row first (the first lot of a SKU at a
+   * new warehouse has no pre-existing row, so `restock`'s lockedLevelOrThrow would
+   * 404). Everything happens under the (sku, warehouse) advisory lock acquired by
+   * `restock`, inside the SAME transaction passed by the caller, so the onHand
+   * bump + IN/PURCHASE StockMovement + the PurchaseOrderLine.receivedQty CAS in
+   * the procurement service all commit or roll back together. EXPORTED for the
+   * purchasing module.
+   *
+   * Idempotency of the overall receive is owned by the caller (advisory lock on
+   * the PO + receivedQty CAS); this method only guarantees the stock side is
+   * atomic and never strands a missing StockLevel row.
+   */
+  async receiveStock(
+    db: Db,
+    args: {
+      skuId: string;
+      warehouseId: string;
+      qty: number;
+      actor: StockActor;
+      reference?: string | null;
+    },
+  ): Promise<void> {
+    if (!Number.isInteger(args.qty) || args.qty <= 0) {
+      throw new BadRequestException(
+        'receiveStock quantity must be a positive integer',
+      );
+    }
+    await this.withTx(db, async (tx) => {
+      // Acquire the (sku, warehouse) lock BEFORE the upsert so two concurrent
+      // first-receipts of the same (sku, warehouse) serialize on the advisory lock
+      // rather than racing the unique constraint into a P2002.
+      await this.acquireLocks(tx, [
+        { skuId: args.skuId, warehouseId: args.warehouseId, qty: args.qty },
+      ]);
+      await tx.stockLevel.upsert({
+        where: {
+          skuId_warehouseId: {
+            skuId: args.skuId,
+            warehouseId: args.warehouseId,
+          },
+        },
+        create: {
+          skuId: args.skuId,
+          warehouseId: args.warehouseId,
+          onHand: 0,
+          reserved: 0,
+        },
+        update: {},
+      });
+      // Reuse the audited onHand bump (it re-acquires the same lock, which is a
+      // no-op re-entrant pg_advisory_xact_lock within this tx).
+      await this.restock(
+        tx,
+        { skuId: args.skuId, warehouseId: args.warehouseId, qty: args.qty },
+        {
+          reason: StockMovementReason.PURCHASE,
+          referenceType: 'PO',
+          // StockMovement.referenceId is @db.Uuid — pass the bare PO uuid here,
+          // never a prefixed label like 'PO:<id>' (that would break the uuid cast).
+          referenceId: args.reference ?? null,
+          actor: args.actor,
+          note: args.reference
+            ? `Received against PO ${args.reference}`
+            : undefined,
+        },
+      );
+    });
+  }
+
+  /**
    * Pick the single active warehouse (with a NON-NULL state_code) that can fulfil
    * ALL lines from available stock — single-warehouse-per-order (Section 8.4).
    * Ordered by Warehouse.priority DESC then most-available. Warehouses with a

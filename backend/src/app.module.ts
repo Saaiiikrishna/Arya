@@ -44,6 +44,10 @@ import { CatalogModule } from './modules/catalog/catalog.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { TaxModule } from './modules/tax/tax.module';
 import { StoreMediaModule } from './modules/store/store-media/store-media.module';
+import { CouponsModule } from './modules/coupons';
+import { CartModule } from './modules/cart';
+import { DiyModule } from './modules/diy/diy.module';
+import { PurchasingModule } from './modules/purchasing/purchasing.module';
 
 /**
  * Fail-fast environment validation. Signing secrets must ALWAYS be strong
@@ -171,6 +175,10 @@ function validateEnv(config: Record<string, unknown>): Record<string, unknown> {
     InventoryModule,
     TaxModule,
     StoreMediaModule,
+    CouponsModule,
+    CartModule,
+    DiyModule,
+    PurchasingModule,
   ],
   providers: [
     // Apply rate limiting globally; per-route @Throttle still tunes the tiers.
