@@ -33,6 +33,23 @@
 - [x] Announcements (batch-scoped with deadlines)
 - [x] Security hardening — identity pinning, token storage, RBAC — `17edb1a`, `3d9b73a`, `fdc0655`, `1788c00`
 
+### Storefront / Articles / Marketing program (PR #9, branch `claude/storefront-articles-marketing`)
+- [x] New premium marketing landing at `/`; original landing moved to `/startup`; nav + DESIGN.md §7 "Public Marketing" layer (glossy/rounded `mkt-*`, scoped)
+- [x] Removed Sanskrit shloka + image from the (now `/startup`) landing; rounded hero pill
+- [x] Full-enterprise commerce architecture — `docs/COMMERCE_ARCHITECTURE.md` (architect→critic)
+- [x] Commerce schema + 10 migrations + shipment-number migration
+- [x] Commerce backend: catalog, inventory (multi-warehouse), tax (GST), store-media, coupons, cart, diy, purchasing, orders/checkout (Razorpay), invoicing (GST PDF), shipping (courier), returns (RMA), real-time gateways, jobs, analytics
+- [x] Articles backend: submission → moderation → publish, media (15img/3vid), view metrics, related, author-vs-admin visibility
+- [x] Frontend: storeApi/storeAuth/sockets + component kit; public storefront (catalog, product detail w/ dynamic tabs, DIY build, cart, Razorpay checkout, account, order tracking); public articles (list/detail/submit); admin `/admin/store/*` dashboards
+
+#### Storefront follow-ups (not blocking)
+- [ ] Socket.io **Redis adapter** for cross-replica real-time fan-out (store + chat gateways)
+- [ ] Integration test suite on real Postgres + Redis (checkout/refund/coupon/invoice/tax/oversell paths)
+- [ ] `ArticleStatus` DRAFT + ARCHIVED states (enum migration; current SUBMITTED|APPROVED|REJECTED|PUBLISHED)
+- [ ] Dedicated admin product-LIST endpoint (admin list currently reuses the public ACTIVE-only list)
+- [ ] Backend list endpoints to presign thumbnail read URLs (catalog/article covers)
+- [ ] Populate default warehouse state/GSTIN via `/admin/store/settings` before the first production invoice
+
 ---
 
 ## P0 — Blockers (Platform Cannot Run Without These)
