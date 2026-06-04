@@ -84,14 +84,16 @@ jobs:
         run: npx prisma migrate deploy
 
       - name: Create integration test DB (arya_test)
-        # Single self-contained psql call: gen_database avoids the TOCTOU window of a
-        # separate SELECT-then-CREATE (CREATE DATABASE cannot run inside a DO/tx
-        # block, so we conditionally emit the statement via \gexec instead).
+        # CREATE DATABASE cannot run inside a transaction/DO block, so we can't make
+        # it conditional in pure SQL. Probe with a SELECT and CREATE only when absent
+        # — idempotent across reruns. (The previous \gexec form is a psql interactive
+        # meta-command and is a syntax error inside a -c/-tc query string.)
         run: |
-          PGPASSWORD=arya_ci_password psql \
-            -h localhost -p 5432 -U arya_user -d arya \
-            -v ON_ERROR_STOP=1 -tc \
-            "SELECT 'CREATE DATABASE arya_test' WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'arya_test')\gexec"
+          if ! PGPASSWORD=arya_ci_password psql -h localhost -p 5432 -U arya_user -d arya -tAc \
+            "SELECT 1 FROM pg_database WHERE datname = 'arya_test'" | grep -q 1; then
+            PGPASSWORD=arya_ci_password psql -h localhost -p 5432 -U arya_user -d arya \
+              -v ON_ERROR_STOP=1 -c "CREATE DATABASE arya_test"
+          fi
 
       - name: Apply migrations to test DB (arya_test)
         run: npx prisma migrate deploy
