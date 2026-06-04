@@ -1584,3 +1584,17 @@ Only genuine product/infra forks remain. (Items the original draft left open tha
 6. **Audit-table partitioning timeline.** When (volume threshold) to introduce monthly range partitioning + retention for `StockMovement`/`OrderEvent`/`ShipmentEvent`. Not blocking; flag for a follow-up migration.
 7. **DIGITAL product delivery mechanism.** v1 hard-blocks DIGITAL at checkout (8.10). If digital goods are required now, define delivery (download link / license email) — otherwise it stays blocked.
 8. **Razorpay account topology.** Confirm whether pledges and the store share one Razorpay account (then the event-type-filtered handler + recommended dual-webhook-URL config in 8.1 are mandatory) or use separate accounts (cleaner isolation). Either way the ownership-filter in each handler is required.
+---
+
+## 14. Resolved Decisions (human-confirmed 2026-06-04)
+
+These supersede the corresponding items in Section 13 (Open Decisions):
+
+1. **Seller GSTIN topology = SINGLE GSTIN (single-state, v1).** One seller GSTIN stored in SiteSettings; `Warehouse.gstin`/`Order.sellerGstinSnapshot` remain in the schema for forward-compat but v1 uses the single configured GSTIN. Intra-state vs inter-state CGST/SGST-vs-IGST is still computed from buyer state vs the single seller state.
+2. **Returns policy = 7-day window post-delivery, FULL refund including proportional tax, NO restocking fee.** Add to CLAUDE.md Hard Business Rules. Cumulative-refund cap (Section 4.10/8.5) still enforced.
+3. **Razorpay = SEPARATE webhook URL** for the store (`POST /api/store/webhooks/razorpay`), configured distinctly in the Razorpay dashboard. Ownership-filtered handlers (Section 8.1) remain mandatory regardless.
+4. (default accepted) Single-warehouse-per-order fulfillment; no split shipments in v1 (409 NO_FULFILLABLE_WAREHOUSE otherwise).
+5. (default accepted) Virtual bundle availability, atomic member draw-down.
+6. (default accepted) Tier price then one non-stacking coupon (capped by maxDiscount).
+7. (default accepted) No audit-table partitioning in v1 (documented follow-up at volume threshold).
+8. (default accepted) DIGITAL products 422-blocked in v1.
