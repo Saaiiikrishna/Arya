@@ -1,0 +1,142 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+# Cancel superseded runs on the same ref to save CI minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (build, types, unit + integration tests)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: arya_user
+          POSTGRES_PASSWORD: arya_ci_password
+          POSTGRES_DB: arya
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U arya_user -d arya"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # Default DB for the app + unit context. The integration harness
+      # (test/integration/setup-env.ts) rewrites this `/arya` -> `/arya_test`
+      # at runtime, so steps that should hit the test DB are overridden inline.
+      DATABASE_URL: postgresql://arya_user:arya_ci_password@localhost:5432/arya?schema=public
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ""
+      NODE_ENV: test
+      # Strong dummy secrets (>= 32 chars, no placeholder words). Because NODE_ENV=test
+      # (not production), validateEnv in app.module.ts runs in WARN mode — it would not
+      # throw on a missing/duplicate JWT_CUSTOMER_SECRET. These are set anyway so the
+      # config is production-shaped and future-proof: JWT_CUSTOMER_SECRET is kept
+      # distinct from JWT_SECRET, which is what strict (prod) validateEnv requires.
+      JWT_SECRET: ci_dummy_jwt_secret_0123456789_abcdefghij
+      JWT_REFRESH_SECRET: ci_dummy_jwt_refresh_secret_0123456789_klmnop
+      JWT_CUSTOMER_SECRET: ci_dummy_jwt_customer_secret_0123456789_qrstuv
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        # postinstall runs `prisma generate` automatically; no separate step needed.
+        run: npm ci
+
+      - name: Apply migrations to app DB (arya)
+        run: npx prisma migrate deploy
+
+      - name: Create integration test DB (arya_test)
+        # Single self-contained psql call: gen_database avoids the TOCTOU window of a
+        # separate SELECT-then-CREATE (CREATE DATABASE cannot run inside a DO/tx
+        # block, so we conditionally emit the statement via \gexec instead).
+        run: |
+          PGPASSWORD=arya_ci_password psql \
+            -h localhost -p 5432 -U arya_user -d arya \
+            -v ON_ERROR_STOP=1 -tc \
+            "SELECT 'CREATE DATABASE arya_test' WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'arya_test')\gexec"
+
+      - name: Apply migrations to test DB (arya_test)
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://arya_user:arya_ci_password@localhost:5432/arya_test?schema=public
+
+      - name: Unit tests
+        run: npm run test
+
+      - name: Integration tests
+        run: npm run test:int
+
+      - name: Type-check (tsc --noEmit)
+        run: npx tsc --noEmit -p tsconfig.json
+
+      - name: Build (nest build)
+        run: npx nest build
+
+  frontend:
+    name: Frontend (types + build)
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    env:
+      NEXT_PUBLIC_API_URL: http://localhost:3001/api
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check (tsc --noEmit)
+        run: npx tsc --noEmit
+
+      - name: Build (next build)
+        run: npx next build

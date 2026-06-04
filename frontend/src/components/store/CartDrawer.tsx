@@ -171,7 +171,16 @@ export default function CartDrawer({ open, onClose }: CartDrawerProps) {
                   <div className="py-2">
                     {items.map((raw, i) => {
                       const item = raw as Record<string, unknown>;
-                      const id = str(item, 'id', 'itemId', 'cartItemId') ?? `row-${i}`;
+                      // The REAL server line id, used for cart mutations. May be
+                      // absent on a malformed/partial row; never invent one for the
+                      // mutation APIs (a synthetic `row-${i}` id would 404 the
+                      // update/remove call against the backend).
+                      const serverId = str(item, 'id', 'itemId', 'cartItemId');
+                      // A stable React key: prefer the real id, else a positional
+                      // fallback. This fallback is for rendering ONLY — it is NEVER
+                      // passed to updateItem/removeItem (see the disabled controls
+                      // below when `serverId` is missing).
+                      const key = serverId ?? `row-${i}`;
                       const qty = num(item, 'qty', 'quantity') ?? 1;
                       const unitPrice =
                         num(item, 'unitPrice', 'price', 'unitPriceSnapshot') ?? 0;
@@ -194,7 +203,7 @@ export default function CartDrawer({ open, onClose }: CartDrawerProps) {
 
                       return (
                         <CartLineItem
-                          key={id}
+                          key={key}
                           name={name}
                           skuCode={skuCode}
                           imageUrl={imageUrl}
@@ -205,14 +214,22 @@ export default function CartDrawer({ open, onClose }: CartDrawerProps) {
                           purchasable={purchasable}
                           inStock={inStock}
                           available={available}
-                          pending={mutating}
+                          // Lock the qty +/- and remove controls while a mutation is
+                          // in flight OR when the row has no real server id (we must
+                          // not call the cart mutation APIs with a synthetic id).
+                          pending={mutating || !serverId}
                           onQtyChange={(next) => {
-                            void updateItem(id, next).catch(() => {
+                            // Defensive: a row with no server id should already have
+                            // its controls disabled via `pending`; bail out anyway so
+                            // a synthetic id can never reach the mutation API.
+                            if (!serverId) return;
+                            void updateItem(serverId, next).catch(() => {
                               /* surfaced via context `error` */
                             });
                           }}
                           onRemove={() => {
-                            void removeItem(id).catch(() => {
+                            if (!serverId) return;
+                            void removeItem(serverId).catch(() => {
                               /* surfaced via context `error` */
                             });
                           }}

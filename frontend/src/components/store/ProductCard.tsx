@@ -76,6 +76,19 @@ export default function ProductCard({
   // the same placeholder used when no image exists — so a bad/un-listed URL
   // degrades gracefully instead of breaking the card.
   const [imgFailed, setImgFailed] = useState(false);
+  // Reset the failure flag when the image prop changes, WITHOUT an effect. React
+  // recycles a card's component instance when a list re-renders with new data
+  // (same key/position, new product); without this reset a card whose previous
+  // image failed would stay stuck on the placeholder even though the new product
+  // has a valid image. This is the React-recommended "adjust state during render"
+  // pattern (track the prev prop, reset synchronously) rather than a useEffect —
+  // the latter trips `react-hooks/set-state-in-effect` and renders the stale
+  // placeholder for one frame before correcting.
+  const [prevImageUrl, setPrevImageUrl] = useState(imageUrl);
+  if (imageUrl !== prevImageUrl) {
+    setPrevImageUrl(imageUrl);
+    setImgFailed(false);
+  }
   const showImage = !!imageUrl && !imgFailed;
 
   return (
@@ -89,8 +102,9 @@ export default function ProductCard({
             src={imageUrl as string}
             alt={imageAlt || name}
             fill
-            // 5-up on desktop, 2-up tablet, 1-up mobile (matches the catalog grid).
-            sizes="(min-width: 1024px) 20vw, (min-width: 640px) 50vw, 100vw"
+            // Matches the catalog grid: 4-up at ≥1024px (25vw), 3-up at ≥640px
+            // (33vw), 2-up below that (50vw) — see store/page.tsx grid-cols classes.
+            sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw"
             priority={priority}
             onError={() => setImgFailed(true)}
             className="object-cover transition-transform duration-500 group-hover:scale-[1.04]"

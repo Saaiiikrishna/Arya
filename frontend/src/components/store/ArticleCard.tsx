@@ -66,6 +66,19 @@ export default function ArticleCard({
   // host or load error we fall back to the same placeholder shown when there is
   // no cover, so a bad/un-listed URL degrades gracefully.
   const [imgFailed, setImgFailed] = useState(false);
+  // Reset the failure flag when the cover prop changes, WITHOUT an effect. React
+  // recycles a card's component instance when a list re-renders with new data
+  // (same key/position, new article); without this reset a card whose previous
+  // cover failed would stay stuck on the placeholder even though the new article
+  // has a valid cover. This is the React-recommended "adjust state during render"
+  // pattern (track the prev prop, reset synchronously) rather than a useEffect —
+  // the latter trips `react-hooks/set-state-in-effect` and renders the stale
+  // placeholder for one frame before correcting.
+  const [prevCoverUrl, setPrevCoverUrl] = useState(coverUrl);
+  if (coverUrl !== prevCoverUrl) {
+    setPrevCoverUrl(coverUrl);
+    setImgFailed(false);
+  }
   const showCover = !!coverUrl && !imgFailed;
 
   return (

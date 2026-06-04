@@ -55,12 +55,17 @@ jest.mock('pdfkit', () => {
 
 jest.mock('@aws-sdk/client-s3', () => {
   return {
-    // PutObject is a no-op; constructors just record their input.
+    // PutObject is a no-op; constructors just record their input. The full command
+    // surface (Head/Delete too) is stubbed for forward-safety: if any transitively
+    // imported service in the invoicing chain ever issues a Head/Delete, the mock
+    // stays a valid constructor instead of failing with "is not a constructor".
     S3Client: jest.fn().mockImplementation(() => ({
       send: jest.fn().mockResolvedValue({}),
     })),
     PutObjectCommand: jest.fn().mockImplementation((input) => ({ input })),
     GetObjectCommand: jest.fn().mockImplementation((input) => ({ input })),
+    HeadObjectCommand: jest.fn().mockImplementation((input) => ({ input })),
+    DeleteObjectCommand: jest.fn().mockImplementation((input) => ({ input })),
   };
 });
 
@@ -247,9 +252,13 @@ async function generateWithPoolRetry(orderId: string) {
       return await svc.generateInvoice(orderId);
     } catch (e) {
       const msg = (e as Error)?.message ?? '';
-      const transient =
-        /Order not found/i.test(msg) ||
-        /Connection terminated|connection.*closed|timeout/i.test(msg);
+      // ONLY the "Order not found" stale-read is masked: the seed read-back already
+      // proved the order is committed and visible, so that specific message here is
+      // unambiguously the saturated-pool artifact described above. A real
+      // connection/timeout failure (wrong DB password, dead pool) is NOT retried —
+      // masking it would silently burn ~450ms before re-throwing and could hide a
+      // genuine infrastructure fault, so those errors propagate immediately.
+      const transient = /Order not found/i.test(msg);
       if (!transient) throw e;
       lastErr = e;
       await new Promise((r) => setTimeout(r, 30 * (attempt + 1)));

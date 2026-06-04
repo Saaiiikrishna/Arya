@@ -19,7 +19,7 @@
  */
 import { randomUUID } from 'crypto';
 import { ConflictException } from '@nestjs/common';
-import { PrismaClient, ReservationStatus } from '@prisma/client';
+import { Prisma, PrismaClient, ReservationStatus } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 import {
@@ -28,9 +28,19 @@ import {
   closeAll,
   newEvents,
 } from './harness';
-import { InventoryService, StockLine } from '../../src/modules/inventory/inventory.service';
+import { PrismaService } from '../../src/prisma/prisma.service';
+import {
+  InventoryService,
+  StockActor,
+  StockLine,
+} from '../../src/modules/inventory/inventory.service';
 
-let prisma: any;
+// The singleton from the harness is always a PrismaService — type it as such so
+// every seed/re-read Prisma call in this suite is compiler-checked. (The dedicated
+// concurrency client below is a raw PrismaClient + PrismaPg adapter, which is
+// structurally INCOMPATIBLE with PrismaService — see makeConcurrencyClient — so it
+// must remain `any`; that incompatibility is the documented reason for the cast.)
+let prisma: PrismaService;
 let svc: InventoryService;
 
 /**
@@ -54,8 +64,10 @@ function makeConcurrencyClient(connectionString: string): any {
 }
 
 // A real principal — reserveMany.requireActor() refuses a missing/blank actor
-// (it would otherwise poison the audit trail with triggeredBy=SYSTEM).
-const ACTOR = { id: randomUUID(), role: 'ADMIN' };
+// (it would otherwise poison the audit trail with triggeredBy=SYSTEM). Typed as
+// the service's StockActor (role is optional there) for maintainability; the id is
+// a single module-load UUID, reused across tests (it only needs to be non-blank).
+const ACTOR: StockActor = { id: randomUUID(), role: 'ADMIN' };
 
 // Seeded ids (regenerated each test via beforeEach → seedBaseStock).
 let productId: string;
@@ -135,9 +147,14 @@ async function seedBaseStock(
   return { productId, skuId, warehouseId };
 }
 
-/** Re-read the single seeded StockLevel row. */
+/**
+ * Re-read the single seeded StockLevel row. The row is always seeded by
+ * seedBaseStock, so a null here is a test-setup bug — assert non-null with
+ * findUniqueOrThrow so callers get a non-nullable type (now that `prisma` is the
+ * strictly-typed PrismaService).
+ */
 async function readLevel() {
-  return prisma.stockLevel.findUnique({
+  return prisma.stockLevel.findUniqueOrThrow({
     where: { skuId_warehouseId: { skuId, warehouseId } },
   });
 }
@@ -159,11 +176,11 @@ async function waitForArenaQuiescent(maxMs = 10000): Promise<void> {
     // row/advisory locks that conflict with the next TRUNCATE. Plain `idle`
     // backends (e.g. the singleton harness pool's own spare connections) hold no
     // locks and never block, so they are intentionally NOT counted here.
-    const rows = (await prisma.$queryRawUnsafe(
-      "SELECT count(*)::int AS n FROM pg_stat_activity " +
-        "WHERE datname = 'arya_test' AND pid <> pg_backend_pid() " +
-        "AND state IN ('active', 'idle in transaction', 'idle in transaction (aborted)')",
-    )) as { n: number }[];
+    const rows = await prisma.$queryRaw<{ n: number }[]>(Prisma.sql`
+      SELECT count(*)::int AS n FROM pg_stat_activity
+      WHERE datname = ${'arya_test'} AND pid <> pg_backend_pid()
+      AND state IN ('active', 'idle in transaction', 'idle in transaction (aborted)')
+    `);
     if (Number(rows[0]?.n ?? 0) === 0 || Date.now() > deadline) return;
     await new Promise((r) => setTimeout(r, 25));
   }
@@ -256,7 +273,7 @@ describe('InventoryService (integration, real Postgres)', () => {
     expect(afterCommit.reserved).toBe(0);
     expect(afterCommit.onHand - afterCommit.reserved).toBe(9);
 
-    const reservation = await prisma.stockReservation.findUnique({
+    const reservation = await prisma.stockReservation.findUniqueOrThrow({
       where: { id: reservationId },
     });
     expect(reservation.status).toBe(ReservationStatus.CONSUMED);
@@ -295,7 +312,7 @@ describe('InventoryService (integration, real Postgres)', () => {
     expect(afterRelease.reserved).toBe(0);
     expect(afterRelease.onHand - afterRelease.reserved).toBe(10);
 
-    const reservation = await prisma.stockReservation.findUnique({
+    const reservation = await prisma.stockReservation.findUniqueOrThrow({
       where: { id: reservationId },
     });
     expect(reservation.status).toBe(ReservationStatus.RELEASED);

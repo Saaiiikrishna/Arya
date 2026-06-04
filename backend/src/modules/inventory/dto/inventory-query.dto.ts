@@ -24,16 +24,29 @@ const REFERENCE_TYPES = [
 ] as const;
 
 /**
- * Coerce a query-string flag into a strict boolean. Only the literal strings
- * 'true'/'false' (and real booleans) are accepted; anything else stays `undefined`
- * so the companion `@IsBoolean()` rejects it instead of silently coercing (e.g.
- * '0' / 'banana' must NOT become `true`).
+ * Coerce a query-string flag into a strict boolean for the companion
+ * `@IsBoolean()` guard.
+ *
+ * IMPORTANT: the global ValidationPipe runs with
+ * `transformOptions.enableImplicitConversion: true`. Implicit conversion coerces
+ * the property to its reflected `boolean` design-type BEFORE a `@Transform`
+ * inspects the value, and its coercion is permissive — every non-empty string
+ * (`'banana'`, `'0'`, `'1'`) becomes `true`. Reading the already-converted
+ * `value` would therefore see a bogus `true` and the strict check would be a
+ * no-op. We instead read the ORIGINAL plain value from `obj[key]`, which is
+ * untouched by implicit conversion, and:
+ *   - map the literal strings 'true'/'false' (and real booleans) to booleans,
+ *   - leave absent/null as `undefined` so `@IsOptional()` skips it,
+ *   - return any OTHER value unchanged so `@IsBoolean()` REJECTS it (rather than
+ *     silently coercing '0'/'banana' to `true` or dropping it to `undefined`).
  */
-function toBool({ value }: { value: unknown }): boolean | undefined {
-  if (typeof value === 'boolean') return value;
-  if (value === 'true') return true;
-  if (value === 'false') return false;
-  return undefined;
+function toBool({ obj, key }: { obj: Record<string, unknown>; key: string }): unknown {
+  const raw = obj?.[key];
+  if (typeof raw === 'boolean') return raw;
+  if (raw === 'true') return true;
+  if (raw === 'false') return false;
+  if (raw === undefined || raw === null) return undefined;
+  return raw; // invalid input preserved so @IsBoolean() fails validation
 }
 
 /**
@@ -49,15 +62,42 @@ export class ListWarehousesQueryDto {
   includeInactive?: boolean;
 }
 
-/** Shared page/limit pagination contract (DRY across inventory query DTOs). */
+/**
+ * Coerce an absent/blank pagination value to a default, otherwise pass the value
+ * through UNCHANGED so the companion `@IsInt()`/`@Min()`/`@Max()` guards still
+ * reject garbage (e.g. `page=banana`, `page=0`, `limit=999`). We read the ORIGINAL
+ * plain value from `obj[key]` (not the implicitly-converted `value`) for the same
+ * reason `toBool` does — `enableImplicitConversion` would otherwise have already
+ * turned an absent value into `NaN`/`0` before this transform runs. Only `undefined`
+ * / `null` / `''` map to the default; every other input is preserved verbatim.
+ */
+function defaultPositiveInt(
+  fallback: number,
+): ({ obj, key }: { obj: Record<string, unknown>; key: string }) => unknown {
+  return ({ obj, key }) => {
+    const raw = obj?.[key];
+    if (raw === undefined || raw === null || raw === '') return fallback;
+    return raw; // preserved as-is so @IsInt()/@Min()/@Max() validate it
+  };
+}
+
+/**
+ * Shared page/limit pagination contract (DRY across inventory query DTOs).
+ * Defaults are applied AT THE DTO LEVEL (page→1, limit→50) via `@Transform`, so the
+ * resolved value is self-documenting from the DTO alone — callers (getStockMatrix,
+ * listMovements) receive a guaranteed-present, validated positive integer rather
+ * than `undefined` they must defensively default themselves.
+ */
 export class BasePaginationDto {
   @IsOptional()
+  @Transform(defaultPositiveInt(1))
   @Type(() => Number)
   @IsInt()
   @Min(1)
   page?: number;
 
   @IsOptional()
+  @Transform(defaultPositiveInt(50))
   @Type(() => Number)
   @IsInt()
   @Min(1)

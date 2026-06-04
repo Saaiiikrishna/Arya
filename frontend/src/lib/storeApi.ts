@@ -252,7 +252,9 @@ export interface ProductReview {
   id: string;
   rating: number;
   title?: string | null;
-  body?: string | null;
+  // Non-nullable: the backend PublicReviewDto maps `body` directly from
+  // Review.body (@db.Text NOT NULL), so it is always a present string.
+  body: string;
   isVerifiedPurchase: boolean;
   helpfulCount: number;
   authorName?: string | null;
@@ -650,7 +652,9 @@ class StoreApiClient {
    */
   async submitReview(
     productId: string,
-    payload: { rating: number; title?: string; body?: string },
+    // `body` is required: the backend CreateReviewDto has `body!: string` with
+    // @MinLength(1), so a missing body is a 400 — enforce it at compile time.
+    payload: { rating: number; title?: string; body: string },
   ): Promise<ProductReview> {
     return this.request(`/store/products/${encodeURIComponent(productId)}/reviews`, {
       method: 'POST',
@@ -659,13 +663,16 @@ class StoreApiClient {
   }
 
   /**
-   * Mark a review as helpful (idempotency is best-effort server-side). Public —
-   * no auth header. Returns the updated helpful count.
+   * Mark a review as helpful. CUSTOMER-authed: the backend route is now
+   * CustomerJwtGuard-gated for TRUE per-user dedupe (one vote per customer per
+   * review, server-enforced via a junction unique). `auth` defaults to true so the
+   * store client attaches the customer access token; no request body is needed —
+   * the customer id is pinned from the JWT server-side. A repeat vote is an
+   * idempotent 200 returning the current count. Returns the updated helpful count.
    */
-  async markReviewHelpful(reviewId: string): Promise<{ helpfulCount?: number } & Record<string, unknown>> {
+  async markReviewHelpful(reviewId: string): Promise<{ id: string; helpfulCount: number } & Record<string, unknown>> {
     return this.request(`/store/reviews/${encodeURIComponent(reviewId)}/helpful`, {
       method: 'POST',
-      auth: false,
     });
   }
 

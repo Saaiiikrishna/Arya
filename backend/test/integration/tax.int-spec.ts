@@ -22,7 +22,7 @@ import {
   SELLER_STATE_CODE_SETTING_KEY,
 } from '../../src/modules/tax/tax.service';
 
-let prisma: any;
+let prisma: Awaited<ReturnType<typeof getPrisma>>;
 let svc: TaxService;
 
 // Seller is registered in Karnataka (GST state code 29).

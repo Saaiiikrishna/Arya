@@ -47,14 +47,19 @@ function buildRemotePatterns(): NonNullable<NonNullable<NextConfig["images"]>["r
   ];
 
   // 2 + 3. Derive hostnames from the configured CDN + API URLs (build-time only).
-  const seen = new Set(patterns.map((p) => `${p.protocol}//${p.hostname}`));
+  // Dedup key is `scheme://host[:port]` (a real origin) — note the colon after the
+  // scheme. The static patterns above carry no port, so seed their key the same way
+  // a URL.origin would serialise (`protocol:` + `//` + hostname).
+  const seen = new Set(patterns.map((p) => `${p.protocol}://${p.hostname}`));
   for (const raw of [process.env.NEXT_PUBLIC_MEDIA_BASE, process.env.NEXT_PUBLIC_API_URL]) {
     if (!raw || !raw.trim()) continue;
     try {
       const u = new URL(raw.trim());
       const protocol = u.protocol.replace(":", "");
       if (protocol !== "http" && protocol !== "https") continue;
-      const key = `${protocol}//${u.hostname}`;
+      // Use the parsed origin (scheme://host[:port]) as the dedup key so it is a
+      // well-formed origin string rather than the misleading `https//host` form.
+      const key = u.origin;
       if (seen.has(key)) continue;
       seen.add(key);
       patterns.push({
@@ -75,11 +80,15 @@ function buildRemotePatterns(): NonNullable<NonNullable<NextConfig["images"]>["r
  * re-fetches + re-optimizes the source. The Next.js default of 60s is far too low
  * for a storefront whose product/article images change infrequently — at 60s the
  * optimizer runs on nearly every request, inflating compute + latency. Default to
- * 7 days; override with NEXT_PUBLIC_IMAGE_CACHE_TTL where a different policy is
- * needed (bad/zero values fall back to the 7-day default).
+ * 7 days; override with IMAGE_CACHE_TTL where a different policy is needed
+ * (bad/zero values fall back to the 7-day default).
+ *
+ * This is read ONLY here, by the Node.js build/server process — it is never needed
+ * in the browser bundle, so it deliberately has NO `NEXT_PUBLIC_` prefix (which
+ * would inline the value into client-side JS and expose a build-time tuning knob).
  */
 function imageCacheTtl(): number {
-  const raw = Number(process.env.NEXT_PUBLIC_IMAGE_CACHE_TTL);
+  const raw = Number(process.env.IMAGE_CACHE_TTL);
   return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 604800; // 7 days
 }
 
@@ -88,12 +97,16 @@ function imageCacheTtl(): number {
  * + static assets; the backend Helmet config only covers API responses). These are
  * defence-in-depth: a second layer behind the app's own escaping/sanitisation.
  *
- * COOP is deliberately NOT set in this baseline: the default
- * (`same-origin-allow-popups`) is the safer choice site-wide. The previous config
- * applied `Cross-Origin-Opener-Policy: unsafe-none` to EVERY route; it is now
- * scoped to ONLY the routes that mount Google One-Tap — `/login` and `/apply`
- * (both render <GlobalOneTap/>, which uses the legacy non-FedCM prompt that needs
- * `window.opener` access) — rather than weakening isolation across the whole site.
+ * Cross-Origin-Opener-Policy is set EXPLICITLY to `same-origin` site-wide rather
+ * than left to the platform default. Relying on the default left COOP effectively
+ * `unsafe-none` on most routes (the absence of the header means no opener
+ * isolation), so a cross-origin opener could keep a `window` reference into our
+ * pages. `same-origin` severs any cross-origin opener/openee relationship,
+ * isolating the browsing-context group. We can use the strict `same-origin` (not
+ * `same-origin-allow-popups`) because no OAuth flow here relies on a popup:
+ * Discord auth uses a full-page redirect. The ONLY exception is the legacy Google
+ * One-Tap prompt (`/login`, `/apply`), which still needs `window.opener` access —
+ * those two routes override this baseline to `unsafe-none` below.
  *
  * A Content-Security-Policy is intentionally omitted for now: the inline JSON-LD
  * (<script type="application/ld+json">) needs a nonce strategy before a strict CSP
@@ -110,6 +123,10 @@ const securityHeaders = [
   },
 ];
 
+// The two routes that mount the legacy Google One-Tap prompt (<GlobalOneTap/>),
+// which needs `window.opener` access and therefore MUST relax COOP to `unsafe-none`.
+const ONE_TAP_ROUTES = ["/login", "/apply"] as const;
+
 const nextConfig: NextConfig = {
   output: "standalone",
   compress: true,
@@ -121,22 +138,30 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return [
-      // Baseline security headers on all routes.
+      // Baseline security headers on all routes (COOP handled separately below so
+      // the One-Tap routes can override it without emitting a duplicate header).
       {
         source: "/(.*)",
         headers: securityHeaders,
       },
+      // Site-wide opener isolation. Applied to EVERY route EXCEPT the One-Tap
+      // routes via a negative-lookahead matcher, so those routes receive only the
+      // `unsafe-none` value below (Next.js does NOT dedupe across matching source
+      // blocks — emitting `same-origin` here AND `unsafe-none` there would send two
+      // conflicting Cross-Origin-Opener-Policy headers, which browsers reject). The
+      // lookahead is anchored to a full path segment (`(?:/|$)`) so only the exact
+      // `/login` / `/apply` routes are excluded — sibling paths like `/applications`
+      // still receive the strict baseline.
+      {
+        source: `/((?!(?:${ONE_TAP_ROUTES.map((r) => r.slice(1)).join("|")})(?:/|$)).*)`,
+        headers: [{ key: "Cross-Origin-Opener-Policy", value: "same-origin" }],
+      },
       // COOP relaxation scoped to the One-Tap routes only (window.opener access
       // for the legacy non-FedCM Google prompt rendered by <GlobalOneTap/>).
-      // Everywhere else the Next.js default (same-origin-allow-popups) applies.
-      {
-        source: "/login",
+      ...ONE_TAP_ROUTES.map((source) => ({
+        source,
         headers: [{ key: "Cross-Origin-Opener-Policy", value: "unsafe-none" }],
-      },
-      {
-        source: "/apply",
-        headers: [{ key: "Cross-Origin-Opener-Policy", value: "unsafe-none" }],
-      },
+      })),
     ];
   },
 };

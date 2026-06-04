@@ -3,11 +3,8 @@ import {
   Injectable,
   Logger,
   NotFoundException,
-  OnModuleDestroy,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { OrderStatus, Prisma, Review, ReviewStatus } from '@prisma/client';
-import Redis from 'ioredis';
 import { PrismaService } from '@/prisma/prisma.service';
 import {
   CreateReviewDto,
@@ -21,18 +18,6 @@ const PUBLIC_DEFAULT_LIMIT = 10;
 const PUBLIC_MAX_LIMIT = 50;
 const ADMIN_DEFAULT_LIMIT = 20;
 const ADMIN_MAX_LIMIT = 200;
-
-/**
- * Helpful-vote dedupe window. A given IP can register at most ONE helpful vote
- * per review per this window (Redis SET NX EX). This is a coarse, infrastructure
- * -only mitigation layered on top of the per-IP @Throttle: it does not replace a
- * true per-user dedupe (which needs a votes junction table — a schema change
- * owned outside this module), but it converts "6 votes/min/IP forever" into "1
- * vote/IP/day" so vote inflation is no longer trivial. Best-effort: if Redis is
- * unavailable the vote is allowed through rather than failing the request.
- */
-const HELPFUL_VOTE_DEDUPE_TTL_SECONDS = 24 * 60 * 60; // 24h
-const HELPFUL_VOTE_KEY_PREFIX = 'review_helpful_vote';
 
 /**
  * Public-safe projection of a review. Deliberately omits customerId / orderId
@@ -65,7 +50,10 @@ export interface ReviewSummaryDto {
  * are no ratings (stable "no stars yet" value; avoids divide-by-zero).
  */
 function ratingAverage(ratingSum: number, ratingCount: number): number {
-  if (!ratingCount || ratingCount <= 0) return 0;
+  // ratingCount is a non-negative integer DB column; `<= 0` covers the 0 ("no
+  // ratings yet") case and any negative value from DB corruption — and also
+  // guards the divide below.
+  if (ratingCount <= 0) return 0;
   return Math.round((ratingSum / ratingCount) * 10) / 10;
 }
 
@@ -103,49 +91,10 @@ function maskEmail(email: string | null | undefined): string {
 }
 
 @Injectable()
-export class ReviewsService implements OnModuleDestroy {
+export class ReviewsService {
   private readonly logger = new Logger(ReviewsService.name);
-  // Dedicated Redis connection for helpful-vote dedupe (mirrors StoreAuthService's
-  // own connection rather than reaching into the BullMQ pool). Constructed from
-  // the same REDIS_* config (port 6380 ⇒ TLS in prod).
-  private readonly redis: Redis;
 
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly configService: ConfigService,
-  ) {
-    const port = this.configService.get<number>('REDIS_PORT', 6379);
-    const password = this.configService.get<string>('REDIS_PASSWORD');
-    const useTls = String(port) === '6380';
-    this.redis = new Redis({
-      host: this.configService.get<string>('REDIS_HOST', 'localhost'),
-      port,
-      ...(password ? { password } : {}),
-      ...(useTls ? { tls: {} } : {}),
-      // Don't let a Redis hiccup crash the process or block startup; the
-      // helpful-vote dedupe degrades open (best-effort) when Redis is down.
-      maxRetriesPerRequest: 1,
-      enableOfflineQueue: false,
-      lazyConnect: true,
-    });
-    // Swallow connection errors: dedupe is best-effort and must never bubble an
-    // unhandled 'error' event from the ioredis client.
-    this.redis.on('error', (err) => {
-      this.logger.warn(`reviews helpful-vote Redis error: ${err.message}`);
-    });
-  }
-
-  /**
-   * Close the dedicated Redis connection on graceful shutdown so we don't leak a
-   * socket on test teardown / rolling deploys (matches StoreAuthService).
-   */
-  async onModuleDestroy(): Promise<void> {
-    try {
-      await this.redis.quit();
-    } catch {
-      /* already closing / closed — nothing to do on shutdown */
-    }
-  }
+  constructor(private readonly prisma: PrismaService) {}
 
   // ─── CUSTOMER: SUBMIT ─────────────────────────────────────
 
@@ -349,98 +298,81 @@ export class ReviewsService implements OnModuleDestroy {
     };
   }
 
-  // ─── PUBLIC: HELPFUL ──────────────────────────────────────
+  // ─── CUSTOMER: HELPFUL ────────────────────────────────────
 
   /**
-   * Increment a review's helpfulCount. Public; we only count helpful votes on
-   * APPROVED reviews (a PENDING/REJECTED review isn't publicly visible, so voting
-   * on it is meaningless and is rejected as 404). A single atomic
-   * UPDATE … SET helpful_count = helpful_count + 1 avoids a read-modify-write race.
+   * Register a helpful vote on a review for the JWT-pinned customer. CUSTOMER-only
+   * (the route is CustomerJwtGuard-gated); the public can still READ helpfulCount
+   * via the list, but only a registered customer can vote.
    *
-   * Dedupe: layered defence. A true per-user dedupe needs a votes junction table
-   * (a schema change owned outside this module), so we instead apply a Redis
-   * per-review-per-IP gate (one vote / IP / review / 24h) ON TOP of the per-IP
-   * @Throttle. `SET key 1 NX EX` is atomic, so two concurrent votes from the same
-   * IP for the same review cannot both pass. Degrades open: if Redis is down or no
-   * IP is available, the vote is still counted (best-effort, never blocks the
-   * read path). When the IP has already voted in-window we return the CURRENT
-   * count unchanged (HTTP 200, idempotent) rather than erroring.
+   * TRUE per-user dedupe (replaces the old coarse per-IP Redis gate): one row per
+   * (review, customer) in `review_helpful_votes` with a @@unique([reviewId,
+   * customerId]). A second vote from the same customer collides on that unique and
+   * surfaces as a P2002 — we swallow it idempotently and return the CURRENT count
+   * unchanged (HTTP 200, no increment). Both the junction insert and the count
+   * increment run inside ONE $transaction so a fresh vote and its +1 are atomic.
+   *
+   * We only count helpful votes on APPROVED reviews (a PENDING/REJECTED review
+   * isn't publicly visible, so voting on it is meaningless → 404). The increment
+   * is an updateMany scoped to APPROVED so it is conditional in ONE round-trip
+   * (no separate existence read that could race the status change); if it matches
+   * nothing the transaction rolls back (so no orphan vote row is left behind) and
+   * we surface a 404.
    */
   async markHelpful(
     reviewId: string,
-    voterIp?: string | null,
+    customerId: string,
   ): Promise<{ id: string; helpfulCount: number }> {
-    // Per-IP dedupe BEFORE the increment. If this IP already voted on this review
-    // within the window, short-circuit to the current count (no double-count).
-    if (voterIp) {
-      const firstVote = await this.tryClaimHelpfulVote(reviewId, voterIp);
-      if (!firstVote) {
-        const existing = await this.prisma.review.findFirst({
-          where: { id: reviewId, status: ReviewStatus.APPROVED },
-          select: { id: true, helpfulCount: true },
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        // Claim the (review, customer) slot first. A duplicate collides on the
+        // @@unique and throws P2002 — caught below and handled idempotently.
+        await tx.reviewHelpfulVote.create({
+          data: { reviewId, customerId },
         });
-        if (!existing) {
+
+        // Fresh vote: increment, scoped to APPROVED so the +1 is conditional in
+        // one atomic round-trip. updateMany returns count===0 for a missing /
+        // non-APPROVED review → throw so the whole tx (incl. the vote insert above)
+        // rolls back and no orphan vote row survives.
+        const result = await tx.review.updateMany({
+          where: { id: reviewId, status: ReviewStatus.APPROVED },
+          data: { helpfulCount: { increment: 1 } },
+        });
+        if (result.count === 0) {
           throw new NotFoundException('Review not found');
         }
-        return { id: existing.id, helpfulCount: existing.helpfulCount };
-      }
-    }
 
-    // updateMany scoped to APPROVED so the increment is conditional in ONE
-    // round-trip (no separate existence read that could race the status change).
-    const result = await this.prisma.review.updateMany({
-      where: { id: reviewId, status: ReviewStatus.APPROVED },
-      data: { helpfulCount: { increment: 1 } },
-    });
-    if (result.count === 0) {
-      // Not an APPROVED review: release the just-claimed dedupe key so a later
-      // legitimate vote (once approved) isn't blocked by this rejected attempt.
-      if (voterIp) {
-        await this.redis
-          .del(this.helpfulVoteKey(reviewId, voterIp))
-          .catch(() => undefined);
-      }
-      throw new NotFoundException('Review not found');
-    }
-    const updated = await this.prisma.review.findUnique({
-      where: { id: reviewId },
-      select: { id: true, helpfulCount: true },
-    });
-    // updated is non-null: the row matched the updateMany above within this request.
-    return { id: updated!.id, helpfulCount: updated!.helpfulCount };
-  }
-
-  /** Redis dedupe key for one (review, IP) pair. */
-  private helpfulVoteKey(reviewId: string, voterIp: string): string {
-    return `${HELPFUL_VOTE_KEY_PREFIX}:${reviewId}:${voterIp}`;
-  }
-
-  /**
-   * Atomically claim the (review, IP) vote slot. Returns true if THIS call set
-   * the key (first vote in-window), false if it already existed (duplicate).
-   * Degrades OPEN on any Redis error — returns true so the vote still counts.
-   */
-  private async tryClaimHelpfulVote(
-    reviewId: string,
-    voterIp: string,
-  ): Promise<boolean> {
-    try {
-      const set = await this.redis.set(
-        this.helpfulVoteKey(reviewId, voterIp),
-        '1',
-        'EX',
-        HELPFUL_VOTE_DEDUPE_TTL_SECONDS,
-        'NX',
-      );
-      // ioredis returns 'OK' when NX set succeeds, null when the key already exists.
-      return set === 'OK';
+        const updated = await tx.review.findUnique({
+          where: { id: reviewId },
+          select: { id: true, helpfulCount: true },
+        });
+        // Non-null: the row matched the updateMany above within this transaction.
+        return { id: updated!.id, helpfulCount: updated!.helpfulCount };
+      });
     } catch (e) {
-      this.logger.warn(
-        `helpful-vote dedupe unavailable (review ${reviewId}); allowing vote: ${
-          e instanceof Error ? e.message : String(e)
-        }`,
-      );
-      return true;
+      if (e instanceof Prisma.PrismaClientKnownRequestError) {
+        if (e.code === 'P2002') {
+          // @@unique([reviewId, customerId]) — this customer already voted.
+          // Idempotent: return the CURRENT count unchanged, no increment. Still
+          // scoped to APPROVED so a vote that pre-dates a later rejection doesn't
+          // leak a hidden review.
+          const existing = await this.prisma.review.findFirst({
+            where: { id: reviewId, status: ReviewStatus.APPROVED },
+            select: { id: true, helpfulCount: true },
+          });
+          if (!existing) {
+            throw new NotFoundException('Review not found');
+          }
+          return { id: existing.id, helpfulCount: existing.helpfulCount };
+        }
+        if (e.code === 'P2003') {
+          // FK violation on the vote insert: the reviewId references no review row
+          // at all — a clean 404 rather than a raw 500.
+          throw new NotFoundException('Review not found');
+        }
+      }
+      throw e;
     }
   }
 

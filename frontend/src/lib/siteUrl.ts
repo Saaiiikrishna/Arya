@@ -36,13 +36,23 @@ function validatedOrigin(candidate: string): string | null {
   try {
     parsed = new URL(candidate);
   } catch {
+    // Not a syntactically valid URL at all → reject.
     return null;
   }
+  // Must carry an actual host. `new URL('https:///x')` parses with an empty
+  // hostname; such a value is not a usable absolute origin, so reject it.
+  if (!parsed.hostname) return null;
   const isHttps = parsed.protocol === 'https:';
   const isLocalHttp =
     parsed.protocol === 'http:' &&
     (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1');
+  // Only http(s) is acceptable; any other scheme (ftp:, javascript:, data:, …) is
+  // rejected, and plain http is allowed ONLY for the local-dev loopback hosts.
   if (!isHttps && !isLocalHttp) return null;
+  // `URL.origin` is `null`/`'null'` for opaque origins (e.g. non-special schemes);
+  // we have already constrained to http(s) above, so origin is a real serialised
+  // value here. Guard anyway so a stringy 'null' never leaks downstream.
+  if (!parsed.origin || parsed.origin === 'null') return null;
   // Re-serialise from the parsed URL so only scheme://host[:port] survives and a
   // trailing slash never leaks through (URL.origin has no trailing slash).
   return parsed.origin;

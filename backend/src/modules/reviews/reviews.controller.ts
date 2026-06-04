@@ -22,13 +22,14 @@ import { CreateReviewDto, ListReviewsDto } from './dto';
  * Store-facing reviews surface (REVIEW API CONTRACT — public + customer):
  *  - GET  /api/store/products/:productId/reviews        public list + summary
  *  - POST /api/store/products/:productId/reviews         CUSTOMER JWT — submit
- *  - POST /api/store/reviews/:id/helpful                 public — helpful vote
+ *  - POST /api/store/reviews/:id/helpful                 CUSTOMER JWT — helpful vote
  *
  * Follows the repo-wide `@Controller('api')` convention (every store + platform
- * controller does the same); the sub-path is qualified per-route. The public
- * reads/votes carry NO class-level guard (matching cart/orders store controllers);
- * the submit route is per-route CUSTOMER-gated and the customer id is pinned from
- * the verified JWT (req.user.id) — NEVER the body.
+ * controller does the same); the sub-path is qualified per-route. The public READ
+ * carries NO class-level guard (matching cart/orders store controllers); both the
+ * submit AND helpful-vote routes are per-route CUSTOMER-gated and the customer id
+ * is pinned from the verified JWT (req.user.id) — NEVER the body. The public can
+ * still READ helpfulCount via the list; only a registered customer can vote.
  */
 @Controller('api')
 @UseGuards(ThrottlerGuard)
@@ -69,15 +70,14 @@ export class ReviewsController {
   }
 
   /**
-   * Increment a review's helpful count (public). Layered abuse mitigation: the
-   * STRICT per-IP @Throttle bounds burst rate, and the service applies a Redis
-   * per-review-per-IP dedupe (one vote / IP / review / 24h) so a single IP can't
-   * inflate a count beyond one. The voter IP is taken SOLELY from `req.ip` /
-   * the socket remote address — the raw `X-Forwarded-For` header is intentionally
-   * NOT trusted (Express is not configured with `trust proxy`, so a client could
-   * otherwise spoof the source IP and defeat the dedupe). True per-user dedupe
-   * still needs a votes table (schema change, out of this module's scope).
+   * Register a helpful vote on a review (CUSTOMER JWT). TRUE per-user dedupe: the
+   * service inserts a (review, customer) row into review_helpful_votes guarded by
+   * a @@unique, so a customer can vote at most once per review (a repeat is a 200
+   * no-op returning the current count). The customer id is pinned from the verified
+   * JWT (req.user.id) — never the body; no request body is needed. STRICT tier
+   * bounds burst rate per customer.
    */
+  @UseGuards(CustomerJwtGuard)
   @Post('store/reviews/:id/helpful')
   @HttpCode(HttpStatus.OK)
   @Throttle({ short: { limit: 6, ttl: 60000 } })
@@ -85,7 +85,12 @@ export class ReviewsController {
     @Req() req: Request,
     @Param('id', new ParseUUIDPipe()) id: string,
   ) {
-    const voterIp = req.ip ?? req.socket?.remoteAddress ?? null;
-    return this.reviews.markHelpful(id, voterIp);
+    const customerId = (req as Request & { user?: { id?: string } }).user?.id;
+    if (!customerId) {
+      // The guard guarantees an authenticated CUSTOMER, but assert defensively so
+      // an unexpected missing id is a clean 401, never an undefined-id write.
+      throw new UnauthorizedException('Customer authentication required');
+    }
+    return this.reviews.markHelpful(id, customerId);
   }
 }

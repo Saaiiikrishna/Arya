@@ -2190,6 +2190,7 @@ model Customer {
   returns           Return[]
   couponRedemptions CouponRedemption[]
   reviews           Review[]
+  reviewHelpfulVotes ReviewHelpfulVote[]
 
   // Partial-unique on email for REGISTERED only is enforced in the migration (SQL-only);
   // guests may share NULL email. Coupon per-customer-limit dedupes on REGISTERED identity
@@ -2409,11 +2410,32 @@ model Review {
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
   // onDelete SetNull: verified-purchase linkage survives order deletion.
   order    Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  // Per-user helpful-vote junction (true dedupe). Cascade: votes go with the review.
+  helpfulVotes ReviewHelpfulVote[]
 
   @@unique([productId, customerId]) // one review per customer per product
   @@index([productId, status])
   @@index([customerId])
   @@map("reviews")
+}
+
+// One row per (review, customer) helpful vote — TRUE per-user dedupe (replaces the
+// coarse per-IP Redis gate). The @@unique([reviewId, customerId]) makes a second
+// vote from the same customer a P2002 the service swallows idempotently (no double
+// count). UUID id has no DB default (app-side @default(uuid()); no pgcrypto).
+model ReviewHelpfulVote {
+  id         String   @id @default(uuid()) @db.Uuid
+  reviewId   String   @map("review_id") @db.Uuid
+  customerId String   @map("customer_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // onDelete Cascade on both: a vote is meaningless without its review/customer.
+  review   Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([reviewId, customerId]) // one helpful vote per customer per review
+  @@index([customerId])
+  @@map("review_helpful_votes")
 }
 
 // ─── COUPONS, SHIPPING, RETURNS, INVOICING ───────────────

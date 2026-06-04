@@ -40,6 +40,22 @@ const DISCORD_SCOPE = 'identify email';
 // SiteSettings key holding the channel webhook URL that newly-PUBLISHED articles
 // are announced to. Absent/blank ⇒ Discord announcements are disabled (no-op).
 const DISCORD_ARTICLE_WEBHOOK_SETTING_KEY = 'discordArticleWebhookUrl';
+// SSRF allowlist: the webhook URL is admin-mutable config, so we hard-pin its
+// destination host to Discord's official webhook domains. A poisoned setting
+// pointing anywhere else (internal IPs, cloud metadata endpoints, attacker
+// hosts) is rejected before any outbound request is made.
+// Restricted to the two production hosts ONLY — canary.discord.com and
+// ptb.discord.com (Discord's pre-release / public-test-build environments) are
+// deliberately EXCLUDED: no legitimate deployment posts announcements there, and
+// admitting them would silently widen the allowlist for a mistyped/canary URL. Add
+// a host here only with a documented reason.
+// IMPORTANT: the membership test MUST use strict Set.has() (exact host equality) —
+// never .includes()/.endsWith()/substring matching, which are trivially bypassable
+// (e.g. `discord.com.attacker.example`). See the check in postDiscordArticle().
+const DISCORD_WEBHOOK_HOSTS = new Set<string>([
+  'discord.com',
+  'discordapp.com',
+]);
 // In-process TTL for the cached webhook URL. A 5-minute window bounds staleness
 // after an admin updates the setting while eliminating a per-publish DB round-trip.
 const DISCORD_WEBHOOK_CACHE_TTL_MS = 5 * 60_000;
@@ -64,6 +80,16 @@ export class StoreAuthService implements OnModuleDestroy {
     private readonly emailService: EmailService,
     private readonly notifications: NotificationService,
   ) {
+    // Dedicated ioredis connection owned by this service (OTP codes, OAuth `state`
+    // nonces). Intentionally NOT shared with BullMQ's pool: BullMQ connections run
+    // in blocking command modes (BRPOPLPUSH / blocking subscribers) that cannot be
+    // safely multiplexed with the simple GET/SET/INCR/GETDEL traffic here, and a
+    // separate client isolates auth-critical reads from queue back-pressure. The
+    // socket is drained + closed in onModuleDestroy so it is not leaked on
+    // shutdown. NOTE: each module that spins its own client adds to the Azure
+    // Redis connection count (billed/bounded on port 6380) — if more modules need
+    // raw Redis, promote this to a shared @Global() RedisModule rather than
+    // copying this constructor.
     const port = this.configService.get<number>('REDIS_PORT', 6379);
     const password = this.configService.get<string>('REDIS_PASSWORD');
     const useTls = String(port) === '6380';
@@ -328,6 +354,15 @@ export class StoreAuthService implements OnModuleDestroy {
 
     const storedBuf = Buffer.from(stored);
     const givenBuf = Buffer.from(otp);
+    // timingSafeEqual() throws if the two buffers differ in length, so the length
+    // equality MUST be checked first. This `===` short-circuit can leak (via a
+    // timing side-channel) whether the submitted code is the right LENGTH — but
+    // that is not a secret here: the stored OTP is always exactly 6 digits
+    // (requestOtp mints randomInt(100000, 1000000) ⇒ 6 chars), so the length is
+    // public/fixed and reveals nothing about the digits. The VALUE comparison
+    // stays constant-time via timingSafeEqual once lengths match. If the OTP
+    // length ever becomes variable or secret, replace this with a fixed-length
+    // padded-buffer compare so no length signal leaks.
     const matches =
       storedBuf.length === givenBuf.length &&
       timingSafeEqual(storedBuf, givenBuf);
@@ -345,7 +380,14 @@ export class StoreAuthService implements OnModuleDestroy {
       throw new UnauthorizedException('Invalid code. Please try again.');
     }
 
-    // Code consumed — clear it and the attempt counter before issuing tokens.
+    // Code consumed — clear it and the attempt counter BEFORE the customer
+    // find/create/update + token issue below. This ordering is intentional: a
+    // valid OTP is strictly single-use, so we burn it the instant it verifies. If
+    // a later DB write fails (connection drop, schema mismatch, etc.) the OTP is
+    // already gone and the user must request a FRESH code rather than being able
+    // to replay the just-verified one. The trade-off (a rare transient DB error
+    // surfaces to the user as "request a new code") is preferred over leaving a
+    // verified-but-uncommitted OTP live for replay.
     await this.redis.del(`store_otp:${email}`);
     await this.redis.del(`store_otp_attempts:${email}`);
 
@@ -595,13 +637,19 @@ export class StoreAuthService implements OnModuleDestroy {
     }
 
     if (!customer) {
-      // Unusable password sentinel (Unix shadow convention): a value that is not a
-      // valid bcrypt hash can never be a bcrypt.compare() match, so the row works
-      // for federated/OTP login but never for `login()` (email + password). The
-      // random suffix keeps every row distinct without spending 12 bcrypt rounds
-      // on entropy that is never compared against user input. firstName is
+      // Federated (Discord) signups have no user-chosen password, but the column
+      // is NOT NULL and `login()` runs bcrypt.compare() against it. Store a REAL
+      // bcrypt hash of a high-entropy random secret that is never persisted or
+      // revealed anywhere, so password login is cryptographically unreachable for
+      // this row while the value remains a valid bcrypt hash (no malformed-hash
+      // edge cases in compare()). The 32 random bytes render to 64 hex chars —
+      // comfortably under bcrypt's 72-byte input cap (bcrypt v6 silently
+      // truncates beyond that), so the full secret is hashed. firstName is
       // best-effort from the Discord display name.
-      const unusablePasswordHash = `!discord:${randomBytes(16).toString('hex')}`;
+      const unusablePasswordHash = await bcrypt.hash(
+        randomBytes(32).toString('hex'),
+        BCRYPT_ROUNDS,
+      );
       customer = await this.prisma.customer.create({
         data: {
           type: CustomerType.REGISTERED,
@@ -670,7 +718,7 @@ export class StoreAuthService implements OnModuleDestroy {
       }
     }
 
-    // Disabled unless a valid http(s) webhook URL is configured.
+    // Disabled unless a valid https Discord webhook URL is configured.
     if (!webhookUrl) return false;
     let parsed: URL;
     try {
@@ -681,9 +729,26 @@ export class StoreAuthService implements OnModuleDestroy {
       );
       return false;
     }
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    if (parsed.protocol !== 'https:') {
       this.logger.warn(
-        'Discord article webhook URL must be http(s) — skipping',
+        'Discord article webhook URL must be https — skipping',
+      );
+      return false;
+    }
+    // SSRF guard: the webhook URL is sourced from a runtime-mutable SiteSettings
+    // row, so a poisoned/typo'd value could otherwise point axios at an internal
+    // host (cloud metadata, localhost services, …). Pin the destination to
+    // Discord's own webhook hosts ONLY and require the canonical webhook path.
+    // Anything else is logged and treated as disabled (no-op, non-throwing).
+    // IMPORTANT: use strict Set.has() (exact host equality) — never .includes(),
+    // .endsWith(), or substring matching, which would admit a bypass host such as
+    // `discord.com.attacker.example` or `evildiscord.com`.
+    if (
+      !DISCORD_WEBHOOK_HOSTS.has(parsed.hostname.toLowerCase()) ||
+      !parsed.pathname.startsWith('/api/webhooks/')
+    ) {
+      this.logger.warn(
+        `Discord article webhook URL host/path not allowed (${parsed.hostname}) — skipping`,
       );
       return false;
     }

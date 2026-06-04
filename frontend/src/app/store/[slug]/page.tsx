@@ -43,14 +43,15 @@ import type {
 } from '@/components/store';
 import {
   storeApi,
-  ProductDetail,
+  type ProductDetail,
   type ProductReview,
   type ReviewSummary,
 } from '@/lib/storeApi';
 import { ApiError } from '@/lib/api';
 import { useStoreAuth } from '@/lib/storeAuth';
+import { useStoreCart } from '@/lib/storeCart';
 import { cn } from '@/lib/cn';
-import { str, num } from '../_util';
+import { asStr, asNum } from '../_util';
 
 // ── Local view models (defensive narrowing of the permissive ProductDetail) ──
 
@@ -68,21 +69,21 @@ interface SkuView {
 /** Map a raw SKU record onto a defensive SkuView. */
 function toSkuView(raw: Record<string, unknown>): SkuView {
   const stock = (raw.stock as Record<string, unknown> | undefined) ?? {};
-  const basePrice = num(raw.basePrice);
-  const salePrice = num(raw.salePrice);
-  const effectivePrice = num(raw.effectivePrice) ?? salePrice ?? basePrice;
+  const basePrice = asNum(raw.basePrice);
+  const salePrice = asNum(raw.salePrice);
+  const effectivePrice = asNum(raw.effectivePrice) ?? salePrice ?? basePrice;
   return {
     id: String(raw.id ?? ''),
-    name: str(raw.name) ?? str(raw.skuCode) ?? 'Default',
-    skuCode: str(raw.skuCode),
+    name: asStr(raw.name) ?? asStr(raw.skuCode) ?? 'Default',
+    skuCode: asStr(raw.skuCode),
     effectivePrice,
     basePrice,
     salePrice,
-    available: num(stock.available),
+    available: asNum(stock.available),
     // Treat the explicit boolean `inStock === true` as authoritative; otherwise
     // fall back to a positive available count. A truthy non-boolean (e.g. the
     // string 'true') must NOT over-report as in stock, hence `=== true`.
-    inStock: stock.inStock === true || (num(stock.available) ?? 0) > 0,
+    inStock: stock.inStock === true || (asNum(stock.available) ?? 0) > 0,
   };
 }
 
@@ -97,15 +98,15 @@ function toGalleryMedia(product: ProductDetail): GalleryMedia[] {
   const rows = Array.isArray(product.media) ? product.media : [];
   const out: GalleryMedia[] = [];
   for (const r of rows) {
-    const url = str((r as Record<string, unknown>).url);
+    const url = asStr((r as Record<string, unknown>).url);
     if (!url) continue;
     const type =
       (r as Record<string, unknown>).type === 'VIDEO' ? 'VIDEO' : 'IMAGE';
     out.push({
       url,
       type,
-      caption: str((r as Record<string, unknown>).caption),
-      altText: str((r as Record<string, unknown>).altText),
+      caption: asStr((r as Record<string, unknown>).caption),
+      altText: asStr((r as Record<string, unknown>).altText),
     });
   }
   return out;
@@ -146,7 +147,7 @@ function buildProductJsonLd(
     .map((s) => s.effectivePrice)
     .filter((p): p is number => typeof p === 'number' && Number.isFinite(p));
   const lowestPaise =
-    num(product.priceFrom) ?? (skuPrices.length ? Math.min(...skuPrices) : null);
+    asNum(product.priceFrom) ?? (skuPrices.length ? Math.min(...skuPrices) : null);
   const inStock = skus.some((s) => s.inStock);
 
   const data: Record<string, unknown> = {
@@ -158,8 +159,8 @@ function buildProductJsonLd(
   // Aggregate rating → enables star rich-results in Google search. Emitted only
   // when there is at least one approved rating; values come straight off the
   // denormalised ProductDetail fields (Product.ratingSum / Product.ratingCount).
-  const ratingAverage = num(product.ratingAverage);
-  const ratingCount = num(product.ratingCount) ?? 0;
+  const ratingAverage = asNum(product.ratingAverage);
+  const ratingCount = asNum(product.ratingCount) ?? 0;
   if (ratingAverage != null && ratingCount > 0) {
     data.aggregateRating = {
       '@type': 'AggregateRating',
@@ -170,16 +171,23 @@ function buildProductJsonLd(
     };
   }
 
-  const desc = str(product.shortDescription) ?? str(product.subtitle) ?? str(product.description);
+  const desc = asStr(product.shortDescription) ?? asStr(product.subtitle) ?? asStr(product.description);
   if (desc) data.description = desc;
 
-  const brand = str(product.brand);
+  const brand = asStr(product.brand);
   if (brand) data.brand = { '@type': 'Brand', name: brand };
 
-  const imageUrls = media.map((m) => m.url).filter(Boolean);
+  // schema.org Product.image expects IMAGE URLs only. The media list mixes IMAGE
+  // and VIDEO rows (videos render in the gallery's video slot); a VIDEO URL here
+  // would be served to crawlers as a product image (Google Search rich-result
+  // breakage / invalid structured data). Filter to IMAGE rows before mapping.
+  const imageUrls = media
+    .filter((m) => m.type === 'IMAGE')
+    .map((m) => m.url)
+    .filter(Boolean);
   if (imageUrls.length) data.image = imageUrls;
 
-  const sku = str(product.sku) ?? (skus.length ? str(skus[0].skuCode) : null);
+  const sku = asStr(product.sku) ?? (skus.length ? asStr(skus[0].skuCode) : null);
   if (sku) data.sku = sku;
 
   if (lowestPaise != null) {
@@ -187,7 +195,7 @@ function buildProductJsonLd(
       '@type': 'Offer',
       // Paise → rupees, fixed 2dp, as a string (schema.org price is a decimal).
       price: (lowestPaise / 100).toFixed(2),
-      priceCurrency: str(product.currency) ?? 'INR',
+      priceCurrency: asStr(product.currency) ?? 'INR',
       availability: inStock
         ? 'https://schema.org/InStock'
         : 'https://schema.org/OutOfStock',
@@ -363,6 +371,10 @@ function ProductView({
     setQty(1);
   }, [selectedSkuId]);
 
+  // Cart context: route adds through the provider (not storeApi directly) so a
+  // brand-new guest gets a minted guest cart and the header badge count updates.
+  const { addItem } = useStoreCart();
+
   // Add-to-cart state machine: idle → adding → added (transient) | error.
   const [adding, setAdding] = useState(false);
   const [added, setAdded] = useState(false);
@@ -388,7 +400,11 @@ function ProductView({
     setCartError(null);
     setAdded(false);
     try {
-      await storeApi.addCartItem({ skuId: selectedSku.id, qty });
+      // Route through the cart context: it mints a guest cart on the first add for
+      // an unauthenticated visitor (avoiding the 401/403 the direct storeApi call
+      // hit) and commits the recomputed cart to context state so the header badge
+      // in Layout.tsx reflects the new count immediately.
+      await addItem(selectedSku.id, qty);
       setAdded(true);
     } catch (err) {
       setCartError(
@@ -397,18 +413,18 @@ function ProductView({
     } finally {
       setAdding(false);
     }
-  }, [selectedSku, qty]);
+  }, [selectedSku, qty, addItem]);
 
-  const eyebrow = str(product.brand) ?? str(product.subtitle);
+  const eyebrow = asStr(product.brand) ?? asStr(product.subtitle);
   // Buy-box paragraph: the dedicated short description, falling back only to the
   // subtitle — never the full long-form `description` (that belongs in a tab).
-  const shortDesc = str(product.shortDescription) ?? str(product.subtitle);
+  const shortDesc = asStr(product.shortDescription) ?? asStr(product.subtitle);
 
   // Denormalised rating off the ProductDetail (named fields on ProductSummary).
   // Shown near the title when there is at least one rating.
-  const ratingAverage = num(product.ratingAverage);
-  const ratingCount = num(product.ratingCount) ?? 0;
-  const productId = str(product.id) ?? '';
+  const ratingAverage = asNum(product.ratingAverage);
+  const ratingCount = asNum(product.ratingCount) ?? 0;
+  const productId = asStr(product.id) ?? '';
 
   // Tabs: admin-defined tab/section tree. Each tab.sections → BlockRenderer.
   const tabItems = useMemo(() => {
@@ -416,7 +432,7 @@ function ProductView({
     return rawTabs
       .map((t, i) => {
         const tab = t as Record<string, unknown>;
-        const title = str(tab.title) ?? `Section ${i + 1}`;
+        const title = asStr(tab.title) ?? `Section ${i + 1}`;
         // Defensive: only pass an actual array to BlockRenderer.
         const sections: ContentBlock[] = Array.isArray(tab.sections)
           ? (tab.sections as ContentBlock[])
@@ -735,8 +751,8 @@ function ReviewsSection({
       setTotalPages(metaPages);
       if (res.summary) {
         setSummary({
-          average: num(res.summary.average) ?? 0,
-          count: num(res.summary.count) ?? 0,
+          average: asNum(res.summary.average) ?? 0,
+          count: asNum(res.summary.count) ?? 0,
           breakdown: res.summary.breakdown ?? EMPTY_BREAKDOWN,
         });
       }
@@ -758,6 +774,10 @@ function ReviewsSection({
 
   const onHelpful = useCallback(
     async (reviewId: string) => {
+      // The "helpful" endpoint is behind CustomerJwtGuard — only logged-in
+      // customers may vote. Guard here too so an anonymous click never fires a
+      // request that would 401; the UI shows a sign-in prompt for guests instead.
+      if (!isAuthed) return;
       if (voted[reviewId]) return;
       // Optimistic bump + lock; reconcile with the server count on success.
       setVoted((v) => ({ ...v, [reviewId]: true }));
@@ -787,7 +807,7 @@ function ReviewsSection({
         );
       }
     },
-    [voted],
+    [voted, isAuthed],
   );
 
   // After a successful submission, jump to the freshest sort so the author sees
@@ -933,7 +953,7 @@ function ReviewsSection({
           ) : (
             <ul className="flex flex-col gap-5">
               {reviews.map((r) => {
-                const author = str(r.authorName) ?? 'Verified customer';
+                const author = asStr(r.authorName) ?? 'Verified customer';
                 const dateLabel = fmtReviewDate(r.createdAt);
                 return (
                   <li key={r.id} className="mkt-card p-6">
@@ -954,12 +974,12 @@ function ReviewsSection({
                       )}
                     </div>
 
-                    {str(r.title) && (
+                    {asStr(r.title) && (
                       <h4 className="mt-3 font-serif text-lg leading-snug text-forest">
                         {r.title}
                       </h4>
                     )}
-                    {str(r.body) && (
+                    {asStr(r.body) && (
                       <p className="mt-2 whitespace-pre-line font-sans text-sm leading-relaxed text-ink/70">
                         {r.body}
                       </p>
@@ -968,24 +988,41 @@ function ReviewsSection({
                     <div className="mt-4 flex items-center gap-3">
                       <span className="font-sans text-xs text-ink/55">{author}</span>
                       <span aria-hidden className="text-ink/25">·</span>
-                      <button
-                        type="button"
-                        onClick={() => void onHelpful(r.id)}
-                        disabled={!!voted[r.id]}
-                        className={cn(
-                          'inline-flex items-center gap-1.5 font-sans text-xs transition-colors',
-                          voted[r.id]
-                            ? 'cursor-default text-saffron-deep'
-                            : 'text-ink/55 hover:text-saffron-deep',
-                        )}
-                      >
-                        <ThumbsUp
-                          className={cn('h-3.5 w-3.5', voted[r.id] && 'fill-saffron-deep')}
-                        />
-                        <span>
-                          Helpful{r.helpfulCount > 0 ? ` (${r.helpfulCount})` : ''}
-                        </span>
-                      </button>
+                      {isAuthed ? (
+                        // Logged-in customers can vote (CustomerJwtGuard route).
+                        <button
+                          type="button"
+                          onClick={() => void onHelpful(r.id)}
+                          disabled={!!voted[r.id]}
+                          className={cn(
+                            'inline-flex items-center gap-1.5 font-sans text-xs transition-colors',
+                            voted[r.id]
+                              ? 'cursor-default text-saffron-deep'
+                              : 'text-ink/55 hover:text-saffron-deep',
+                          )}
+                        >
+                          <ThumbsUp
+                            className={cn('h-3.5 w-3.5', voted[r.id] && 'fill-saffron-deep')}
+                          />
+                          <span>
+                            Helpful{r.helpfulCount > 0 ? ` (${r.helpfulCount})` : ''}
+                          </span>
+                        </button>
+                      ) : (
+                        // Guests: show the (non-interactive) count and a sign-in
+                        // prompt instead of a button that would 401 on click.
+                        <Link
+                          href="/account"
+                          className="inline-flex items-center gap-1.5 font-sans text-xs text-ink/55 transition-colors hover:text-saffron-deep"
+                          title="Sign in to mark a review helpful"
+                        >
+                          <ThumbsUp className="h-3.5 w-3.5" aria-hidden />
+                          <span>
+                            Helpful{r.helpfulCount > 0 ? ` (${r.helpfulCount})` : ''}
+                            {' · Sign in'}
+                          </span>
+                        </Link>
+                      )}
                     </div>
                   </li>
                 );

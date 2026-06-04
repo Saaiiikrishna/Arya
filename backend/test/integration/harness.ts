@@ -5,8 +5,15 @@
  * (advisory locks + CAS) — that is the whole point of these specs.
  */
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../src/prisma/prisma.service';
 
+// Module-level singleton: a single PrismaService (one pg.Pool) is shared by every
+// int-spec file in a Jest run. This is safe ONLY because jest-integration.json
+// pins `maxWorkers: 1` (serial, single worker process) — spec files never execute
+// concurrently, so `closeAll()` in one suite's afterAll cannot disconnect a pool
+// still in use by another suite's beforeAll. If maxWorkers is ever raised, this
+// singleton must become per-worker or the suites would race on the shared pool.
 let prismaSingleton: PrismaService | null = null;
 
 /** Minimal ConfigService stub returning the (test) DATABASE_URL + any overrides. */
@@ -39,6 +46,11 @@ export async function getPrisma(): Promise<PrismaService> {
 // migration-seeded counters persist; numbering tests assert relative contiguity.
 const TABLES = [
   'invoice_lines', 'invoices',
+  // Reviews + their per-customer helpful-vote junction. Children first
+  // (review_helpful_votes references reviews) so RESTART IDENTITY CASCADE is
+  // clean. reviews itself references products/customers/orders, all truncated
+  // below it in this list.
+  'review_helpful_votes', 'reviews',
   'order_events', 'order_items', 'orders',
   'return_items', 'returns',
   'shipment_events', 'shipments',
@@ -56,8 +68,19 @@ const TABLES = [
 ];
 
 export async function truncateAll(p: PrismaService): Promise<void> {
-  const list = TABLES.map((t) => `"${t}"`).join(', ');
-  await p.$executeRawUnsafe(`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE`);
+  // Convention requires the parameterised raw API (`$executeRaw`) rather than
+  // `$executeRawUnsafe`. Table names cannot be bound parameters, but they ARE a
+  // static, developer-controlled list, so each is wrapped with Prisma.raw and the
+  // set is composed with Prisma.join into a single tagged-template statement —
+  // keeping us on the APPROVED `$executeRaw` path with no string interpolation of
+  // any runtime/user-supplied value.
+  const idents = Prisma.join(
+    TABLES.map((t) => Prisma.raw(`"${t}"`)),
+    ', ',
+  );
+  await p.$executeRaw(
+    Prisma.sql`TRUNCATE TABLE ${idents} RESTART IDENTITY CASCADE`,
+  );
 }
 
 export async function closeAll(): Promise<void> {

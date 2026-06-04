@@ -67,11 +67,13 @@ const MAX_DYNAMIC = 1000;
 /**
  * Narrow an unknown list item to a usable, URL-safe slug, else null.
  *
- * `encodeURI` (applied at the call site) does NOT encode `&`, so a slug holding
- * a literal `&`/`<`/`>` would survive into the `<loc>` value, which Next writes
- * verbatim with no entity escaping — producing non-well-formed sitemap XML. Slugs
- * are URL-safe by backend convention; we reject any that contains an XML-unsafe
- * character as an extra defence layer rather than emit a malformed sitemap.
+ * The call site percent-encodes the slug with encodeURIComponent, but that only
+ * makes the URL well-formed — it does NOT entity-escape for XML. A slug holding a
+ * literal `&`/`<`/`>`/`"`/`'` would, once encoded, still need XML entity escaping
+ * in the `<loc>` value, which Next writes verbatim with no entity escaping —
+ * producing non-well-formed sitemap XML. Slugs are URL-safe by backend convention;
+ * we reject any that contains an XML-unsafe character as an extra defence layer
+ * rather than emit a malformed sitemap.
  */
 function slugOf(item: unknown): string | null {
   if (!item || typeof item !== 'object') return null;
@@ -177,13 +179,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       .map((p): MetadataRoute.Sitemap[number] | null => {
         const slug = slugOf(p);
         if (!slug) return null;
-        // `slugOf()` already validated a non-empty string. `encodeURI` keeps URL-
-        // safe path characters (hyphens, etc.) intact while still encoding any
-        // genuinely unsafe character (space, `?`, a stray `/`) — unlike
-        // encodeURIComponent, which over-encodes safe punctuation.
+        // `slugOf()` already validated a non-empty string. The slug is a SINGLE
+        // path segment, so encode it with encodeURIComponent (not encodeURI):
+        // encodeURI leaves `?`, `#`, `&`, `=`, and `/` intact, any of which would
+        // change the URL's structure (a stray `/` would invent a sub-path, a `?`
+        // would start a query string). encodeURIComponent percent-encodes those
+        // reserved characters so the slug stays a single, well-formed segment.
         const images = imagesOf(p, 'primaryImageUrl', 'primaryImageS3Key');
         return {
-          url: `${base}/store/${encodeURI(slug)}`,
+          url: `${base}/store/${encodeURIComponent(slug)}`,
           lastModified: lastModifiedOf(p, 'updatedAt', 'createdAt') ?? now,
           changeFrequency: 'weekly',
           priority: 0.7,
@@ -212,11 +216,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       .map((a): MetadataRoute.Sitemap[number] | null => {
         const slug = slugOf(a);
         if (!slug) return null;
-        // See the product branch above: encodeURI preserves safe path characters
-        // (the slug was already validated non-empty by slugOf()).
+        // See the product branch above: encodeURIComponent encodes the single slug
+        // segment so reserved characters (`/`, `?`, `#`, `&`) cannot break the URL
+        // structure (the slug was already validated non-empty by slugOf()).
         const images = imagesOf(a, 'coverUrl', 'coverS3Key');
         return {
-          url: `${base}/articles/${encodeURI(slug)}`,
+          url: `${base}/articles/${encodeURIComponent(slug)}`,
           lastModified: lastModifiedOf(a, 'publishedAt', 'updatedAt', 'createdAt') ?? now,
           changeFrequency: 'monthly',
           priority: 0.6,

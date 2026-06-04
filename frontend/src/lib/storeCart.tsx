@@ -102,6 +102,15 @@ export function StoreCartProvider({ children }: { children: ReactNode }) {
   // in-flight status without taking `mutating` as a dependency (which would
   // re-create them on every mutation toggle).
   const mutatingRef = useRef(false);
+  // Monotonic request-sequence token. EVERY cart write (refresh OR mutation)
+  // increments it and captures the new value; a refresh only commits its resolved
+  // response if its captured token is still the latest one. This prevents a
+  // refresh() that was already in flight when a mutation started (or a second,
+  // newer refresh) from resolving LATER and overwriting the authoritative
+  // post-mutation cart with a stale snapshot. It strengthens `mutatingRef`, which
+  // only blocks NEW refreshes from STARTING during a mutation but cannot cancel one
+  // that began before the mutation did.
+  const reqSeq = useRef(0);
   const [error, setError] = useState<string | null>(null);
   // Slide-over drawer visibility — owned here (not the header button) so the
   // badge in <Layout/> and the <CartDrawer/> portal share one source of truth.
@@ -151,15 +160,26 @@ export function StoreCartProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     const hasGuestCart = !!storeApi.getCartToken();
     const hasCustomer = !!storeApi.getCustomerToken();
+    // Claim a sequence token for THIS refresh up front, before any await, so a
+    // mutation (or newer refresh) that starts while our getCart() is in flight
+    // bumps reqSeq past `token` and causes us to discard our now-stale result.
+    const token = ++reqSeq.current;
+    const isCurrent = () => token === reqSeq.current;
     if (!hasGuestCart && !hasCustomer) {
-      setCart(null);
+      if (isCurrent()) setCart(null);
       return;
     }
     try {
       const res = await storeApi.getCart();
+      // A mutation or a newer refresh superseded us while awaiting — drop this
+      // stale snapshot rather than clobber the authoritative current cart.
+      if (!isCurrent()) return;
       setCart(res);
       setError(null);
     } catch (err) {
+      // Only act on the error if we are still the latest request: a superseding
+      // mutation has already set the correct cart/error state.
+      if (!isCurrent()) return;
       if (err instanceof ApiError && (err.status === 404 || err.status === 410)) {
         storeApi.clearCartToken();
         setCart(null);
@@ -177,6 +197,10 @@ export function StoreCartProvider({ children }: { children: ReactNode }) {
       mutatingRef.current = true;
       setMutating(true);
       setError(null);
+      // Bump the sequence token: any refresh already in flight now holds an older
+      // token, so its eventual resolution will be discarded and cannot overwrite
+      // this mutation's authoritative result.
+      ++reqSeq.current;
       try {
         const res = await fn();
         setCart(res);
@@ -184,6 +208,14 @@ export function StoreCartProvider({ children }: { children: ReactNode }) {
         setError(messageOf(err, 'Something went wrong. Please try again.'));
         throw err;
       } finally {
+        // Re-assert this mutation as the latest writer REGARDLESS of success/failure.
+        // A refresh kicked off WHILE fn() was awaiting claimed a token equal to the
+        // current reqSeq; bumping here (not only on the success path) guarantees that
+        // refresh is invalidated even when fn() rejects — otherwise its stale snapshot
+        // would resolve later and clobber this mutation's error/cart state. Must run
+        // before clearing `mutating` so any refresh that starts after this still sees
+        // a newer token than its own.
+        ++reqSeq.current;
         mutatingRef.current = false;
         setMutating(false);
       }
