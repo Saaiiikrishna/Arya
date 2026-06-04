@@ -48,6 +48,8 @@ import { CouponsModule } from './modules/coupons';
 import { CartModule } from './modules/cart';
 import { DiyModule } from './modules/diy/diy.module';
 import { PurchasingModule } from './modules/purchasing/purchasing.module';
+import { InvoicingModule } from './modules/invoicing';
+import { OrdersModule } from './modules/orders';
 
 /**
  * Fail-fast environment validation. Signing secrets must ALWAYS be strong
@@ -73,6 +75,10 @@ function validateEnv(config: Record<string, unknown>): Record<string, unknown> {
     requirePresent('DATABASE_URL');
     requirePresent('RAZORPAY_KEY_SECRET');
     requirePresent('RAZORPAY_WEBHOOK_SECRET');
+    // Store webhook secret is SEPARATE from the pledge webhook secret (the store
+    // webhook handler in orders.service fails closed when absent). Enforce at boot
+    // so a missing value never silently 500s every Razorpay store callback.
+    requirePresent('RAZORPAY_STORE_WEBHOOK_SECRET');
     requirePresent('WHATSAPP_APP_SECRET');
   }
 
@@ -179,6 +185,8 @@ function validateEnv(config: Record<string, unknown>): Record<string, unknown> {
     CartModule,
     DiyModule,
     PurchasingModule,
+    InvoicingModule,
+    OrdersModule,
   ],
   providers: [
     // Apply rate limiting globally; per-route @Throttle still tunes the tiers.

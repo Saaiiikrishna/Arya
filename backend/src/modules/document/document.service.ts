@@ -133,6 +133,62 @@ export class DocumentService {
     });
   }
 
+  /**
+   * Direct server-side PutObject for SERVER-GENERATED artifacts (invoice/label
+   * PDFs) — NOT the client presign+confirm flow (architecture 8.7). The buffer is
+   * rendered in-process (e.g. pdfkit) and written straight to S3 under the caller's
+   * key. No Document row is created; the caller persists its own key reference
+   * (e.g. Invoice.pdfS3Key). The bucket IAM policy must grant `s3:PutObject`.
+   *
+   * Returns the stored key on success. Throws BadRequestException on an S3 failure
+   * so the caller (an idempotent, retryable job) can surface/retry rather than
+   * silently treating a non-uploaded artifact as stored.
+   */
+  async putObject(
+    key: string,
+    body: Buffer,
+    contentType: string,
+  ): Promise<{ key: string }> {
+    if (!key || typeof key !== 'string') {
+      throw new BadRequestException('A storage key is required');
+    }
+    if (!Buffer.isBuffer(body)) {
+      throw new BadRequestException('putObject body must be a Buffer');
+    }
+    try {
+      await this.s3.send(
+        new PutObjectCommand({
+          Bucket: this.bucket,
+          Key: key,
+          Body: body,
+          ContentType: contentType,
+        }),
+      );
+    } catch (e) {
+      this.logger.error(
+        `putObject failed for ${key}: ${(e as Error)?.message}`,
+      );
+      throw new BadRequestException('Failed to store generated document');
+    }
+    return { key };
+  }
+
+  /**
+   * Presigned GET for an arbitrary S3 key (server-generated artifacts that have no
+   * Document row, e.g. an invoice PDF referenced by Invoice.pdfS3Key). Mirrors
+   * {@link getDownloadUrl} but takes a raw key rather than a Document id.
+   */
+  async getSignedDownloadUrlForKey(
+    key: string,
+    expiresIn = 3600,
+  ): Promise<string> {
+    if (!key || typeof key !== 'string') {
+      throw new BadRequestException('A storage key is required');
+    }
+    const command = new GetObjectCommand({ Bucket: this.bucket, Key: key });
+    return getSignedUrl(this.s3, command, { expiresIn });
+  }
+
   async getDownloadUrl(documentId: string) {
     const document = await this.prisma.document.findUnique({
       where: { id: documentId },
