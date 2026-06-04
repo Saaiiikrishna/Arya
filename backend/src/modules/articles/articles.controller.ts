@@ -14,7 +14,7 @@ import {
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
-import { ArticleAuthorType } from '@prisma/client';
+import { ArticleAuthorType, ArticleStatus } from '@prisma/client';
 import { ArticleAuthorGuard } from '../store-auth/guards';
 import { VisitorService } from '../settings/visitor.service';
 import { ArticlesService } from './articles.service';
@@ -105,18 +105,38 @@ export class ArticlesController {
 
   // ─── AUTHOR (ArticleAuthorGuard — APPLICANT or CUSTOMER) ───
 
+  // SUBMIT FOR REVIEW — create a new article straight into the moderation queue
+  // (status SUBMITTED). Short tier so an author cannot flood the queue.
   @Throttle({ short: { limit: 10, ttl: 60000 } })
   @UseGuards(ArticleAuthorGuard)
   @Post('articles')
   create(@Req() req: AuthoredRequest, @Body() dto: CreateArticleDto) {
     const { authorType, authorId } = this.author(req);
-    return this.articles.create(authorType, authorId, dto);
+    return this.articles.create(
+      authorType,
+      authorId,
+      dto,
+      ArticleStatus.SUBMITTED,
+    );
   }
 
-  // Re-edit/re-submit of a rejected article toggles REJECTED -> SUBMITTED back
-  // into the moderation queue, so it is rate-matched to the submit (short) tier
-  // to prevent an author flooding the queue with rapid resubmissions.
-  @Throttle({ short: { limit: 10, ttl: 60000 } })
+  // SAVE DRAFT — create a new article as a work-in-progress DRAFT (NOT submitted,
+  // not in the moderation queue). The author can keep editing it (PATCH) and
+  // submit it later via POST /articles/:id/submit. A draft does not load the
+  // moderation queue, so it can use the slightly looser medium tier.
+  @Throttle({ medium: { limit: 30, ttl: 60000 } })
+  @UseGuards(ArticleAuthorGuard)
+  @Post('articles/draft')
+  createDraft(@Req() req: AuthoredRequest, @Body() dto: CreateArticleDto) {
+    const { authorType, authorId } = this.author(req);
+    return this.articles.create(authorType, authorId, dto, ArticleStatus.DRAFT);
+  }
+
+  // EDIT (no status change) — save edits to an author's own DRAFT or REJECTED
+  // article. This NEVER moves it into the queue; submission is the separate
+  // submit route below. Medium tier: a save-as-you-type draft edit is not a
+  // queue-flooding vector.
+  @Throttle({ medium: { limit: 30, ttl: 60000 } })
   @UseGuards(ArticleAuthorGuard)
   @Patch('articles/:id')
   update(
@@ -126,6 +146,22 @@ export class ArticlesController {
   ) {
     const { authorType, authorId } = this.author(req);
     return this.articles.updateMine(id, authorType, authorId, dto);
+  }
+
+  // SUBMIT FOR REVIEW — move an author's own DRAFT or REJECTED article into the
+  // moderation queue (-> SUBMITTED). Optional inline edits in the body are
+  // applied first (save-then-submit in one call). Rate-matched to the submit
+  // (short) tier so an author cannot flood the queue with rapid submissions.
+  @Throttle({ short: { limit: 10, ttl: 60000 } })
+  @UseGuards(ArticleAuthorGuard)
+  @Post('articles/:id/submit')
+  submit(
+    @Req() req: AuthoredRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: UpdateArticleDto,
+  ) {
+    const { authorType, authorId } = this.author(req);
+    return this.articles.submitMine(id, authorType, authorId, dto);
   }
 
   // ─── AUTHOR: ARTICLE MEDIA (own article) ──────────────────

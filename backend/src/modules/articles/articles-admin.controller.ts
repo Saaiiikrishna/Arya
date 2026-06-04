@@ -100,8 +100,13 @@ export class ArticlesAdminController {
 
   @Throttle({ short: { limit: 10, ttl: 60000 } })
   @Delete('admin/store/articles/:id')
-  remove(@Param('id', new ParseUUIDPipe()) id: string) {
-    return this.articles.remove(id);
+  remove(
+    @Req() req: AdminRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ) {
+    // adminId pinned to the verified JWT and threaded into remove() for audit
+    // attribution, consistent with approve/reject/update/restore.
+    return this.articles.remove(id, this.adminId(req));
   }
 
   // ─── INTERNAL ─────────────────────────────────────────────

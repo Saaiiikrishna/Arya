@@ -88,7 +88,10 @@ function IsArticleBody(options?: ValidationOptions) {
 }
 
 /**
- * Body for POST /api/articles (author submit).
+ * Body for POST /api/articles (author submit) and POST /api/articles/draft
+ * (author save-as-draft). The route — not a client-supplied status — selects the
+ * created state (SUBMITTED vs DRAFT), so there is deliberately NO status field
+ * here.
  *
  * The identity fields (authorType / authorId / authorName / status / slug /
  * publishedAt / viewCount / reviewedById) are NEVER accepted here — they are
@@ -130,10 +133,13 @@ export class CreateArticleDto {
 }
 
 /**
- * Body for PATCH /api/articles/:id (author edit of own DRAFT/REJECTED article).
+ * Body for PATCH /api/articles/:id (author edit of own DRAFT/REJECTED article)
+ * AND for the optional inline-edit payload of POST /api/articles/:id/submit.
  *
- * All fields optional. Status is intentionally absent: re-submission is driven
- * by the service (REJECTED -> SUBMITTED), never by a client-supplied status.
+ * All fields optional. Status is intentionally absent: the PATCH edit NEVER
+ * changes workflow status (a DRAFT stays DRAFT, a REJECTED stays REJECTED), and
+ * submission (DRAFT/REJECTED -> SUBMITTED) is driven by the dedicated submit
+ * route, never by a client-supplied status.
  */
 export class UpdateArticleDto {
   @IsOptional()
@@ -162,15 +168,6 @@ export class UpdateArticleDto {
   @ArrayMaxSize(ARTICLE_TAGS_MAX)
   @MaxLength(60, { each: true })
   tags?: string[];
-
-  /**
-   * When true, an edit of a REJECTED article re-submits it for review
-   * (REJECTED -> SUBMITTED). Defaults to true so a fixed-up rejected article
-   * goes back into the queue; pass false to keep editing without re-submitting.
-   */
-  @IsOptional()
-  @IsBoolean()
-  resubmit?: boolean;
 }
 
 /**
@@ -269,10 +266,11 @@ export class RejectArticleDto {
 /**
  * Body for PATCH /api/admin/articles/:id — admin edit / feature / unpublish.
  *
- * `unpublish=true` pulls a PUBLISHED article off the public listing (there is no
- * ARCHIVED state in the schema, so it returns to the moderation queue as
- * SUBMITTED — see the service note). `feature` is not a schema field; featuring
- * is expressed by a leading "featured" tag the public sort honors.
+ * `unpublish=true` pulls a PUBLISHED article off the public listing into the
+ * distinct terminal ARCHIVED state (NOT the SUBMITTED moderation queue — use the
+ * restore endpoint to bring it back to PUBLISHED). `feature` is not a schema
+ * field; featuring is expressed by a reserved "featured" tag the public sort
+ * honors.
  */
 export class AdminUpdateArticleDto {
   @IsOptional()

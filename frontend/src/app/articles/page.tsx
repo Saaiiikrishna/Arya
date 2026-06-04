@@ -6,8 +6,9 @@
  * Data via storeApi.listArticles (page/limit/tag/category/search). The backend
  * returns RAW S3 keys (coverS3Key), so covers are resolved through
  * resolveMediaUrl before being handed to ArticleCard. Featured articles (server
- * `featured` — the field declared on ArticleSummary) are surfaced in a hero strip
- * and flow through the normal grid. Loading / empty / error states are handled.
+ * `isFeatured` — the field declared on ArticleSummary, matching the backend JSON
+ * key) are surfaced in a hero strip and flow through the normal grid. Loading /
+ * empty / error states are handled.
  *
  * `useSearchParams` lives in an inner component wrapped in <Suspense> (the repo
  * convention — see apply/success), so the page does not bail out of static
@@ -108,7 +109,7 @@ function ArticlesIndex() {
       // entry point, not a property of a filtered/paged result.
       const isUnfiltered = page === 1 && !tag && !category && !search;
       setFeatured(
-        isUnfiltered ? data.filter((a) => Boolean(a.featured)).slice(0, 3) : [],
+        isUnfiltered ? data.filter((a) => Boolean(a.isFeatured)).slice(0, 3) : [],
       );
 
       // Harvest tag chips from results (de-duped).

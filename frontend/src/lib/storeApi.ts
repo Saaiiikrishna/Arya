@@ -24,7 +24,7 @@
  * refresh — a guest has no refresh token.
  */
 
-import { ApiError } from '@/lib/api';
+import { ApiError, api } from '@/lib/api';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
@@ -214,7 +214,13 @@ export interface ArticleSummary {
   excerpt?: string | null;
   coverUrl?: string | null;
   tags?: string[];
-  featured?: boolean;
+  /**
+   * Server-emitted featured flag. The backend `toPublicListItem` derives this
+   * from the reserved FEATURED_TAG and serialises it as `isFeatured` (NOT
+   * `featured`); the field name MUST match the JSON key or the featured strip
+   * never populates. Keep this in lock-step with `ArticlesService.toPublicListItem`.
+   */
+  isFeatured?: boolean;
   publishedAt?: string | null;
   [k: string]: unknown;
 }
@@ -327,9 +333,23 @@ class StoreApiClient {
 
     const headers: Record<string, string> = { ...(options.headers || {}) };
 
+    // Customer token is the primary credential for this client. For the
+    // dual-issuer article-author endpoints (guarded by ArticleAuthorGuard, which
+    // accepts EITHER a store CUSTOMER `jwt-customer` token OR a platform APPLICANT
+    // `jwt` token), a logged-in platform applicant has NO customer session — so
+    // `this.token` is null. Fall back to the platform `api` access token (held in
+    // memory by the admin/platform client) so an APPLICANT can author/save-draft.
+    // The customer-refresh 401 recovery below stays keyed on the CUSTOMER token
+    // only: a platform applicant has no customer refresh token, and the platform
+    // `api` client manages its own access-token refresh independently.
     const token = this.token;
-    if (auth && token) {
-      headers['Authorization'] = `Bearer ${token}`;
+    if (auth) {
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      } else {
+        const platformToken = api.getToken();
+        if (platformToken) headers['Authorization'] = `Bearer ${platformToken}`;
+      }
     }
     if (cartToken) {
       const ct = this.getCartToken();
@@ -667,8 +687,33 @@ class StoreApiClient {
     return this.request(`/articles/${encodeURIComponent(slug)}/related`, { auth: false });
   }
 
+  /** Create a new article straight into the moderation queue (status SUBMITTED). */
   async submitArticle(body: Record<string, unknown>): Promise<ArticleDetail> {
     return this.request('/articles', { method: 'POST', body });
+  }
+
+  /**
+   * Create a new article as a DRAFT (work-in-progress; NOT submitted for review).
+   * The author can keep editing it (updateMyArticle) and later submit it via
+   * submitArticleForReview. Distinct from submitArticle, which queues for review.
+   */
+  async saveArticleDraft(body: Record<string, unknown>): Promise<ArticleDetail> {
+    return this.request('/articles/draft', { method: 'POST', body });
+  }
+
+  /**
+   * Submit an existing DRAFT (or REJECTED) article for review
+   * (-> SUBMITTED). Optional inline edits in `body` are applied first
+   * (save-then-submit in one call).
+   */
+  async submitArticleForReview(
+    id: string,
+    body: Record<string, unknown> = {},
+  ): Promise<ArticleDetail> {
+    return this.request(`/articles/${encodeURIComponent(id)}/submit`, {
+      method: 'POST',
+      body,
+    });
   }
 
   async myArticles(params: Record<string, unknown> = {}): Promise<ArticleListResponse> {

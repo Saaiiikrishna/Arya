@@ -67,6 +67,7 @@ export class CreateProductDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(1000)
   seoDescription?: string;
 }
 
@@ -124,6 +125,7 @@ export class UpdateProductDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(1000)
   seoDescription?: string;
 }
 
@@ -154,6 +156,7 @@ export class ProductQueryDto {
   /** Free-text search over name / subtitle / brand. */
   @IsOptional()
   @IsString()
+  @MaxLength(200)
   search?: string;
 
   @IsOptional()
@@ -177,4 +180,37 @@ export class ProductQueryDto {
   @IsOptional()
   @IsString()
   sort?: 'newest' | 'price_asc' | 'price_desc' | 'popular' | 'featured';
+}
+
+/**
+ * Query DTO for the ADMIN product list (`GET /admin/store/products`). Unlike the
+ * public {@link ProductQueryDto}, it accepts a `status` filter spanning
+ * DRAFT/ACTIVE/ARCHIVED and searches title/slug only. Lives in the `dto/` folder
+ * (discoverable via the directory scan) and is validated by the global
+ * ValidationPipe (whitelist + implicit conversion).
+ */
+export class AdminProductQueryDto {
+  /** Narrow to a single lifecycle status; omit to list ALL statuses. */
+  @IsOptional()
+  @IsEnum(ProductStatus)
+  status?: ProductStatus;
+
+  /** Free-text search over product name / slug (case-insensitive). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  search?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
 }

@@ -19,8 +19,9 @@
  *   3. MEDIA — inline images/video via MediaUploader (caps 15 img / 3 video)
  *      against the returned id. We do NOT set a cover here: the backend only
  *      permits an author cover PATCH (`PATCH /articles/:id` with `coverS3Key`)
- *      while the article is in REJECTED status — a PATCH on a freshly SUBMITTED
- *      article is refused — so the cover is chosen by a moderator during review.
+ *      while the article is in DRAFT or REJECTED status (AUTHOR_EDITABLE_STATES)
+ *      — a PATCH on a freshly SUBMITTED article is refused — so for the submit
+ *      flow the cover is chosen by a moderator during review.
  *      (See the in-code note in the MEDIA section below for the full rationale.)
  *   4. DONE — pending-review success screen.
  *
@@ -46,6 +47,7 @@ import {
   Loader2,
   LogIn,
   ImagePlus,
+  Save,
 } from 'lucide-react';
 import Layout from '@/components/Layout';
 import { MediaUploader, type MediaType } from '@/components/store';
@@ -202,10 +204,16 @@ export default function ArticleSubmitPage() {
   const [blocks, setBlocks] = useState<EditorBlock[]>([makeBlock('RICH_TEXT')]);
 
   const [submitting, setSubmitting] = useState(false);
+  // Tracks which action is in flight so the two buttons show independent spinners
+  // and we know whether to land on the "saved draft" or "submitted" screen.
+  const [pendingAction, setPendingAction] = useState<'submit' | 'draft' | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
   // Created article (after phase 1).
   const [created, setCreated] = useState<ArticleDetail | null>(null);
+  // Whether the created article was saved as a DRAFT (vs submitted for review) —
+  // drives the copy on the media step and the final confirmation screen.
+  const [savedAsDraft, setSavedAsDraft] = useState(false);
 
   const tags = useMemo(
     () =>
@@ -267,44 +275,67 @@ export default function ArticleSubmitPage() {
       ),
     );
 
-  // ── Submit (phase 1 → create) ─────────────────────────────────────────────
+  // ── Phase 1 → create (as SUBMITTED or DRAFT) ───────────────────────────────
 
-  const onCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setFormError(null);
-
+  /**
+   * Validate + serialise the compose form into the create payload. Returns null
+   * (after setting a field error) when the form is not yet valid. A DRAFT is held
+   * to the SAME minimums as a submission (title + at least one content block) so a
+   * draft is always a coherent, resumable article rather than an empty shell.
+   */
+  const buildPayload = (): Record<string, unknown> | null => {
     if (title.trim().length < 3) {
       setFormError('Give your article a title (at least 3 characters).');
-      return;
+      return null;
     }
     const serialised = blocks
       .map(serialiseBlock)
       .filter((b): b is Record<string, unknown> => b !== null);
     if (serialised.length === 0) {
-      setFormError('Add at least one content block with text before submitting.');
-      return;
+      setFormError('Add at least one content block with text first.');
+      return null;
     }
+    const allTags = category.trim() ? [category.trim(), ...tags] : tags;
+    return {
+      title: title.trim(),
+      body: { blocks: serialised },
+      excerpt: excerpt.trim() || undefined,
+      tags: Array.from(new Set(allTags.map((t) => t.trim()).filter(Boolean))),
+    };
+  };
+
+  const runCreate = async (action: 'submit' | 'draft') => {
+    setFormError(null);
+    const payload = buildPayload();
+    if (!payload) return;
 
     setSubmitting(true);
+    setPendingAction(action);
     try {
-      const allTags = category.trim() ? [category.trim(), ...tags] : tags;
-      const article = await storeApi.submitArticle({
-        title: title.trim(),
-        body: { blocks: serialised },
-        excerpt: excerpt.trim() || undefined,
-        tags: Array.from(new Set(allTags.map((t) => t.trim()).filter(Boolean))),
-      });
+      const article =
+        action === 'draft'
+          ? await storeApi.saveArticleDraft(payload)
+          : await storeApi.submitArticle(payload);
       setCreated(article);
+      setSavedAsDraft(action === 'draft');
       setPhase('media');
     } catch (err) {
       setFormError(
         err instanceof ApiError
           ? err.message
-          : 'Something went wrong submitting your article. Please try again.',
+          : action === 'draft'
+            ? 'Something went wrong saving your draft. Please try again.'
+            : 'Something went wrong submitting your article. Please try again.',
       );
     } finally {
       setSubmitting(false);
+      setPendingAction(null);
     }
+  };
+
+  const onCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await runCreate('submit');
   };
 
   // ── Media presign / confirm bound to the created article ──────────────────
@@ -324,11 +355,37 @@ export default function ArticleSubmitPage() {
     return storeApi.confirmArticleMedia(created.id, mediaId, { fileSize: file.size });
   };
 
+  // From the media step, submit a previously-saved DRAFT for review
+  // (DRAFT -> SUBMITTED). After this the article is no longer a draft, so the
+  // final screen shows the "submitted for review" confirmation.
+  const submitDraftForReview = async () => {
+    if (!created) return;
+    setFormError(null);
+    setSubmitting(true);
+    setPendingAction('submit');
+    try {
+      await storeApi.submitArticleForReview(created.id);
+      setSavedAsDraft(false);
+      setPhase('done');
+    } catch (err) {
+      setFormError(
+        err instanceof ApiError
+          ? err.message
+          : 'Something went wrong submitting your draft. Please try again.',
+      );
+    } finally {
+      setSubmitting(false);
+      setPendingAction(null);
+    }
+  };
+
   // NOTE: we deliberately do NOT attempt to set the first uploaded image as the
-  // article cover here. The article is already SUBMITTED at this point, and the
-  // backend only permits an author cover PATCH (`PATCH /articles/:id` with a
-  // `coverS3Key`) while the article is in REJECTED status — a PATCH on a SUBMITTED
-  // article is refused. Additionally, `confirmArticleMedia` returns `unknown` (its
+  // article cover here. The backend permits an author cover PATCH (`PATCH
+  // /articles/:id` with a `coverS3Key`) only while the article is in DRAFT or
+  // REJECTED status (AUTHOR_EDITABLE_STATES). In THIS flow we reach the media step
+  // after either submitting for review (status SUBMITTED — a PATCH is refused) or
+  // saving a draft, and we do not branch the cover-set on that. Additionally,
+  // `confirmArticleMedia` returns `unknown` (its
   // shape is not documented to include an `s3Key`), so there is no reliable key to
   // PATCH with. The cover is therefore chosen by a moderator during review; we make
   // that explicit to the author in the media step rather than silently failing.
@@ -393,15 +450,33 @@ export default function ArticleSubmitPage() {
         initial={{ opacity: 0, y: 18 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-        className="mx-auto flex max-w-md flex-col items-center gap-5 rounded-2xl border border-success/30 bg-success/[0.05] px-8 py-16 text-center"
+        className={`mx-auto flex max-w-md flex-col items-center gap-5 rounded-2xl border px-8 py-16 text-center ${
+          savedAsDraft
+            ? 'border-saffron/30 bg-saffron/[0.05]'
+            : 'border-success/30 bg-success/[0.05]'
+        }`}
       >
-        <CheckCircle2 className="h-12 w-12 text-success" aria-hidden />
-        <h1 className="font-serif text-3xl text-forest">Submitted for review</h1>
-        <p className="font-sans text-sm text-ink/70">
-          Thank you. Your article{created?.title ? ` "${created.title}"` : ''} is now
-          in the moderation queue. We will email you when it is published or if any
-          changes are needed.
-        </p>
+        {savedAsDraft ? (
+          <>
+            <Save className="h-12 w-12 text-saffron-deep" aria-hidden />
+            <h1 className="font-serif text-3xl text-forest">Draft saved</h1>
+            <p className="font-sans text-sm text-ink/70">
+              Your draft{created?.title ? ` "${created.title}"` : ''} has been saved.
+              It has NOT been submitted for review yet — you can keep editing it and
+              submit it when you are ready.
+            </p>
+          </>
+        ) : (
+          <>
+            <CheckCircle2 className="h-12 w-12 text-success" aria-hidden />
+            <h1 className="font-serif text-3xl text-forest">Submitted for review</h1>
+            <p className="font-sans text-sm text-ink/70">
+              Thank you. Your article{created?.title ? ` "${created.title}"` : ''} is now
+              in the moderation queue. We will email you when it is published or if any
+              changes are needed.
+            </p>
+          </>
+        )}
         <div className="flex flex-col gap-3 sm:flex-row">
           <button type="button" onClick={() => router.push('/articles')} className="mkt-btn !py-2.5 !px-5">
             <span>Back to the journal</span>
@@ -433,7 +508,8 @@ export default function ArticleSubmitPage() {
             Add a cover &amp; images
           </h1>
           <p className="mt-4 font-sans text-sm text-ink/65">
-            Your article{created.title ? ` "${created.title}"` : ''} has been created.
+            Your {savedAsDraft ? 'draft' : 'article'}
+            {created.title ? ` "${created.title}"` : ''} has been saved.
             Add up to 15 images and 3 videos. A cover image is chosen by our
             editors when your article is reviewed.
           </p>
@@ -453,17 +529,54 @@ export default function ArticleSubmitPage() {
           Your images are attached. The cover will be selected during review.
         </div>
 
+        {formError && (
+          <div className="flex items-center gap-2 rounded-xl border border-terracotta/40 bg-terracotta/[0.05] px-4 py-3 font-sans text-sm text-terracotta">
+            <AlertCircle className="h-4 w-4 shrink-0" aria-hidden />
+            {formError}
+          </div>
+        )}
+
         <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="font-sans text-xs text-ink/50">
             Media is optional — you can finish without adding any.
           </p>
-          <button
-            type="button"
-            onClick={() => setPhase('done')}
-            className="mkt-btn !py-3 !px-7"
-          >
-            <span>Finish &amp; submit</span>
-          </button>
+          {savedAsDraft ? (
+            // DRAFT: offer keep-as-draft (finish) AND submit-for-review.
+            <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
+              <button
+                type="button"
+                onClick={() => setPhase('done')}
+                disabled={submitting}
+                className="mkt-btn-ghost !py-3 !px-6 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Save className="h-4 w-4" />
+                <span>Keep as draft</span>
+              </button>
+              <button
+                type="button"
+                onClick={submitDraftForReview}
+                disabled={submitting}
+                className="mkt-btn !py-3 !px-7 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {submitting && pendingAction === 'submit' ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Submitting…</span>
+                  </>
+                ) : (
+                  <span>Submit for review</span>
+                )}
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setPhase('done')}
+              className="mkt-btn !py-3 !px-7"
+            >
+              <span>Finish</span>
+            </button>
+          )}
         </div>
       </motion.div>
       </ArticleShell>
@@ -756,22 +869,44 @@ export default function ArticleSubmitPage() {
           >
             <span>Cancel</span>
           </button>
-          <button
-            type="submit"
-            disabled={submitting}
-            className="mkt-btn !py-3 !px-7 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {submitting ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Submitting…</span>
-              </>
-            ) : (
-              <>
-                <span>Submit &amp; add media</span>
-              </>
-            )}
-          </button>
+          <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
+            {/* Save draft — keeps the article private (DRAFT); it is NOT sent for
+                review until the author submits it later. */}
+            <button
+              type="button"
+              onClick={() => runCreate('draft')}
+              disabled={submitting}
+              className="mkt-btn-ghost !py-3 !px-6 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {submitting && pendingAction === 'draft' ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Saving…</span>
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4" />
+                  <span>Save draft</span>
+                </>
+              )}
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="mkt-btn !py-3 !px-7 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {submitting && pendingAction === 'submit' ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Submitting…</span>
+                </>
+              ) : (
+                <>
+                  <span>Submit for review</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </form>
     </motion.div>

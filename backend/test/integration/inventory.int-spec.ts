@@ -159,11 +159,11 @@ async function waitForArenaQuiescent(maxMs = 10000): Promise<void> {
     // row/advisory locks that conflict with the next TRUNCATE. Plain `idle`
     // backends (e.g. the singleton harness pool's own spare connections) hold no
     // locks and never block, so they are intentionally NOT counted here.
-    const rows = await prisma.$queryRawUnsafe<{ n: number }[]>(
+    const rows = (await prisma.$queryRawUnsafe(
       "SELECT count(*)::int AS n FROM pg_stat_activity " +
         "WHERE datname = 'arya_test' AND pid <> pg_backend_pid() " +
         "AND state IN ('active', 'idle in transaction', 'idle in transaction (aborted)')",
-    );
+    )) as { n: number }[];
     if (Number(rows[0]?.n ?? 0) === 0 || Date.now() > deadline) return;
     await new Promise((r) => setTimeout(r, 25));
   }

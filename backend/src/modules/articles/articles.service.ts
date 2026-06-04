@@ -10,6 +10,7 @@ import { ConfigService } from '@nestjs/config';
 import {
   S3Client,
   PutObjectCommand,
+  GetObjectCommand,
   HeadObjectCommand,
   DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
@@ -43,6 +44,9 @@ const SLUG_MAX_ATTEMPTS = 10;
 
 /** Presigned PUT URL lifetime (seconds). Orphan PENDING rows are GC'd after this. */
 const MEDIA_PRESIGN_TTL_SECONDS = 3600;
+
+/** Presigned GET (read) URL lifetime (seconds) for public cover thumbnails. */
+const COVER_READ_TTL_SECONDS = 3600;
 
 /** Default + max page size for paginated reads. */
 const DEFAULT_PAGE_SIZE = 20;
@@ -258,12 +262,43 @@ export class ArticlesService implements OnModuleInit {
       this.prisma.article.count({ where }),
     ]);
 
-    const data = rows.map((r) => ArticlesService.toPublicListItem(r));
+    // Resolve a presigned read URL for each cover so ArticleCard can render the
+    // thumbnail without the storefront needing direct bucket access. Batched with
+    // Promise.all; a sign failure (or absent key) tolerates null so one bad cover
+    // never fails the whole list. coverS3Key is kept on the item too (callers that
+    // resolve their own URL can still use it).
+    const data = await Promise.all(
+      rows.map(async (r) => {
+        const item = ArticlesService.toPublicListItem(r);
+        return { ...item, coverUrl: await this.presignCoverRead(r.coverS3Key) };
+      }),
+    );
 
     return {
       data,
       meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
+  }
+
+  /**
+   * Best-effort presigned GET URL for a cover image key. Returns null for a
+   * missing key or on any signing error (a broken cover must never fail the
+   * list). Mirrors the document module's read-presign helper.
+   */
+  private async presignCoverRead(key: string | null): Promise<string | null> {
+    if (!key) return null;
+    try {
+      return await getSignedUrl(
+        this.s3,
+        new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+        { expiresIn: COVER_READ_TTL_SECONDS },
+      );
+    } catch (e) {
+      this.logger.warn(
+        `Failed to presign cover read URL for ${key}: ${(e as Error)?.message}`,
+      );
+      return null;
+    }
   }
 
   /**
@@ -384,16 +419,26 @@ export class ArticlesService implements OnModuleInit {
       LIMIT ${RELATED_LIMIT}
     `);
 
-    return rows.map((r) =>
-      ArticlesService.toPublicListItem({
-        id: r.id,
-        slug: r.slug,
-        title: r.title,
-        excerpt: r.excerpt,
-        coverS3Key: r.cover_s3_key,
-        tags: r.tags,
-        authorName: r.author_name,
-        publishedAt: r.published_at,
+    // Presign each cover read URL exactly as listPublic does, so related-article
+    // covers render without the storefront needing direct (public) bucket access.
+    // The arya-documents bucket is private (the whole media flow is presign-based),
+    // so returning a raw cover_s3_key would 403 when resolveMediaUrl builds a public
+    // virtual-hosted URL from it. Batched with Promise.all; a sign failure tolerates
+    // null so one bad cover never fails the related strip. coverS3Key is still kept
+    // on the item for callers that resolve their own URL.
+    return Promise.all(
+      rows.map(async (r) => {
+        const item = ArticlesService.toPublicListItem({
+          id: r.id,
+          slug: r.slug,
+          title: r.title,
+          excerpt: r.excerpt,
+          coverS3Key: r.cover_s3_key,
+          tags: r.tags,
+          authorName: r.author_name,
+          publishedAt: r.published_at,
+        });
+        return { ...item, coverUrl: await this.presignCoverRead(r.cover_s3_key) };
       }),
     );
   }
@@ -403,17 +448,34 @@ export class ArticlesService implements OnModuleInit {
   // ──────────────────────────────────────────────────────────────────────────
 
   /**
-   * Submit a new article -> SUBMITTED (the moderation-queue/"pending review"
-   * state; the schema enum has no PENDING_REVIEW, SUBMITTED is its equivalent).
-   * authorType/authorId are pinned from the verified token by ArticleAuthorGuard
-   * and passed in by the controller — NEVER read from the request body. The slug
-   * is generated race-safely from the title.
+   * Create a new article in one of two author-initiated states:
+   *   - SUBMITTED  → straight into the moderation queue ("submit for review").
+   *   - DRAFT      → saved as a work-in-progress, NOT yet in the queue
+   *                  ("save draft"); the author can keep editing it and submit
+   *                  it later via the submit path.
+   * Only these two are valid create states; the caller (controller) chooses which
+   * one. authorType/authorId are pinned from the verified token by
+   * ArticleAuthorGuard and passed in by the controller — NEVER read from the
+   * request body. The slug is generated race-safely from the title.
+   *
+   * `initialStatus` is REQUIRED (no default): a forgotten argument from a future
+   * caller (e.g. an import pipeline) must NOT silently create a SUBMITTED article
+   * that bypasses an intended state choice. Defense-in-depth below still clamps any
+   * value other than DRAFT to SUBMITTED.
+   *
+   * @param initialStatus DRAFT (save-as-draft) or SUBMITTED (queue for review).
    */
   async create(
     authorType: ArticleAuthorType,
     authorId: string,
     dto: CreateArticleDto,
+    initialStatus: ArticleStatus,
   ) {
+    // Defense in depth: only DRAFT or SUBMITTED may be requested at create time.
+    const status =
+      initialStatus === ArticleStatus.DRAFT
+        ? ArticleStatus.DRAFT
+        : ArticleStatus.SUBMITTED;
     const authorName = await this.resolveAuthorName(authorType, authorId);
     const tags = this.normalizeTags(dto.tags);
 
@@ -443,7 +505,7 @@ export class ArticlesService implements OnModuleInit {
           authorType,
           authorId,
           authorName,
-          status: ArticleStatus.SUBMITTED,
+          status,
           tags,
         },
         select: AUTHOR_SAFE_SELECT,
@@ -490,12 +552,16 @@ export class ArticlesService implements OnModuleInit {
 
   /**
    * Edit the caller's OWN article, permitted only while DRAFT or REJECTED.
-   * (The schema has no DRAFT state; SUBMITTED is in the moderation queue and is
-   * intentionally NOT editable. So in practice editing is allowed while
-   * REJECTED.) Ownership is enforced (authorType + authorId must match) — a
-   * mismatch yields 404 (do not reveal existence) and a wrong-state edit yields
-   * 409. A successful edit of a REJECTED article re-submits it
-   * (REJECTED -> SUBMITTED) unless `resubmit:false` is passed.
+   * SUBMITTED (in the moderation queue), PUBLISHED, APPROVED, and ARCHIVED are
+   * all locked to the author. Ownership is enforced (authorType + authorId must
+   * match) — a mismatch yields 404 (do not reveal existence) and a wrong-state
+   * edit yields 409.
+   *
+   * This path NEVER changes the workflow status: a DRAFT edit stays DRAFT, a
+   * REJECTED edit stays REJECTED. Moving DRAFT/REJECTED -> SUBMITTED is the
+   * distinct responsibility of {@link submitMine} (the SUBMIT action), so an
+   * author can iterate on a draft (or fix a rejected piece) without it silently
+   * re-entering the moderation queue on every save.
    */
   async updateMine(
     id: string,
@@ -522,14 +588,13 @@ export class ArticlesService implements OnModuleInit {
       throw new NotFoundException('Article not found');
     }
 
-    // Editable states only. SUBMITTED (in-queue) and PUBLISHED are locked to the
-    // author; an in-queue article must be moderated, a published one is admin's.
-    const editable: ArticleStatus[] = [ArticleStatus.REJECTED];
-    if (!editable.includes(existing.status)) {
+    // Editable states only: DRAFT (work in progress) and REJECTED (fix-up before
+    // re-submitting). SUBMITTED is in the queue, PUBLISHED/APPROVED/ARCHIVED are
+    // the admin's — none are author-editable.
+    if (!ArticlesService.AUTHOR_EDITABLE_STATES.includes(existing.status)) {
       throw new ConflictException({
         code: 'ARTICLE_NOT_EDITABLE',
-        message:
-          'Only a rejected article can be edited and re-submitted by its author',
+        message: 'Only a draft or rejected article can be edited by its author',
       });
     }
 
@@ -552,16 +617,61 @@ export class ArticlesService implements OnModuleInit {
       );
     }
 
-    // Re-submit a fixed-up rejected article back into the queue (default true).
-    const resubmit = dto.resubmit !== false;
-    if (resubmit) {
-      data.status = ArticleStatus.SUBMITTED;
-      data.rejectionReason = null;
+    return this.prisma.article.update({
+      where: { id },
+      data,
+      select: AUTHOR_SAFE_SELECT,
+    });
+  }
+
+  /**
+   * SUBMIT the caller's OWN article for review: DRAFT or REJECTED -> SUBMITTED
+   * (clearing any stale rejection reason). Ownership is enforced (404 on
+   * mismatch). Already-SUBMITTED is idempotent; any other state (PUBLISHED /
+   * APPROVED / ARCHIVED) is a 409. Optional inline edits are applied first via
+   * {@link updateMine} so a "save then submit" round-trips in one call.
+   */
+  async submitMine(
+    id: string,
+    authorType: ArticleAuthorType,
+    authorId: string,
+    dto?: UpdateArticleDto,
+  ) {
+    // Apply any inline edits while still in an author-editable state. updateMine
+    // re-checks ownership + editability and never mutates status.
+    if (dto && Object.keys(dto).length > 0) {
+      await this.updateMine(id, authorType, authorId, dto);
+    }
+
+    const existing = await this.prisma.article.findUnique({
+      where: { id },
+      select: { id: true, authorType: true, authorId: true, status: true },
+    });
+    if (
+      !existing ||
+      existing.authorType !== authorType ||
+      existing.authorId !== authorId
+    ) {
+      throw new NotFoundException('Article not found');
+    }
+
+    if (existing.status === ArticleStatus.SUBMITTED) {
+      // Idempotent: already in the queue.
+      return this.prisma.article.findUniqueOrThrow({
+        where: { id },
+        select: AUTHOR_SAFE_SELECT,
+      });
+    }
+    if (!ArticlesService.AUTHOR_SUBMITTABLE_STATES.includes(existing.status)) {
+      throw new ConflictException({
+        code: 'ARTICLE_NOT_SUBMITTABLE',
+        message: `Only a draft or rejected article can be submitted for review; current status is ${existing.status}`,
+      });
     }
 
     return this.prisma.article.update({
       where: { id },
-      data,
+      data: { status: ArticleStatus.SUBMITTED, rejectionReason: null },
       select: AUTHOR_SAFE_SELECT,
     });
   }
@@ -874,6 +984,14 @@ export class ArticlesService implements OnModuleInit {
    * in SUBMITTED transitions, so two concurrent approves can't both publish /
    * double-fire. An already-PUBLISHED article returns idempotently. Notifies the
    * author best-effort.
+   *
+   * NOTE on `ArticleStatus.APPROVED`: this enum member is currently VESTIGIAL /
+   * UNREACHABLE. Approval transitions SUBMITTED directly to PUBLISHED — no service
+   * method ever writes status = APPROVED. It is retained in the enum (removing an
+   * enum value requires a full type recreation in Postgres, which `ADD VALUE`
+   * cannot undo) and is handled defensively in the admin UI. Do NOT assume any row
+   * can carry the APPROVED status; if a two-step approve→publish workflow is ever
+   * introduced, this is the method that would set it.
    */
   async approve(id: string, decidedByAdminId: string) {
     const existing = await this.prisma.article.findUnique({
@@ -991,10 +1109,9 @@ export class ArticlesService implements OnModuleInit {
    *
    * - feature: toggles the reserved FEATURED_TAG (the schema has no isFeatured
    *   column; featuring is modeled as a sentinel tag the public sort honors).
-   * - unpublish: there is no ARCHIVED state in the schema, so unpublish pulls a
-   *   PUBLISHED article off the public listing by returning it to the moderation
-   *   queue (SUBMITTED), clearing publishedAt AND the stale reviewedById (so the
-   *   next admin to pick it from the queue is not shown a prior reviewer).
+   * - unpublish: pulls a PUBLISHED article off the public listing into the
+   *   distinct terminal ARCHIVED state (NOT back into the SUBMITTED moderation
+   *   queue), clearing publishedAt. Use RESTORE to bring it back to PUBLISHED.
    * - other fields: a free admin content edit.
    *
    * `decidedByAdminId` is pinned from the AdminGuard JWT (never the body). The
@@ -1035,11 +1152,12 @@ export class ArticlesService implements OnModuleInit {
     }
 
     if (dto.unpublish === true) {
-      data.status = ArticleStatus.SUBMITTED;
+      // Unpublish → ARCHIVED (a distinct terminal state, NOT the SUBMITTED
+      // moderation queue). publishedAt is cleared; the reviewer attribution is
+      // intentionally kept (it records who last published it). RESTORE returns it
+      // to PUBLISHED.
+      data.status = ArticleStatus.ARCHIVED;
       data.publishedAt = null;
-      // Clear the prior reviewer so the requeued article is a blank slate for the
-      // next admin who moderates it (no stale decision attribution).
-      data.reviewedById = null;
     }
 
     const changedFields = Object.keys(data);
@@ -1055,9 +1173,11 @@ export class ArticlesService implements OnModuleInit {
   }
 
   /**
-   * Restore: re-publish an article (e.g. one that was unpublished back to the
-   * queue, or a rejected one an admin wants to force live). CAS-free admin
-   * action: sets PUBLISHED + publishedAt if not already published. Idempotent.
+   * Restore: re-publish an article. The primary path is ARCHIVED -> PUBLISHED
+   * (the inverse of unpublish), but it also tolerantly force-publishes a
+   * REJECTED/APPROVED article an admin wants to push live. CAS-free admin action:
+   * sets PUBLISHED + publishedAt if not already published. Idempotent on an
+   * already-PUBLISHED article.
    */
   async restore(id: string, decidedByAdminId: string) {
     const existing = await this.prisma.article.findUnique({
@@ -1087,8 +1207,14 @@ export class ArticlesService implements OnModuleInit {
    * possible. This performs a HARD delete (ArticleMedia rows cascade via the FK)
    * and best-effort purges each media object from S3. This is flagged as an open
    * concern: to honor a real soft-delete, add `Article.deletedAt` + a migration.
+   *
+   * `decidedByAdminId` (pinned from the verified JWT by the controller) is logged
+   * at INFO for attribution, consistent with adminUpdate/approve/reject — a
+   * hard-delete must not be an unattributed action. The log is ephemeral (stdout,
+   * not a DB row); a durable AuditEvent row is the follow-up if forensic
+   * requirements increase (same open concern noted on adminUpdate).
    */
-  async remove(id: string) {
+  async remove(id: string, decidedByAdminId: string) {
     const existing = await this.prisma.article.findUnique({
       where: { id },
       select: {
@@ -1103,6 +1229,8 @@ export class ArticlesService implements OnModuleInit {
     await Promise.all(
       existing.media.map((m) => this.bestEffortDeleteObject(m.s3Key)),
     );
+
+    this.logger.log(`admin ${decidedByAdminId} hard-deleted article ${id}`);
 
     return { id, deleted: true };
   }
@@ -1299,17 +1427,36 @@ export class ArticlesService implements OnModuleInit {
   }
 
   /**
-   * Author-editable states for MEDIA management: SUBMITTED and REJECTED.
+   * Author-editable workflow states for CONTENT edits (updateMine): DRAFT (work
+   * in progress) and REJECTED (fix-up before re-submitting). SUBMITTED is in the
+   * queue; PUBLISHED / APPROVED / ARCHIVED are the admin's.
+   */
+  private static readonly AUTHOR_EDITABLE_STATES: readonly ArticleStatus[] = [
+    ArticleStatus.DRAFT,
+    ArticleStatus.REJECTED,
+  ];
+
+  /**
+   * States from which the author may SUBMIT for review (submitMine): DRAFT and
+   * REJECTED both move -> SUBMITTED.
+   */
+  private static readonly AUTHOR_SUBMITTABLE_STATES: readonly ArticleStatus[] =
+    [ArticleStatus.DRAFT, ArticleStatus.REJECTED];
+
+  /**
+   * Author-editable states for MEDIA management: DRAFT, SUBMITTED, and REJECTED.
    *
    * The architecture (Section 4.14 / Section 9) models presign/confirm as part of
    * the authoring flow — the row-reservation cap is exercised on the submit path,
    * not only on the re-edit-after-rejection path. A freshly created article is in
-   * SUBMITTED, so SUBMITTED MUST be media-editable or the author can never attach
-   * media to a just-submitted piece (a PENDING row would be reserved at presign
-   * but the confirm would 409, leaving an orphan slot). REJECTED stays editable
-   * so the author can fix up media before re-submitting. PUBLISHED is the admin's.
+   * DRAFT or SUBMITTED, so both MUST be media-editable or the author can never
+   * attach media before/at submit (a PENDING row would be reserved at presign but
+   * the confirm would 409, leaving an orphan slot). REJECTED stays editable so the
+   * author can fix up media before re-submitting. PUBLISHED/ARCHIVED are the
+   * admin's.
    */
   private static readonly MEDIA_EDITABLE_STATES: readonly ArticleStatus[] = [
+    ArticleStatus.DRAFT,
     ArticleStatus.SUBMITTED,
     ArticleStatus.REJECTED,
   ];
@@ -1345,7 +1492,7 @@ export class ArticlesService implements OnModuleInit {
       throw new ConflictException({
         code: 'ARTICLE_NOT_EDITABLE',
         message:
-          'Media can only be managed on a submitted or rejected article you own',
+          'Media can only be managed on a draft, submitted, or rejected article you own',
       });
     }
   }
@@ -1474,6 +1621,13 @@ export class ArticlesService implements OnModuleInit {
    * failing the whole detail fetch.
    */
   private async computeAdminMetrics(slug: string) {
+    // `path` derives from `slug`, which callers resolve from the DB AFTER a
+    // PUBLISHED filter — not raw user input. It is ALSO passed below ONLY as a
+    // bound parameter (`${path}`) into the JSONB-path raw queries, never
+    // interpolated as a SQL literal, so the query is injection-safe by
+    // construction. REGRESSION GUARD: if `path` is ever built into the SQL string
+    // directly (e.g. via Prisma.raw) instead of as a `${}` bind, that becomes an
+    // injection vector — keep it bound.
     const path = `/articles/${slug}`;
     try {
       // Aggregate views + unique IPs from the daily rollup for this path.

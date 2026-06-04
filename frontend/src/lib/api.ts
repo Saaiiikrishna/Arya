@@ -1378,6 +1378,29 @@ class ApiClient {
 
   // ─── Store Admin: Products ────────────────────────────────────────────────
 
+  /**
+   * Admin product LIST — returns products of ALL statuses (DRAFT/ACTIVE/ARCHIVED),
+   * unlike the public `storeApi.listProducts` (ACTIVE-only). Each row carries a
+   * presigned `thumbnail` ({ url, altText } | null). Money is integer paise.
+   */
+  async adminListProducts(
+    params: {
+      status?: string;
+      search?: string;
+      page?: number;
+      limit?: number;
+    } = {},
+  ) {
+    const qs = new URLSearchParams(
+      Object.entries(params)
+        .filter(([, v]) => v !== undefined && v !== null && v !== '')
+        .map(([k, v]) => [k, String(v)]),
+    ).toString();
+    return this.request<{ data: any[]; meta: any }>(
+      `/admin/store/products${qs ? `?${qs}` : ''}`,
+    );
+  }
+
   async adminGetStoreProduct(id: string) {
     return this.request<any>(`/admin/store/products/${id}`);
   }

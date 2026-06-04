@@ -16,6 +16,7 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../../prisma';
+import { DocumentService } from '../document/document.service';
 import {
   CreateProductDto,
   UpdateProductDto,
@@ -54,6 +55,35 @@ const CATEGORY_SCAN_LIMIT = 10_000;
 /** Presigned PUT URL lifetime (seconds). Orphan PENDING rows are GC'd after this. */
 const MEDIA_PRESIGN_TTL_SECONDS = 3600;
 
+/**
+ * Presigned READ (GET) URL lifetime for list thumbnails (seconds). Named + passed
+ * explicitly so the TTL is an intentional catalog-side constant rather than
+ * inheriting DocumentService.getSignedDownloadUrlForKey's default — matches the
+ * page-render lifecycle and is immune to upstream default changes.
+ */
+const THUMBNAIL_READ_TTL_SECONDS = 3600;
+
+/** Default page size for product listings. */
+const DEFAULT_PAGE_LIMIT = 20;
+
+/** Hard cap on a single listing page (clamps a caller-supplied limit). */
+const MAX_PAGE_LIMIT = 100;
+
+/**
+ * Clamp a caller-supplied page/limit to safe bounds: page >= 1 (default 1), limit
+ * in [1, {@link MAX_PAGE_LIMIT}] (default {@link DEFAULT_PAGE_LIMIT}). Shared by
+ * the public and admin product listings so the cap lives in exactly one place.
+ */
+function normalisePagination(
+  page?: number,
+  limit?: number,
+): { page: number; limit: number; skip: number } {
+  const safePage = page && page > 0 ? page : 1;
+  const safeLimit =
+    limit && limit > 0 ? Math.min(limit, MAX_PAGE_LIMIT) : DEFAULT_PAGE_LIMIT;
+  return { page: safePage, limit: safeLimit, skip: (safePage - 1) * safeLimit };
+}
+
 @Injectable()
 export class CatalogService {
   private readonly logger = new Logger(CatalogService.name);
@@ -63,6 +93,7 @@ export class CatalogService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly documents: DocumentService,
   ) {
     this.s3 = new S3Client({
       region: this.config.get<string>('AWS_REGION', 'ap-south-1'),
@@ -83,7 +114,7 @@ export class CatalogService {
     const slug = name
       .toLowerCase()
       .normalize('NFKD')
-      .replace(/[\u0300-\u036f]/gu, '') // strip combining diacritical marks (Unicode block U+0300-U+036F)
+      .replace(/[̀-ͯ]/gu, '') // strip combining diacritical marks (Unicode block U+0300-U+036F)
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '')
       .slice(0, 80);
@@ -262,10 +293,7 @@ export class CatalogService {
    * via a single grouped include and prices summarised in-memory.
    */
   async listPublicProducts(query: ProductQueryDto) {
-    const page = query.page && query.page > 0 ? query.page : 1;
-    const limit =
-      query.limit && query.limit > 0 ? Math.min(query.limit, 100) : 20;
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = normalisePagination(query.page, query.limit);
 
     const where: Prisma.ProductWhereInput = {
       status: ProductStatus.ACTIVE,
@@ -318,8 +346,11 @@ export class CatalogService {
         skip,
         take: limit,
         include: {
+          // Primary image only: first CONFIRMED IMAGE by sortOrder. A presigned
+          // READ url is resolved per row below (batched). VIDEO media never act
+          // as the list thumbnail.
           media: {
-            where: { status: 'CONFIRMED' },
+            where: { status: 'CONFIRMED', type: ProductMediaType.IMAGE },
             orderBy: { sortOrder: 'asc' },
             take: 1,
           },
@@ -332,7 +363,10 @@ export class CatalogService {
       this.prisma.product.count({ where }),
     ]);
 
-    const data = rows.map((p) => {
+    // Resolve presigned thumbnail URLs for the whole page in parallel.
+    const thumbnails = await this.resolveThumbnails(rows);
+
+    const data = rows.map((p, i) => {
       const prices = p.skus.map((s) =>
         this.effectivePrice(s.basePrice, s.salePrice),
       );
@@ -347,7 +381,7 @@ export class CatalogService {
         category: p.category,
         tags: p.tags,
         isFeatured: p.isFeatured,
-        thumbnail: p.media[0] ?? null,
+        thumbnail: thumbnails[i],
         priceFrom: minPrice,
         priceTo: maxPrice,
         currency: p.skus[0]?.currency ?? 'INR',
@@ -360,6 +394,126 @@ export class CatalogService {
       data,
       meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
+  }
+
+  /**
+   * Admin paginated list of products across ALL statuses (DRAFT/ACTIVE/ARCHIVED)
+   * — unlike {@link listPublicProducts}, which is ACTIVE + non-DIGITAL only. The
+   * admin product manager needs to see drafts and archived rows, so this applies
+   * no status/type gate by default; an optional `status` narrows it. Supports
+   * title/slug search + pagination. Each row carries a presigned thumbnail url
+   * (first CONFIRMED IMAGE) resolved in a single batched pass. (Section 8.x)
+   */
+  async adminListProducts(params: {
+    status?: ProductStatus;
+    search?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const { page, limit, skip } = normalisePagination(
+      params.page,
+      params.limit,
+    );
+
+    const where: Prisma.ProductWhereInput = {};
+    if (params.status) {
+      where.status = params.status;
+    }
+    if (params.search) {
+      const term = params.search.trim();
+      if (term) {
+        where.OR = [
+          { name: { contains: term, mode: 'insensitive' } },
+          { slug: { contains: term, mode: 'insensitive' } },
+        ];
+      }
+    }
+
+    const [rows, total] = await Promise.all([
+      this.prisma.product.findMany({
+        where,
+        orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+        skip,
+        take: limit,
+        include: {
+          media: {
+            where: { status: 'CONFIRMED', type: ProductMediaType.IMAGE },
+            orderBy: { sortOrder: 'asc' },
+            take: 1,
+          },
+          skus: {
+            where: { isActive: true },
+            select: { basePrice: true, salePrice: true, currency: true },
+          },
+        },
+      }),
+      this.prisma.product.count({ where }),
+    ]);
+
+    const thumbnails = await this.resolveThumbnails(rows);
+
+    const data = rows.map((p, i) => {
+      const prices = p.skus.map((s) =>
+        this.effectivePrice(s.basePrice, s.salePrice),
+      );
+      const minPrice = prices.length ? Math.min(...prices) : null;
+      const maxPrice = prices.length ? Math.max(...prices) : null;
+      return {
+        id: p.id,
+        slug: p.slug,
+        name: p.name,
+        subtitle: p.subtitle,
+        brand: p.brand,
+        category: p.category,
+        tags: p.tags,
+        status: p.status,
+        type: p.type,
+        isFeatured: p.isFeatured,
+        thumbnail: thumbnails[i],
+        priceFrom: minPrice,
+        priceTo: maxPrice,
+        currency: p.skus[0]?.currency ?? 'INR',
+        viewCount: p.viewCount,
+        publishedAt: p.publishedAt,
+        updatedAt: p.updatedAt,
+      };
+    });
+
+    return {
+      data,
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
+  /**
+   * Resolve a presigned READ url for each row's primary image (the single
+   * pre-selected CONFIRMED IMAGE in `media[0]`). Batched with Promise.all; a row
+   * with no media — or a presign failure — yields `null` rather than aborting the
+   * whole listing. Returns one entry per input row, index-aligned.
+   */
+  private async resolveThumbnails(
+    rows: { media: { s3Key: string; altText: string | null }[] }[],
+  ): Promise<({ url: string; altText: string | null } | null)[]> {
+    return Promise.all(
+      rows.map(async (p) => {
+        const primary = p.media[0];
+        if (!primary?.s3Key) return null;
+        try {
+          const url = await this.documents.getSignedDownloadUrlForKey(
+            primary.s3Key,
+            THUMBNAIL_READ_TTL_SECONDS,
+          );
+          return { url, altText: primary.altText };
+        } catch (e) {
+          this.logger.warn(
+            `Failed to presign thumbnail for key ${primary.s3Key}: ${
+              (e as Error)?.message
+            }`,
+          );
+          return null;
+        }
+      }),
+    );
   }
 
   private buildProductOrderBy(
@@ -1281,8 +1435,9 @@ export class CatalogService {
    * Defense-in-depth sanitization of a tab-section content payload before it is
    * persisted (and later returned verbatim to the public storefront). Structural
    * shape is validated at the DTO layer; here we strip dangerous constructs:
-   *   - RICH_TEXT: remove <script>/<style> blocks, on*="" event handlers, and
-   *     javascript:/data:/vbscript: URIs from the stored html.
+   *   - RICH_TEXT: remove <script>/<style> blocks, dangerous URI-bearing /
+   *     navigation elements, on*="" event handlers, and javascript:/data:/
+   *     vbscript: URIs from the stored html.
    *   - MEDIA: re-assert every item.url is an https URL (drop the rest).
    * No external sanitizer dependency is assumed; this is a conservative strip.
    */
@@ -1305,20 +1460,85 @@ export class CatalogService {
     return content;
   }
 
-  /** Conservative HTML strip: removes script/style/event-handlers + unsafe URIs. */
+  /**
+   * Conservative, dependency-free HTML strip applied as DEFENSE-IN-DEPTH before a
+   * RICH_TEXT payload is persisted (the only write path is AdminGuard-gated). It
+   * is intentionally a denylist over a raw string — NOT a parsed-DOM allowlist —
+   * so it cannot promise protection against every mutation-XSS vector; the real
+   * boundary is that only an admin can write. It removes:
+   *   - <script>/<style> blocks (paired and self-closing)
+   *   - dangerous URI-bearing / navigation elements
+   *     (iframe, object, embed, applet, form, base, link, meta) — paired tags
+   *     are removed with their content, voids stripped — so an unsanitized
+   *     `<object data=…>`, `<iframe src=…>`, `<base href=…>` etc. can't slip past
+   *   - inline on* event handlers (quoted or unquoted)
+   *   - javascript:/data:/vbscript: schemes in href/src — QUOTED or UNQUOTED,
+   *     and after collapsing HTML entities / whitespace inside the scheme token
+   *     (e.g. `&#106;avascript:`) so encoded bypasses are neutralised too.
+   */
   private sanitizeHtml(html: string): string {
-    return (
-      html
-        .replace(/<\s*(script|style)\b[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, '')
-        .replace(/<\s*(script|style)\b[^>]*\/?>/gi, '')
-        // Strip inline event handlers: on*="..." / on*='...' / on*=value.
-        .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
-        // Neutralize dangerous URI schemes in href/src attributes.
+    let out = html
+      // Paired script/style with their content.
+      .replace(/<\s*(script|style)\b[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, '')
+      // Self-closing / unpaired script/style.
+      .replace(/<\s*(script|style)\b[^>]*\/?>/gi, '');
+
+    // Dangerous URI-bearing / navigation elements. Remove paired forms with
+    // their content first, then any remaining (self-closing / unclosed) opens.
+    const dangerousTags = [
+      'iframe',
+      'object',
+      'embed',
+      'applet',
+      'form',
+      'base',
+      'link',
+      'meta',
+    ];
+    for (const tag of dangerousTags) {
+      out = out
         .replace(
-          /\b(href|src)\s*=\s*("|')\s*(javascript|data|vbscript):[^"']*\2/gi,
-          '$1=$2#$2',
+          new RegExp(`<\\s*${tag}\\b[^>]*>[\\s\\S]*?<\\s*/\\s*${tag}\\s*>`, 'gi'),
+          '',
         )
-    );
+        .replace(new RegExp(`<\\s*/?\\s*${tag}\\b[^>]*>`, 'gi'), '');
+    }
+
+    out = out
+      // Inline event handlers: on*="..." / on*='...' / on*=value.
+      .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+      // Dangerous URI schemes in href/src (quoted or unquoted) — neutralise to '#'.
+      .replace(
+        /\b(href|src)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi,
+        (match: string, attr: string, rawValue: string) =>
+          this.isDangerousUriValue(rawValue) ? `${attr}="#"` : match,
+      );
+
+    return out;
+  }
+
+  /**
+   * True if an href/src attribute value (quoted or not) resolves to a dangerous
+   * scheme (javascript:/data:/vbscript:) after stripping surrounding quotes and
+   * collapsing HTML entities / whitespace that browsers tolerate inside the
+   * scheme token (e.g. `java&#x0a;script:`).
+   */
+  private isDangerousUriValue(rawValue: string): boolean {
+    let v = rawValue.trim();
+    if (
+      (v.startsWith('"') && v.endsWith('"')) ||
+      (v.startsWith("'") && v.endsWith("'"))
+    ) {
+      v = v.slice(1, -1);
+    }
+    // Drop HTML entities, then any whitespace / ASCII control chars browsers
+    // ignore inside the leading scheme token, then lowercase.
+    const collapsed = v
+      .replace(/&#x?[0-9a-f]+;?/gi, '')
+      .replace(/&[a-z]+;/gi, '')
+      .replace(/[\s\x00-\x1f\x7f]+/g, '')
+      .toLowerCase();
+    return /^(javascript|data|vbscript):/.test(collapsed);
   }
 
   private isHttpsUrl(v: unknown): boolean {

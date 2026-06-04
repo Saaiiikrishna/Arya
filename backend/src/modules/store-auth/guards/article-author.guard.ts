@@ -12,9 +12,14 @@ import { AuthGuard } from '@nestjs/passport';
  *   - a platform APPLICANT JWT (Passport 'jwt' strategy → role 'APPLICANT'), or
  *   - a store CUSTOMER JWT  (Passport 'jwt-customer' strategy → role 'CUSTOMER').
  *
- * Passport tries the strategies in order and the first that authenticates wins.
- * The guard then PINS the authorship identity from the verified token onto the
- * request:
+ * Passport runs BOTH strategies for the request; with a strategy array it does
+ * not stop at the first success — the LAST strategy that does not error supplies
+ * the principal (Passport multi-strategy "last-wins" semantics). In practice only
+ * one of the two tokens is ever present on a given request, so exactly one
+ * strategy resolves a user and the other resolves null; `handleRequest` (below)
+ * returns the first truthy `user` it is handed, so whichever token authenticated
+ * is the one that wins. The guard then PINS the authorship identity from the
+ * verified token onto the request:
  *   - CUSTOMER  → req.authorType = 'CUSTOMER',  req.authorId = Customer.id
  *   - APPLICANT → req.authorType = 'APPLICANT', req.authorId = Applicant.id
  *
@@ -61,10 +66,12 @@ export class ArticleAuthorGuard extends AuthGuard(['jwt', 'jwt-customer']) {
   }
 
   /**
-   * With a strategy array, Passport calls handleRequest once per strategy and
-   * only the LAST result is normally surfaced — a failing later strategy would
-   * otherwise mask an earlier success. Override so the first authenticated
-   * principal wins and a missing user yields a clean 401.
+   * With a strategy array, Passport's default behaviour surfaces the LAST
+   * strategy's result, so a later strategy that resolves null could mask an
+   * earlier success. Override so ANY truthy authenticated principal is accepted
+   * (the token that authenticated wins) and a missing user yields a clean 401.
+   * Because at most one of the two tokens is present per request, this reliably
+   * returns the single resolved customer/applicant user.
    */
   handleRequest(err: any, user: any, _info: any, _context: any, _status?: any) {
     if (user) return user;

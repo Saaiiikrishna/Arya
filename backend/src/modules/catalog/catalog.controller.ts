@@ -11,7 +11,11 @@ import {
   Req,
   ParseUUIDPipe,
   UseGuards,
+  Injectable,
+  SetMetadata,
+  ExecutionContext,
 } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { AdminGuard } from '../auth/guards';
@@ -21,6 +25,7 @@ import {
   CreateProductDto,
   UpdateProductDto,
   ProductQueryDto,
+  AdminProductQueryDto,
   CreateSkuDto,
   UpdateSkuDto,
   CreatePriceTierDto,
@@ -34,6 +39,42 @@ import {
   MediaListQueryDto,
 } from './dto';
 
+/**
+ * Metadata key + decorator that opts a single route OUT of the class-level
+ * {@link CatalogAdminGuard}. Routes are admin-gated by DEFAULT (secure default);
+ * the unauthenticated public reads must explicitly mark themselves `@Public()`,
+ * so a NEW method added without thought inherits the guard rather than silently
+ * becoming public. Scoped to this controller's file lane.
+ */
+const CATALOG_PUBLIC_KEY = 'catalog:isPublic';
+const Public = (): MethodDecorator & ClassDecorator =>
+  SetMetadata(CATALOG_PUBLIC_KEY, true);
+
+/**
+ * Class-level guard for {@link CatalogController}: applies {@link AdminGuard} to
+ * every route UNLESS the handler is annotated `@Public()`. This makes the
+ * admin-gate the default and the public reads the explicit exception — closing
+ * the fragility the review flagged (a new method added between the public block
+ * and an admin block could otherwise silently ship guard-free). The convention
+ * (CLAUDE.md: "AdminGuard at controller level") is now honored.
+ */
+@Injectable()
+export class CatalogAdminGuard extends AdminGuard {
+  constructor(private readonly reflector: Reflector) {
+    super();
+  }
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const isPublic = this.reflector.getAllAndOverride<boolean>(
+      CATALOG_PUBLIC_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+    if (isPublic) return true;
+    return super.canActivate(context);
+  }
+}
+
+@UseGuards(CatalogAdminGuard)
 @Controller('api')
 export class CatalogController {
   constructor(
@@ -41,16 +82,18 @@ export class CatalogController {
     private readonly visitor: VisitorService,
   ) {}
 
-  // ─── PUBLIC READ (no guard) ───────────────────────────────
+  // ─── PUBLIC READ (@Public — opted OUT of the class-level admin guard) ──────
   // Rate-limited to 30 req/min/IP so a crawler/scraper can't enumerate the full
   // catalog (and, on availability, real-time stock) at the global 100/min tier.
 
+  @Public()
   @Throttle({ medium: { limit: 30, ttl: 60000 } })
   @Get('store/products')
   listProducts(@Query() query: ProductQueryDto) {
     return this.catalog.listPublicProducts(query);
   }
 
+  @Public()
   @Throttle({ medium: { limit: 30, ttl: 60000 } })
   @Get('store/categories')
   getCategoryTree() {
@@ -59,12 +102,14 @@ export class CatalogController {
 
   // Availability exposes real-time stock — stricter per-IP limit (competitor
   // monitoring deterrence).
+  @Public()
   @Throttle({ short: { limit: 20, ttl: 60000 } })
   @Get('store/availability/:skuId')
   getAvailability(@Param('skuId', new ParseUUIDPipe()) skuId: string) {
     return this.catalog.getAvailability(skuId);
   }
 
+  @Public()
   @Throttle({ medium: { limit: 30, ttl: 60000 } })
   @Get('store/products/:slug')
   async getProduct(@Param('slug') slug: string, @Req() req: Request) {
@@ -80,19 +125,26 @@ export class CatalogController {
 
   // ─── ADMIN: PRODUCTS ──────────────────────────────────────
 
-  @UseGuards(AdminGuard)
+  // Admin product LIST — ALL statuses (DRAFT/ACTIVE/ARCHIVED), unlike the public
+  // GET /store/products (ACTIVE-only). Standard (medium) admin throttle tier.
+  // AdminGuard is applied at the class level (CatalogAdminGuard); these routes
+  // need no per-method guard — only the public reads above opt out via @Public().
+  @Throttle({ medium: { limit: 100, ttl: 60000 } })
+  @Get('admin/store/products')
+  adminListProducts(@Query() query: AdminProductQueryDto) {
+    return this.catalog.adminListProducts(query);
+  }
+
   @Get('admin/store/products/:id')
   adminGetProduct(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.catalog.adminGetProduct(id);
   }
 
-  @UseGuards(AdminGuard)
   @Post('admin/store/products')
   createProduct(@Body() dto: CreateProductDto) {
     return this.catalog.createProduct(dto);
   }
 
-  @UseGuards(AdminGuard)
   @Patch('admin/store/products/:id')
   updateProduct(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -101,7 +153,6 @@ export class CatalogController {
     return this.catalog.updateProduct(id, dto);
   }
 
-  @UseGuards(AdminGuard)
   @Delete('admin/store/products/:id')
   archiveProduct(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.catalog.archiveProduct(id);
@@ -109,7 +160,6 @@ export class CatalogController {
 
   // ─── ADMIN: SKUS + PRICE TIERS ────────────────────────────
 
-  @UseGuards(AdminGuard)
   @Post('admin/store/products/:id/skus')
   createSku(
     @Param('id', new ParseUUIDPipe()) productId: string,
@@ -118,7 +168,6 @@ export class CatalogController {
     return this.catalog.createSku(productId, dto);
   }
 
-  @UseGuards(AdminGuard)
   @Patch('admin/store/skus/:id')
   updateSku(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -127,7 +176,6 @@ export class CatalogController {
     return this.catalog.updateSku(id, dto);
   }
 
-  @UseGuards(AdminGuard)
   @Post('admin/store/skus/:id/price-tiers')
   addPriceTier(
     @Param('id', new ParseUUIDPipe()) skuId: string,
@@ -138,7 +186,6 @@ export class CatalogController {
 
   // ─── ADMIN: PRODUCT MEDIA ─────────────────────────────────
 
-  @UseGuards(AdminGuard)
   @Post('admin/store/products/:id/media/presign')
   presignMedia(
     @Param('id', new ParseUUIDPipe()) productId: string,
@@ -147,7 +194,6 @@ export class CatalogController {
     return this.catalog.presignMedia(productId, dto);
   }
 
-  @UseGuards(AdminGuard)
   @Post('admin/store/products/:id/media/confirm')
   confirmMedia(
     @Param('id', new ParseUUIDPipe()) productId: string,
@@ -156,7 +202,6 @@ export class CatalogController {
     return this.catalog.confirmMedia(productId, dto);
   }
 
-  @UseGuards(AdminGuard)
   @Get('admin/store/products/:id/media')
   listMedia(
     @Param('id', new ParseUUIDPipe()) productId: string,
@@ -165,7 +210,6 @@ export class CatalogController {
     return this.catalog.listMedia(productId, query.confirmedOnly);
   }
 
-  @UseGuards(AdminGuard)
   @Delete('admin/store/products/:id/media/:mediaId')
   deleteMedia(
     @Param('id', new ParseUUIDPipe()) productId: string,
@@ -176,7 +220,6 @@ export class CatalogController {
 
   // ─── ADMIN: TABS ──────────────────────────────────────────
 
-  @UseGuards(AdminGuard)
   @Put('admin/store/products/:id/tabs')
   upsertTabs(
     @Param('id', new ParseUUIDPipe()) productId: string,
@@ -191,19 +234,16 @@ export class CatalogController {
 
   // ─── ADMIN: CATEGORIES ────────────────────────────────────
 
-  @UseGuards(AdminGuard)
   @Get('admin/store/categories')
   adminCategoryTree() {
     return this.catalog.getCategoryTree();
   }
 
-  @UseGuards(AdminGuard)
   @Post('admin/store/categories')
   createCategory(@Body() dto: CreateCategoryDto) {
     return this.catalog.createCategory(dto);
   }
 
-  @UseGuards(AdminGuard)
   @Patch('admin/store/categories/:id')
   updateCategory(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -212,7 +252,6 @@ export class CatalogController {
     return this.catalog.updateCategory(id, dto);
   }
 
-  @UseGuards(AdminGuard)
   @Delete('admin/store/categories/:id')
   deleteCategory(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -225,13 +264,11 @@ export class CatalogController {
 
   // ─── ADMIN: TAX CLASSES ───────────────────────────────────
 
-  @UseGuards(AdminGuard)
   @Get('admin/store/tax-classes')
   listTaxClasses() {
     return this.catalog.listTaxClasses();
   }
 
-  @UseGuards(AdminGuard)
   @Post('admin/store/tax-classes')
   createTaxClass(@Body() dto: CreateTaxClassDto) {
     return this.catalog.createTaxClass(dto);

@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
-import { storeApi } from '@/lib/storeApi';
 import { Modal, Pagination, Money } from '@/components/store';
 import {
   Package, Plus, Search, ChevronRight, Star, AlertCircle, X,
@@ -13,13 +12,12 @@ import {
 /**
  * Admin Product Manager — list panel.
  *
- * LISTING SOURCE (documented constraint): the backend exposes NO admin
- * product-list route — only `POST /admin/store/products`, `GET /admin/store/products/:id`,
- * and the PUBLIC `GET /api/store/products` (ACTIVE, non-DIGITAL only). With api.ts
- * frozen, the public list (via `storeApi.listProducts`) is the only paginated
- * source available. It therefore shows PUBLISHED (ACTIVE) products; DRAFT and
- * ARCHIVED products are reachable by id from the detail editor. A newly created
- * DRAFT routes the admin straight into its detail page so it is never lost.
+ * LISTING SOURCE: the dedicated admin list route `GET /admin/store/products`
+ * (via `api.adminListProducts`) returns products of ALL statuses
+ * (DRAFT/ACTIVE/ARCHIVED) — unlike the public `GET /api/store/products`, which is
+ * ACTIVE + non-DIGITAL only. Drafts and archived products are therefore visible
+ * directly in this list, with a status filter to narrow the view. Each row
+ * carries a presigned thumbnail (first confirmed product image).
  */
 
 const PRODUCT_STATUSES = ['DRAFT', 'ACTIVE', 'ARCHIVED'] as const;
@@ -32,8 +30,12 @@ interface ProductRow {
   name: string;
   subtitle?: string | null;
   brand?: string | null;
-  category?: string | Record<string, unknown> | null;
+  // The admin list projection returns the denormalized `category` TEXT column —
+  // always a plain string or null (never a nested object) for this endpoint.
+  category?: string | null;
   tags?: string[];
+  status?: string;
+  type?: string;
   isFeatured?: boolean;
   priceFrom?: number | null;
   priceTo?: number | null;
@@ -59,11 +61,30 @@ const EMPTY_CREATE = {
   isFeatured: false,
 };
 
-/** Flatten the category tree into [{id, name, depth}] for the select. */
-function flattenCategories(nodes: CategoryNode[], depth = 0): { id: string; name: string; depth: number }[] {
-  const out: { id: string; name: string; depth: number }[] = [];
+/**
+ * Tonal status pill colours (DESIGN.md: no shadows, 0px radius, hairline depth).
+ * The `/<n>` opacity utilities (e.g. `border-forest/40`, `bg-forest/5`) depend on
+ * the base tokens — `forest`, `terracotta`, `hairline`, `alabaster`, `ink` — being
+ * defined in the Tailwind config as colours that support the `/<opacity>` modifier.
+ * Source of truth: tailwind.config + DESIGN.md palette. If a token is renamed, the
+ * opacity variant silently produces no output, so keep these in sync with the config.
+ */
+const STATUS_STYLES: Record<string, string> = {
+  ACTIVE: 'border-forest/40 text-forest bg-forest/5',
+  DRAFT: 'border-hairline text-ink/50 bg-alabaster',
+  ARCHIVED: 'border-terracotta/40 text-terracotta bg-terracotta/5',
+};
+
+/** Flatten the category tree into [{id, name, depth, slug}] for the select. */
+function flattenCategories(
+  nodes: CategoryNode[],
+  depth = 0,
+): { id: string; name: string; depth: number; slug: string }[] {
+  const out: { id: string; name: string; depth: number; slug: string }[] = [];
   for (const n of nodes) {
-    out.push({ id: n.id, name: n.name, depth });
+    // The slug is available on the original tree node at the moment of flattening,
+    // so carry it through here — no separate O(N*M) re-traversal per flat node.
+    out.push({ id: n.id, name: n.name, depth, slug: n.slug });
     if (n.children?.length) out.push(...flattenCategories(n.children, depth + 1));
   }
   return out;
@@ -80,10 +101,9 @@ export default function AdminProductsPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
-  const [featuredOnly, setFeaturedOnly] = useState(false);
-  const [categoryFilter, setCategoryFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
 
-  const [categories, setCategories] = useState<{ id: string; name: string; depth: number; slug?: string }[]>([]);
+  const [categories, setCategories] = useState<{ id: string; name: string; depth: number; slug: string }[]>([]);
 
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState({ ...EMPTY_CREATE });
@@ -93,25 +113,11 @@ export default function AdminProductsPage() {
   const loadCategories = useCallback(async () => {
     try {
       const tree = (await api.adminGetStoreCategoryTree()) as CategoryNode[];
-      const flat = flattenCategories(Array.isArray(tree) ? tree : []);
-      // Keep the slug alongside id+name so the list filter (which the public
-      // endpoint keys by slug) can resolve a selected category to its slug.
-      const withSlug = flat.map((f) => {
-        const findSlug = (nodes: CategoryNode[]): string | undefined => {
-          for (const n of nodes) {
-            if (n.id === f.id) return n.slug;
-            if (n.children) {
-              const s = findSlug(n.children);
-              if (s) return s;
-            }
-          }
-          return undefined;
-        };
-        return { ...f, slug: findSlug(Array.isArray(tree) ? tree : []) };
-      });
-      setCategories(withSlug);
+      // flattenCategories carries each node's slug through directly (O(N)); no
+      // per-node re-traversal of the tree is needed.
+      setCategories(flattenCategories(Array.isArray(tree) ? tree : []));
     } catch {
-      // Non-fatal: the create form + filter degrade to "no categories".
+      // Non-fatal: the create form degrades to "no categories".
       setCategories([]);
     }
   }, []);
@@ -120,12 +126,13 @@ export default function AdminProductsPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await storeApi.listProducts({
+      // Admin list: ALL statuses (DRAFT/ACTIVE/ARCHIVED), optionally narrowed by
+      // the status filter. Search matches name/slug; pagination via meta.
+      const res = await api.adminListProducts({
         page,
         limit: PAGE_SIZE,
         ...(search ? { search } : {}),
-        ...(featuredOnly ? { featured: true } : {}),
-        ...(categoryFilter ? { category: categoryFilter } : {}),
+        ...(statusFilter ? { status: statusFilter } : {}),
       });
       setRows((res.data as ProductRow[]) ?? []);
       setMeta({
@@ -139,7 +146,7 @@ export default function AdminProductsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, featuredOnly, categoryFilter]);
+  }, [page, search, statusFilter]);
 
   useEffect(() => {
     loadCategories();
@@ -184,11 +191,17 @@ export default function AdminProductsPage() {
       const created = await api.adminCreateStoreProduct(body);
       setShowCreate(false);
       setCreateForm({ ...EMPTY_CREATE });
-      // Route straight into the detail editor — DRAFTs never appear in the
-      // ACTIVE-only public list, so this is how the admin keeps working on it.
+      // Route straight into the detail editor so the admin can keep building the
+      // new product (add SKUs, media, tabs) without an extra navigation step.
       if (created?.id) {
         router.push(`/admin/store/products/${created.id}`);
       } else {
+        // Unreachable in production — the backend always returns the created
+        // product with its UUID. If the response shape ever changes (id nested
+        // differently), surface a warning rather than silently just reloading.
+        console.warn(
+          'Create product: response had no `id`; reloading the list instead of navigating to the detail editor.',
+        );
         await load();
       }
     } catch (e) {
@@ -198,11 +211,9 @@ export default function AdminProductsPage() {
     }
   };
 
-  const categoryLabel = (c: ProductRow['category']): string | null => {
-    if (!c) return null;
-    if (typeof c === 'string') return c;
-    return (c as { name?: string }).name ?? null;
-  };
+  // The admin list returns `category` as a plain denormalized string (or null);
+  // no nested-object branch is reachable from this endpoint's response shape.
+  const categoryLabel = (c: ProductRow['category']): string | null => c ?? null;
 
   return (
     <div className="text-ink animate-fade-in px-8 py-12 max-w-[1200px] mx-auto min-h-screen">
@@ -232,16 +243,6 @@ export default function AdminProductsPage() {
         </button>
       </header>
 
-      {/* Listing-scope note */}
-      <div className="mb-6 flex items-start gap-2 border border-hairline bg-alabaster px-4 py-3 text-xs text-ink/55">
-        <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-forest/50" />
-        <span>
-          This list shows <strong className="text-ink/70">published (ACTIVE)</strong> products. Newly
-          created drafts open directly in their editor; reach any DRAFT or ARCHIVED product from its
-          detail page.
-        </span>
-      </div>
-
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3 mb-6">
         <form onSubmit={applySearch} className="flex items-center gap-2 flex-1 min-w-[260px]">
@@ -251,7 +252,7 @@ export default function AdminProductsPage() {
               type="text"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Search name, subtitle or brand…"
+              placeholder="Search name or slug…"
               className="w-full border border-hairline pl-10 pr-3 py-2.5 text-sm focus:outline-none focus:border-forest bg-white"
             />
           </div>
@@ -278,36 +279,20 @@ export default function AdminProductsPage() {
         </form>
 
         <select
-          value={categoryFilter}
+          value={statusFilter}
           onChange={(e) => {
-            setCategoryFilter(e.target.value);
+            setStatusFilter(e.target.value);
             setPage(1);
           }}
           className="border border-hairline px-3 py-2.5 text-sm focus:outline-none focus:border-forest bg-white"
         >
-          <option value="">All categories</option>
-          {categories
-            .filter((c) => c.slug)
-            .map((c) => (
-              <option key={c.id} value={c.slug}>
-                {`${'  '.repeat(c.depth)}${c.name}`}
-              </option>
-            ))}
+          <option value="">All statuses</option>
+          {PRODUCT_STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
         </select>
-
-        <button
-          onClick={() => {
-            setFeaturedOnly((v) => !v);
-            setPage(1);
-          }}
-          className={`px-4 py-2.5 text-[10px] uppercase tracking-widest font-bold border transition-colors flex items-center gap-1.5 ${
-            featuredOnly
-              ? 'border-saffron bg-saffron text-parchment'
-              : 'border-hairline bg-white text-ink/60 hover:border-forest/30'
-          }`}
-        >
-          <Star className="w-3.5 h-3.5" /> Featured
-        </button>
       </div>
 
       {/* Table */}
@@ -331,9 +316,10 @@ export default function AdminProductsPage() {
         <>
           <div className="border border-hairline bg-white">
             <div className="grid grid-cols-12 gap-4 px-6 py-3 bg-alabaster border-b border-hairline text-[9px] uppercase tracking-widest text-ink/40 font-bold">
-              <div className="col-span-5">Product</div>
+              <div className="col-span-4">Product</div>
               <div className="col-span-2">Category</div>
-              <div className="col-span-2">Price From</div>
+              <div className="col-span-2">Status</div>
+              <div className="col-span-1">Price From</div>
               <div className="col-span-1 text-center">Featured</div>
               <div className="col-span-2 text-right">Actions</div>
             </div>
@@ -342,9 +328,9 @@ export default function AdminProductsPage() {
               <div className="p-16 text-center text-ink/40">
                 <Package className="w-8 h-8 mx-auto mb-3 opacity-40" />
                 <p className="font-serif italic">
-                  {search || categoryFilter || featuredOnly
-                    ? 'No published products match these filters.'
-                    : 'No published products yet.'}
+                  {search || statusFilter
+                    ? 'No products match these filters.'
+                    : 'No products yet.'}
                 </p>
               </div>
             ) : (
@@ -353,7 +339,7 @@ export default function AdminProductsPage() {
                   key={p.id}
                   className="grid grid-cols-12 gap-4 px-6 py-4 border-b border-hairline/50 hover:bg-alabaster/50 transition-colors items-center text-sm"
                 >
-                  <div className="col-span-5 flex items-center gap-3 min-w-0">
+                  <div className="col-span-4 flex items-center gap-3 min-w-0">
                     <div className="w-11 h-11 border border-hairline bg-parchment shrink-0 overflow-hidden flex items-center justify-center">
                       {p.thumbnail?.url ? (
                         // eslint-disable-next-line @next/next/no-img-element
@@ -377,11 +363,24 @@ export default function AdminProductsPage() {
                   <div className="col-span-2 text-xs text-ink/60 truncate">
                     {categoryLabel(p.category) || <span className="text-ink/25">—</span>}
                   </div>
-                  <div className="col-span-2 text-sm font-semibold">
+                  <div className="col-span-2">
+                    {p.status ? (
+                      <span
+                        className={`inline-block px-2 py-1 text-[9px] uppercase tracking-widest font-bold border ${
+                          STATUS_STYLES[p.status] ?? 'border-hairline text-ink/50 bg-alabaster'
+                        }`}
+                      >
+                        {p.status}
+                      </span>
+                    ) : (
+                      <span className="text-ink/20">—</span>
+                    )}
+                  </div>
+                  <div className="col-span-1 text-sm font-semibold">
                     {p.priceFrom != null ? (
                       <Money paise={p.priceFrom} />
                     ) : (
-                      <span className="text-ink/25 text-xs uppercase tracking-widest">No SKU</span>
+                      <span className="text-ink/25 text-[10px] uppercase tracking-widest">No SKU</span>
                     )}
                   </div>
                   <div className="col-span-1 text-center">
@@ -410,7 +409,7 @@ export default function AdminProductsPage() {
             </div>
           )}
           <p className="text-center text-[10px] uppercase tracking-widest text-ink/35 mt-4">
-            {meta.total} published product{meta.total !== 1 ? 's' : ''}
+            {meta.total} product{meta.total !== 1 ? 's' : ''}
           </p>
         </>
       )}

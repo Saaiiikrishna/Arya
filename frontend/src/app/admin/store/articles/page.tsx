@@ -22,7 +22,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   Newspaper, ChevronRight, ChevronLeft, Search, Eye, Users, Globe,
-  Link2, CheckCircle, XCircle, Star, EyeOff, Pencil, RotateCcw, Trash2,
+  Link2, CheckCircle, XCircle, Star, Archive, Pencil, RotateCcw, Trash2,
   AlertTriangle, Clock, User, Tag, FileText, BarChart3,
 } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -76,7 +76,7 @@ type Panel = 'list' | 'detail';
 const FEATURED_TAG = '__featured__';
 const PAGE_SIZE = 20;
 
-const STATUS_FILTERS = ['', 'SUBMITTED', 'APPROVED', 'PUBLISHED', 'REJECTED'] as const;
+const STATUS_FILTERS = ['', 'DRAFT', 'SUBMITTED', 'APPROVED', 'PUBLISHED', 'REJECTED', 'ARCHIVED'] as const;
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -131,10 +131,12 @@ function fmtDate(d: string | null | undefined): string {
 
 function statusBadge(status: string) {
   const map: Record<string, string> = {
+    DRAFT: 'bg-ink/5 text-ink/50 border-ink/15',
     SUBMITTED: 'bg-marigold/15 text-warning border-marigold/40',
     PUBLISHED: 'bg-success/10 text-success border-success/25',
     REJECTED: 'bg-terracotta/10 text-terracotta border-terracotta/20',
     APPROVED: 'bg-forest/10 text-forest border-forest/20',
+    ARCHIVED: 'bg-ink/10 text-ink/60 border-ink/25',
   };
   const cls = map[status] || 'bg-ink/5 text-ink/50 border-ink/15';
   return (
@@ -311,15 +313,18 @@ export default function AdminArticlesPage() {
     }
   };
 
-  const doUnpublish = async () => {
+  // Archive = unpublish a PUBLISHED article into the distinct terminal ARCHIVED
+  // state (backed by adminUpdateArticle({ unpublish: true })). It is pulled off
+  // the public listing but is NOT returned to the moderation queue.
+  const doArchive = async () => {
     if (!selectedId) return;
-    if (!confirm('Unpublish this article? It will be pulled off the public listing and returned to the moderation queue (SUBMITTED).')) return;
+    if (!confirm('Archive this article? It will be pulled off the public listing into the Archived state (it does NOT go back into the review queue). You can Restore it later.')) return;
     setActionLoading(true);
     try {
       await api.adminUpdateArticle(selectedId, { unpublish: true });
       await reloadDetail();
     } catch (e: unknown) {
-      alert(errMsg(e, 'Failed to unpublish article.'));
+      alert(errMsg(e, 'Failed to archive article.'));
     } finally {
       setActionLoading(false);
     }
@@ -648,13 +653,28 @@ export default function AdminArticlesPage() {
                         {featured ? 'Unfeature' : 'Feature'}
                       </button>
                       <button
-                        onClick={doUnpublish}
+                        onClick={doArchive}
                         disabled={actionLoading}
                         className="px-4 py-2 border border-hairline text-ink/70 text-[10px] uppercase tracking-widest font-bold hover:border-terracotta hover:text-terracotta disabled:opacity-50 transition-colors flex items-center gap-2"
                       >
-                        <EyeOff className="w-3.5 h-3.5" /> Unpublish
+                        <Archive className="w-3.5 h-3.5" /> Archive
                       </button>
                     </>
+                  )}
+
+                  {/*
+                    ARCHIVED is the terminal "unpublished" state (distinct from the
+                    SUBMITTED queue). The only forward transition is Restore
+                    (ARCHIVED -> PUBLISHED), which makes it publicly visible again.
+                  */}
+                  {detail.status === 'ARCHIVED' && (
+                    <button
+                      onClick={doRestore}
+                      disabled={actionLoading}
+                      className="px-4 py-2 bg-forest text-parchment text-[10px] uppercase tracking-widest font-bold hover:bg-forest/90 disabled:opacity-50 transition-colors flex items-center gap-2"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" /> Restore &amp; Publish
+                    </button>
                   )}
 
                   {/*
@@ -693,7 +713,7 @@ export default function AdminArticlesPage() {
                     Scoped to known-unhandled statuses only so adding a new
                     status surfaces a usable action instead of a dead-end bar.
                   */}
-                  {!['SUBMITTED', 'APPROVED', 'PUBLISHED', 'REJECTED'].includes(detail.status) && (
+                  {!['DRAFT', 'SUBMITTED', 'APPROVED', 'PUBLISHED', 'REJECTED', 'ARCHIVED'].includes(detail.status) && (
                     <button
                       onClick={doRestore}
                       disabled={actionLoading}
