@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma';
 import { EmailService } from '../email/email.service';
+import { StoreMediaService } from '../store/store-media/store-media.service';
 
 @Injectable()
 export class SchedulerService {
@@ -10,7 +11,30 @@ export class SchedulerService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
+    private readonly storeMediaService: StoreMediaService,
   ) {}
+
+  /**
+   * store-media-gc (architecture Section 7): every 30 minutes, sweep orphan
+   * PENDING ProductMedia rows whose client abandoned the presigned PUT after
+   * the URL TTL elapsed. Each swept row frees a reserved media cap slot and
+   * best-effort purges its S3 object. Without this an abandoned presign
+   * permanently consumes a slot and can exhaust a product's media cap.
+   * Idempotent (row delete by snapshotted id set).
+   */
+  @Cron('0 */30 * * * *')
+  async sweepOrphanStoreMedia() {
+    try {
+      const { swept } =
+        await this.storeMediaService.gcOrphanPendingProductMedia();
+      if (swept > 0) {
+        this.logger.log(`store-media-gc swept ${swept} orphan PENDING rows`);
+      }
+    } catch (e) {
+      // Cron must never crash the scheduler; the next run retries.
+      this.logger.error(`store-media-gc failed: ${(e as Error)?.message}`);
+    }
+  }
 
   /**
    * Runs every hour. Finds interview bookings whose slot has ended with no decision
@@ -83,7 +107,9 @@ export class SchedulerService {
         data: {
           status: 'REJECTED',
           resolvedAt: new Date(),
-          details: request.details + '\n\n[AUTO-REJECTED: Team formation window has closed for this batch]',
+          details:
+            request.details +
+            '\n\n[AUTO-REJECTED: Team formation window has closed for this batch]',
         },
       });
 
@@ -107,7 +133,8 @@ export class SchedulerService {
       count++;
     }
 
-    if (count > 0) this.logger.log(`Auto-rejected ${count} stale CREATE_NEW requests`);
+    if (count > 0)
+      this.logger.log(`Auto-rejected ${count} stale CREATE_NEW requests`);
   }
 
   /**
@@ -170,13 +197,15 @@ export class SchedulerService {
   async remindWeeklyCheckIns() {
     const now = new Date();
 
-    const assignments = await (this.prisma as any).coFounderAssignment.findMany({
-      where: { isActive: true },
-      include: {
-        team: { select: { id: true, name: true, isLocked: true } },
-        coFounder: { select: { id: true, email: true, firstName: true } },
+    const assignments = await (this.prisma as any).coFounderAssignment.findMany(
+      {
+        where: { isActive: true },
+        include: {
+          team: { select: { id: true, name: true, isLocked: true } },
+          coFounder: { select: { id: true, email: true, firstName: true } },
+        },
       },
-    });
+    );
 
     let count = 0;
     for (const assignment of assignments) {
@@ -191,7 +220,9 @@ export class SchedulerService {
       const currentWeek = Math.ceil(daysSinceAssignment / 7);
 
       const existing = await (this.prisma as any).weeklyCheckIn.findUnique({
-        where: { teamId_week: { teamId: assignment.teamId, week: currentWeek } },
+        where: {
+          teamId_week: { teamId: assignment.teamId, week: currentWeek },
+        },
       });
       if (existing) continue; // already submitted
 
@@ -208,6 +239,7 @@ export class SchedulerService {
       count++;
     }
 
-    if (count > 0) this.logger.log(`Weekly check-in reminders sent to ${count} co-founders`);
+    if (count > 0)
+      this.logger.log(`Weekly check-in reminders sent to ${count} co-founders`);
   }
 }

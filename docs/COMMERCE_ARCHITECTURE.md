@@ -1161,6 +1161,8 @@ Reused services injected throughout: `PrismaService`, `NotificationService`, `Do
 - `POST /api/admin/store/skus/:id/price-tiers` — AdminGuard
 - `POST /api/admin/store/products/:id/media/presign` — AdminGuard (**row-reservation cap check**: insert `ProductMedia(status=PENDING)` then issue URL; reject if PENDING+CONFIRMED count would exceed cap)
 - `POST /api/admin/store/products/:id/media/confirm` — AdminGuard (HeadObject size check, then flip `PENDING→CONFIRMED`; on failure delete the PENDING row + S3 object)
+- `GET /api/admin/store/products/:id/media` — AdminGuard (list a product's media; `?confirmedOnly=true` filters to CONFIRMED rows; owned by `store-media`)
+- `DELETE /api/admin/store/products/:id/media/:mediaId` — AdminGuard (delete a media row + best-effort S3 purge; frees the reserved cap slot; owned by `store-media`)
 - `PUT /api/admin/store/products/:id/tabs` — AdminGuard (replace ordered tabs/sections tree)
 - `GET/POST /api/admin/store/tax-classes` — AdminGuard
 - `GET/POST /api/admin/store/categories` — AdminGuard (delete/re-parent triggers `Product.category` re-sync)

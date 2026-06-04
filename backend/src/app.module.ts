@@ -38,6 +38,12 @@ import { AutomationModule } from './modules/automation/automation.module';
 import { MentorModule } from './modules/mentor';
 import { CoFounderModule } from './modules/cofounder/cofounder.module';
 import { DocumentaryModule } from './modules/documentary/documentary.module';
+// Commerce / storefront (M2b foundational modules)
+import { StoreAuthModule } from './modules/store-auth';
+import { CatalogModule } from './modules/catalog/catalog.module';
+import { InventoryModule } from './modules/inventory/inventory.module';
+import { TaxModule } from './modules/tax/tax.module';
+import { StoreMediaModule } from './modules/store/store-media/store-media.module';
 
 /**
  * Fail-fast environment validation. Signing secrets must ALWAYS be strong
@@ -159,6 +165,12 @@ function validateEnv(config: Record<string, unknown>): Record<string, unknown> {
     MentorModule,
     CoFounderModule,
     DocumentaryModule,
+    // Commerce / storefront (M2b foundational modules)
+    StoreAuthModule,
+    CatalogModule,
+    InventoryModule,
+    TaxModule,
+    StoreMediaModule,
   ],
   providers: [
     // Apply rate limiting globally; per-route @Throttle still tunes the tiers.
