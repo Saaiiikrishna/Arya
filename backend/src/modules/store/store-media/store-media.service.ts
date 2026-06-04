@@ -400,29 +400,70 @@ export class StoreMediaService implements OnModuleInit {
   }> {
     const cutoff = new Date(Date.now() - olderThanMinutes * 60 * 1000);
 
-    const orphans = await this.prisma.productMedia.findMany({
+    // Snapshot the candidate orphans cheaply (no lock). This is only used to
+    // decide whether there is work to do — the actual delete re-asserts the
+    // PENDING+expired predicate so a row confirmed after this read is never
+    // touched and its now-LIVE S3 object is never purged.
+    const candidates = await this.prisma.productMedia.findMany({
       where: {
         status: ProductMediaStatus.PENDING,
         createdAt: { lt: cutoff },
       },
-      select: { id: true, s3Key: true },
+      select: { id: true },
     });
 
-    if (orphans.length === 0) {
+    if (candidates.length === 0) {
       return { swept: 0 };
     }
 
-    const ids = orphans.map((o) => o.id);
-    // Free the cap slots first (the authoritative reservation), then best-effort
-    // purge S3. Deleting by the snapshotted id set is idempotent.
-    const result = await this.prisma.productMedia.deleteMany({
-      where: { id: { in: ids } },
+    const candidateIds = candidates.map((c) => c.id);
+
+    // Re-select the still-PENDING+expired subset and delete EXACTLY those rows
+    // inside a single transaction, then purge S3 only for the keys we actually
+    // deleted. The re-selection inside the transaction re-asserts the predicate
+    // (status = PENDING AND createdAt < cutoff), so a candidate that was promoted
+    // to CONFIRMED in the gap is excluded from both the delete and the purge —
+    // a live object can never be purged.
+    const purgeKeys = await this.prisma.$transaction(async (tx) => {
+      const toDelete = await tx.productMedia.findMany({
+        where: {
+          id: { in: candidateIds },
+          status: ProductMediaStatus.PENDING,
+          createdAt: { lt: cutoff },
+        },
+        select: { id: true, s3Key: true },
+      });
+
+      if (toDelete.length === 0) {
+        return [] as string[];
+      }
+
+      // Delete by the freshly re-selected id set while ALSO re-asserting the
+      // predicate, so a row confirmed between this read and the delete is still
+      // excluded (the predicate, not just the id list, gates the delete).
+      await tx.productMedia.deleteMany({
+        where: {
+          id: { in: toDelete.map((r) => r.id) },
+          status: ProductMediaStatus.PENDING,
+          createdAt: { lt: cutoff },
+        },
+      });
+
+      return toDelete.map((r) => r.s3Key);
     });
 
-    await Promise.all(orphans.map((o) => this.purgeObject(o.s3Key)));
+    if (purgeKeys.length === 0) {
+      return { swept: 0 };
+    }
 
-    this.logger.log(`store-media-gc swept ${result.count} orphan PENDING rows`);
-    return { swept: result.count };
+    // Best-effort purge S3 only for rows that were authoritatively deleted as
+    // still-PENDING orphans. No CONFIRMED (live) object is ever in this set.
+    await Promise.all(purgeKeys.map((key) => this.purgeObject(key)));
+
+    this.logger.log(
+      `store-media-gc swept ${purgeKeys.length} orphan PENDING rows`,
+    );
+    return { swept: purgeKeys.length };
   }
 
   // ──────────────────────────────────────────────────────────────────────────

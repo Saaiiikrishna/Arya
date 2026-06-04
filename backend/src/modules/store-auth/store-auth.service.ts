@@ -512,9 +512,26 @@ export class StoreAuthService {
     const hash = this.hashToken(rawCartToken);
 
     return this.prisma.$transaction(async (tx) => {
-      // Serialize concurrent claims of the same guest cart and concurrent merges
-      // into the same customer cart to keep item dedup race-free.
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'store_cart_merge_' + customerId}))`;
+      // Two distinct critical sections must be serialized here:
+      //   1. concurrent claims of the SAME guest cart (two customers presenting
+      //      the same guest token) — keyed on the guest cart identity (the
+      //      SHA-256 session-token hash). Without this, both could read the cart
+      //      as unclaimed and each claim/merge it.
+      //   2. concurrent merges into the SAME customer cart — keyed on customerId,
+      //      to keep item dedup race-free.
+      // Both advisory locks are taken in the SAME tx before reading the cart.
+      // Acquire them in a deterministic (sorted) order so two callers that touch
+      // the same pair of keys can never deadlock by grabbing them in opposite
+      // orders. hashtext(key) maps each stable string key into the 32-bit
+      // advisory-lock space (same idiom as the rest of the codebase).
+      const guestCartLockKey = 'store_cart_guest_' + hash;
+      const customerMergeLockKey = 'store_cart_merge_' + customerId;
+      const [firstLockKey, secondLockKey] = [
+        guestCartLockKey,
+        customerMergeLockKey,
+      ].sort();
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${firstLockKey}))`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${secondLockKey}))`;
 
       const customer = await tx.customer.findUnique({
         where: { id: customerId },
@@ -527,6 +544,11 @@ export class StoreAuthService {
         throw new UnauthorizedException('Customer not found or inactive');
       }
 
+      // This read happens UNDER the guest-cart-identity lock, so it is the
+      // re-read of ownership a concurrent claimer of the same token races on.
+      // A claimer that committed first nulled sessionTokenHash (both the
+      // claim-in-place and the merge path do), so this lookup returns null for
+      // the loser, which then aborts below — no double claim/merge.
       const guestCart = await tx.cart.findUnique({
         where: { sessionTokenHash: hash },
         include: { items: true },
@@ -538,6 +560,8 @@ export class StoreAuthService {
         throw new ConflictException('Guest cart is no longer active');
       }
       // Already owned by someone — must not be re-claimable via a guest token.
+      // Defensive net for the under-lock re-read in case a path ever leaves the
+      // hash set while assigning an owner.
       if (guestCart.customerId && guestCart.customerId !== customerId) {
         throw new ConflictException('Guest cart already claimed');
       }

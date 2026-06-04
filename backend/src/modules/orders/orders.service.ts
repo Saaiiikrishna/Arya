@@ -448,12 +448,18 @@ export class OrdersService {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`store_checkout_${cartId}`}))`;
 
       // Re-check INSIDE the lock (registered customers only): did a concurrent
-      // winner already mint a live unpaid order for this customer within the
-      // reuse window for the SAME amount? If so, reuse it verbatim.
+      // winner already mint a live unpaid order from THIS SAME CART within the
+      // reuse window? If so, reuse it verbatim. Keying on cartId (not just
+      // customerId + grandTotal) is what guarantees correctness: two DISTINCT
+      // carts of the same customer with an identical total within the window can
+      // never collapse onto one order — a different cart never reuses another
+      // cart's pending order. grandTotal is kept as a belt-and-suspenders guard,
+      // and razorpayOrderId not null ensures we only reuse an order that already
+      // has a live Razorpay order to hand back (no half-built order).
       if (actor.customerId) {
         const existing = await tx.order.findFirst({
           where: {
-            customerId: actor.customerId,
+            cartId,
             status: OrderStatus.PENDING_PAYMENT,
             razorpayOrderId: { not: null },
             grandTotal,
@@ -486,6 +492,9 @@ export class OrdersService {
           id: orderId,
           orderNumber,
           customerId,
+          // The cart this order was minted from — the key the reuse query above
+          // matches on so a different cart never collapses onto this order.
+          cartId,
           guestEmail: actor.isGuest ? (guestEmail ?? null) : null,
           guestPhone: actor.isGuest ? (guestPhone ?? null) : null,
           guestAccessTokenHash: guestToken?.hash ?? null,

@@ -89,8 +89,9 @@ A specific component for this design system. It uses `headline-lg` in Newsreader
 ## 7. Public Marketing Layer (Scoped Exception)
 
 > **Scope:** This section applies **only** to the public, top-of-funnel marketing surfaces:
-> the home landing (`/`), the storefront (`/store`, `/store/[slug]`, `/store/[slug]/build`),
-> and the journal (`/articles`, `/articles/[slug]`). **The application (`/hub/*`), all `/admin/*`
+> the home landing (`/`), the programme landing (`/startup`), the storefront (`/store`,
+> `/store/[slug]`, `/store/[slug]/build`), and the journal (`/articles`, `/articles/[slug]`).
+> **The application (`/hub/*`), all `/admin/*`
 > dashboards, `/apply`, `/investors`, and every authenticated/operational screen remain governed by
 > Sections 1–6 above — 0px corners, no shadows, matte CTAs. No exceptions there.**
 
@@ -101,7 +102,11 @@ inside a `.mkt` wrapper, which guarantees they cannot leak into the app/admin de
 
 ### What the marketing layer MAY do
 *   **Rounded geometry:** Pills (`rounded-full`) and softly-rounded cards/containers (12–24px radius)
-    are allowed for hero badges, CTAs, feature cards, and media frames.
+    are allowed for hero badges, CTAs, feature cards, and media frames. The hero pill on the
+    (moved) Manifesto at `/startup` is in-scope here.
+    *   **Note:** Circular dots and pills (status dots, avatars, the `rounded-full` on a true circle)
+        already fall under the global *rounded-full-for-circles* allowance and are permitted on every
+        surface — they are not a marketing-only exception.
 *   **Glossy, not matte, CTAs:** Primary actions use a saffron→marigold gradient with an inner top
     highlight, a soft saffron glow, and a **subtle animated sheen** that sweeps across on hover
     (`.mkt-btn`). A secondary glass variant (`.mkt-btn-ghost`) is available.

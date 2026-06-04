@@ -2271,6 +2271,12 @@ model Order {
   sellerGstinSnapshot      String?            @map("seller_gstin_snapshot") // GSTIN of fulfilling warehouse, frozen at order time
   isInterState             Boolean            @default(false) @map("is_inter_state")
   fulfilledFromWarehouseId String?            @map("fulfilled_from_warehouse_id") @db.Uuid
+  // The cart this order was minted from. Bare indexed column (no FK relation): the cart row
+  // is marked CONVERTED on checkout, never deleted, so referential integrity is not needed
+  // here. Used by the checkout reuse query to converge two rapid concurrent checkouts of the
+  // SAME cart onto ONE order — keying on cartId (not just customerId+grandTotal) so two
+  // distinct carts with an identical total within the reuse window can never collapse together.
+  cartId                   String?            @map("cart_id") @db.Uuid
   razorpayOrderId          String?            @unique @map("razorpay_order_id")
   razorpayPaymentId        String?            @unique @map("razorpay_payment_id")
   placedAt                 DateTime?          @map("placed_at")
@@ -2299,6 +2305,7 @@ model Order {
   @@index([paymentStatus])
   @@index([createdAt])
   @@index([fulfilledFromWarehouseId])
+  @@index([cartId])
   @@map("orders")
 }
 

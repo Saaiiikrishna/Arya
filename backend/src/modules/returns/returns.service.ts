@@ -462,28 +462,34 @@ export class ReturnsService {
   }
 
   /**
-   * Customer/guest read of their own return. Ownership is enforced here: a
-   * registered customer must own the return; a guest's token must resolve to the
-   * return's order.
+   * Customer/guest read of their own return. Ownership is enforced in the lookup
+   * itself (IDOR fix): the query is SCOPED to the caller's identity up front —
+   * `id = id AND customerId = <caller>` for a registered customer, or
+   * `id = id AND orderId = <token-resolved order>` for a guest — so a return
+   * belonging to ANOTHER account simply does not match. A miss throws
+   * NotFoundException, never Forbidden, so a foreign (but existing) return id is
+   * indistinguishable from a genuinely missing one and the status code cannot be
+   * used as a UUID-exists oracle.
    */
   async getReturnForRequester(id: string, requester: ReturnRequester) {
-    const ret = await this.prisma.return.findUnique({
-      where: { id },
-      include: { items: true },
-    });
-    if (!ret) throw new NotFoundException('Return not found');
-
+    let scope: Prisma.ReturnWhereInput;
     if (requester.customerId) {
-      if (ret.customerId !== requester.customerId) {
-        throw new ForbiddenException('This return belongs to another account');
-      }
+      scope = { id, customerId: requester.customerId };
     } else if (requester.guestOrderId) {
-      if (ret.orderId !== requester.guestOrderId) {
-        throw new ForbiddenException('Order token does not match return');
-      }
+      scope = { id, orderId: requester.guestOrderId };
     } else {
+      // The caller must resolve exactly one identity before calling the service;
+      // reaching here is a wiring bug, not a client error.
       throw new ForbiddenException('Return requester identity not resolved');
     }
+
+    const ret = await this.prisma.return.findFirst({
+      where: scope,
+      include: { items: true },
+    });
+    // Not found OR not owned by the caller — both collapse to NotFound so
+    // ownership cannot be probed via the status code.
+    if (!ret) throw new NotFoundException('Return not found');
     return ret;
   }
 
@@ -680,20 +686,30 @@ export class ReturnsService {
 
   /**
    * Receive a physically-returned parcel and execute the full settlement in ONE
-   * coherent, idempotent flow (architecture 4.10 — the restock+refund step):
-   *   1. Under advisory lock `return_approve_<id>`, CAS APPROVED|IN_TRANSIT →
-   *      RECEIVED + stamp the REAL `receivedAt`. A double-click loses the CAS and
-   *      short-circuits — so refund/restock/credit-note can never run twice.
+   * coherent, idempotent, RE-RUNNABLE flow (architecture 4.10 — the restock+refund
+   * step):
+   *   1. Under advisory lock `return_approve_<id>`, claim the settlement. The
+   *      claim succeeds either by CAS APPROVED|IN_TRANSIT → RECEIVED (the normal
+   *      first receipt, stamping the REAL `receivedAt`) OR by re-entering an
+   *      already-RECEIVED return whose refund has NOT yet completed
+   *      (`refundStatus != COMPLETED`). The latter is the crash-recovery path: if a
+   *      prior attempt flipped to RECEIVED but died before the RECEIVED→REFUNDED
+   *      finalize, a retry RE-DRIVES the remaining settlement instead of treating
+   *      RECEIVED as terminal and stranding the return. A return whose refund is
+   *      already COMPLETED (status REFUNDED, or RECEIVED+COMPLETED) is fully settled
+   *      and short-circuits, so refund/credit-note never run twice.
    *   2. Razorpay refund of the frozen Return.refundAmount via
    *      OrdersService.refundOrder (its own `order_refund_<orderId>` lock +
    *      cumulative cap + razorpayRefundId @unique protect against over-refund).
    *      The external Razorpay call happens OUTSIDE the advisory lock / tx, exactly
-   *      as refundOrder requires.
+   *      as refundOrder requires. Idempotent on re-entry: refundOrder is cumulative-
+   *      capped + de-duped, so a retry after a partial settlement does not double-pay.
    *   3. Restock each line into the order's fulfilling warehouse (onHand += ,
    *      StockMovement RETURN), each guarded by the per-ReturnItem `restocked`
    *      CAS so a retry never double-restocks.
    *   4. Issue the idempotent CREDIT_NOTE via InvoicingService.generateCreditNote.
-   *   5. CAS RECEIVED → REFUNDED + persist razorpayRefundId + refundedAt.
+   *   5. CAS RECEIVED → REFUNDED + persist razorpayRefundId + refundedAt. On
+   *      re-entry this is the step that finally commits, closing the recovery gap.
    *
    * Restocking happens HERE (on physical receipt), never at approval time, so
    * inventory is never inflated by items not yet back at the warehouse. The order's
@@ -701,9 +717,11 @@ export class ReturnsService {
    * method does not duplicate that transition.
    */
   async receiveReturn(id: string, actor: ReturnAdminActor, note?: string) {
-    // ── Step 1: idempotent claim. Advisory lock serializes concurrent receives of
-    // the SAME return; the CAS {APPROVED,IN_TRANSIT}→RECEIVED is the exactly-once
-    // gate and stamps the real physical-receipt time.
+    // ── Step 1: idempotent, re-runnable claim. Advisory lock serializes concurrent
+    // receives of the SAME return. The claim is granted on the first receipt (CAS
+    // {APPROVED,IN_TRANSIT}→RECEIVED) OR on re-entry of a RECEIVED return whose
+    // refund has not yet COMPLETED (crash-recovery), so a death after the RECEIVED
+    // flip but before the REFUNDED finalize is recoverable rather than terminal.
     const claim = await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`return_approve_${id}`}))`;
 
@@ -713,20 +731,38 @@ export class ReturnsService {
       });
       if (!ret) throw new NotFoundException('Return not found');
 
-      // Must be approved (or in-transit) before it can be received.
+      // Fully-settled fast path: the refund has COMPLETED (status REFUNDED, or
+      // RECEIVED already marked COMPLETED). Nothing left to do — never re-run the
+      // money/credit-note steps.
+      if (ret.refundStatus === RefundStatus.COMPLETED) {
+        return { ret, claimed: false as const };
+      }
+
+      // Crash-recovery re-entry: already RECEIVED but the refund did NOT complete
+      // (refundStatus != COMPLETED). A prior attempt flipped the status then died
+      // before finalizing. Re-claim WITHOUT re-stamping receivedAt (the physical
+      // receipt already happened) and re-drive the remaining settlement; every
+      // downstream step (refund, restock, credit-note, finalize) is individually
+      // idempotent, so re-running them is safe.
+      if (ret.status === ReturnStatus.RECEIVED) {
+        const order = await tx.order.findUnique({
+          where: { id: ret.orderId },
+          select: {
+            id: true,
+            orderNumber: true,
+            fulfilledFromWarehouseId: true,
+          },
+        });
+        if (!order) throw new NotFoundException('Order not found for return');
+        return { ret, order, claimed: true as const };
+      }
+
+      // Must be approved (or in-transit) before it can be received for the first time.
       if (
         ret.status !== ReturnStatus.APPROVED &&
         ret.status !== ReturnStatus.IN_TRANSIT
       ) {
-        // Already RECEIVED/REFUNDED (settlement done or in-flight), or REQUESTED/
-        // REJECTED/CANCELLED (cannot receive). Treat terminal money states as
-        // already-handled; reject the un-receivable ones.
-        if (
-          ret.status === ReturnStatus.RECEIVED ||
-          ret.status === ReturnStatus.REFUNDED
-        ) {
-          return { ret, claimed: false as const };
-        }
+        // REQUESTED/REJECTED/CANCELLED — cannot receive.
         throw new ConflictException(
           `Return cannot be received from status ${ret.status}`,
         );
@@ -777,9 +813,13 @@ export class ReturnsService {
 
     const { ret, order } = claim;
     if (!order.fulfilledFromWarehouseId) {
-      // Without a fulfilling warehouse we cannot restock. The CAS already moved the
-      // return to RECEIVED, but no money has moved yet; fail loudly so an admin
-      // reconciles rather than silently skipping restock.
+      // Without a fulfilling warehouse we cannot restock. The return is RECEIVED but
+      // the refund has NOT completed (the fully-settled fast path already returned
+      // above), so no money has moved yet on either the first receipt or a recovery
+      // re-entry — fail loudly so an admin reconciles rather than silently skipping
+      // restock. fulfilledFromWarehouseId is a stable order property, so if it is
+      // null now it was null on the first attempt too (which threw here before any
+      // settlement), meaning this branch never strands a partially-paid return.
       throw new ConflictException(
         'Order has no fulfilling warehouse on record; cannot restock this return',
       );

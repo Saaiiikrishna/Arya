@@ -29,6 +29,7 @@ export default function StartLanding() {
   const { settings } = useSettings();
 
   const discordUrl = settings?.discordUrl || settings?.social_discord || '#';
+  const discordReady = Boolean(discordUrl) && discordUrl !== '#';
   const storeUrl = settings?.storeUrl || '/store';
   const articlesUrl = settings?.articlesUrl || '/articles';
 
@@ -129,10 +130,17 @@ export default function StartLanding() {
               transition={{ duration: 0.8, delay: 0.25 }}
               className="mt-12 flex flex-col sm:flex-row flex-wrap gap-4"
             >
-              <a href={discordUrl} target={discordUrl.startsWith('http') ? '_blank' : undefined} rel="noopener noreferrer" className="mkt-btn">
-                <MessageCircle className="w-4 h-4" />
-                <span>Join the Community</span>
-              </a>
+              {discordReady ? (
+                <a href={discordUrl} target={discordUrl.startsWith('http') ? '_blank' : undefined} rel="noopener noreferrer" className="mkt-btn">
+                  <MessageCircle className="w-4 h-4" />
+                  <span>Join the Community</span>
+                </a>
+              ) : (
+                <button type="button" disabled aria-disabled="true" title="Coming soon" className="mkt-btn opacity-50 cursor-not-allowed">
+                  <MessageCircle className="w-4 h-4" />
+                  <span>Join the Community</span>
+                </button>
+              )}
               <button type="button" onClick={goStore} className="mkt-btn-ghost">
                 <ShoppingBag className="w-4 h-4" />
                 <span>Visit the Store</span>
@@ -307,11 +315,19 @@ export default function StartLanding() {
             So don&rsquo;t. Drop in, show what you&rsquo;re working on, ask the dumb question, answer
             someone else&rsquo;s. This is where it all happens between the builds.
           </p>
-          <a href={discordUrl} target={discordUrl.startsWith('http') ? '_blank' : undefined} rel="noopener noreferrer" className="mkt-btn text-sm px-12 py-5">
-            <MessageCircle className="w-5 h-5" />
-            <span>Join the Community on Discord</span>
-            <ArrowRight className="w-5 h-5" />
-          </a>
+          {discordReady ? (
+            <a href={discordUrl} target={discordUrl.startsWith('http') ? '_blank' : undefined} rel="noopener noreferrer" className="mkt-btn text-sm px-12 py-5">
+              <MessageCircle className="w-5 h-5" />
+              <span>Join the Community on Discord</span>
+              <ArrowRight className="w-5 h-5" />
+            </a>
+          ) : (
+            <button type="button" disabled aria-disabled="true" title="Coming soon" className="mkt-btn text-sm px-12 py-5 opacity-50 cursor-not-allowed">
+              <MessageCircle className="w-5 h-5" />
+              <span>Join the Community on Discord</span>
+              <ArrowRight className="w-5 h-5" />
+            </button>
+          )}
         </motion.div>
       </section>
     </div>

@@ -14,6 +14,7 @@ export default function ComingSoon({ title, subtitle }: { title: string; subtitl
   const router = useRouter();
   const { settings } = useSettings();
   const discordUrl = settings?.discordUrl || settings?.social_discord || '#';
+  const discordReady = Boolean(discordUrl) && discordUrl !== '#';
 
   return (
     <div className="mkt relative overflow-hidden bg-parchment min-h-[calc(100vh-80px)] flex items-center">
@@ -37,10 +38,17 @@ export default function ComingSoon({ title, subtitle }: { title: string; subtitl
         </h1>
         <p className="font-sans text-ink/70 text-lg leading-relaxed mb-12">{subtitle}</p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <a href={discordUrl} target={discordUrl.startsWith('http') ? '_blank' : undefined} rel="noopener noreferrer" className="mkt-btn">
-            <MessageCircle className="w-4 h-4" />
-            <span>Join the Community on Discord</span>
-          </a>
+          {discordReady ? (
+            <a href={discordUrl} target={discordUrl.startsWith('http') ? '_blank' : undefined} rel="noopener noreferrer" className="mkt-btn">
+              <MessageCircle className="w-4 h-4" />
+              <span>Join the Community on Discord</span>
+            </a>
+          ) : (
+            <button type="button" disabled aria-disabled="true" title="Coming soon" className="mkt-btn opacity-50 cursor-not-allowed">
+              <MessageCircle className="w-4 h-4" />
+              <span>Join the Community on Discord</span>
+            </button>
+          )}
           <button type="button" onClick={() => router.push('/')} className="mkt-btn-ghost">
             <ArrowLeft className="w-4 h-4" />
             <span>Back home</span>

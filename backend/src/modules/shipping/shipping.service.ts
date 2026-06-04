@@ -36,9 +36,11 @@ const DEFAULT_PAGE_LIMIT = 50;
 const MAX_PAGE_LIMIT = 200;
 
 /**
- * Bounds for an untrusted courier-supplied event timestamp (see `toDate`). A
- * delivery instant far in the past would retroactively open the 7-day returns
- * window; far in the future would close it early. Out-of-range values clamp to now.
+ * Bounds for an untrusted courier-supplied event timestamp (see `parseEventTime`).
+ * A delivery instant far in the past would retroactively open the 7-day returns
+ * window; far in the future would close it early. An out-of-range value is NOT
+ * trusted as a business time: it is rejected (deliveredAt left untouched) and only
+ * a display-only `now()` is used for the timeline, never to stamp deliveredAt.
  */
 const MAX_EVENT_FUTURE_MS = 5 * 60 * 1000; // 5 minutes (clock skew tolerance)
 const MAX_EVENT_PAST_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -201,9 +203,22 @@ export class ShippingService {
         labelUrl = result.labelUrl;
         courier = provider.courier;
       } catch (e) {
+        // CRITICAL: only a known "not configured / disabled / gated" error is safe
+        // to swallow and fall back to manual. ANY other failure (timeout, 5xx,
+        // network reset) may have happened AFTER the courier actually minted a
+        // shipment/AWB on its side — silently re-shipping manually then duplicates
+        // the consignment. So for unknown provider errors we RETHROW: the admin
+        // sees a real failure and can reconcile, rather than the platform
+        // double-shipping. Gated errors carry the COURIER_NOT_CONFIGURED marker.
+        if (!ShippingService.isCourierNotConfiguredError(e)) {
+          this.logger.error(
+            `Courier provider createShipment failed for order ${order.orderNumber} with a non-gated error: ${(e as Error)?.message}; NOT falling back to manual to avoid a duplicate shipment`,
+          );
+          throw e;
+        }
         // Gated/unconfigured provider → fall back to manual (admin AWB required).
         this.logger.warn(
-          `Courier provider createShipment failed for order ${order.orderNumber}: ${(e as Error)?.message}; falling back to manual`,
+          `Courier provider not configured for order ${order.orderNumber}: ${(e as Error)?.message}; falling back to manual`,
         );
       }
     }
@@ -439,8 +454,10 @@ export class ShippingService {
    *  - advances Shipment.status to the highest-ranked event seen (never regress)
    *    and always stamps lastSyncedAt (so the cron's staleness filter advances
    *    even on a poll that returned only duplicates / nothing)
-   *  - on a freshly-seen DELIVERED event, advances the order + stamps
-   *    Order.deliveredAt (opens the 7-day returns window)
+   *  - on a freshly-seen DELIVERED event, advances the order and stamps
+   *    Order.deliveredAt (opens the 7-day returns window) — but ONLY from a
+   *    trusted, in-range courier delivery time; an out-of-range timestamp advances
+   *    the status without re-dating deliveredAt (see `parseEventTime`)
    */
   private async ingestNormalizedEvents(
     shipment: { id: string; orderId: string; status: ShipmentStatus },
@@ -450,6 +467,10 @@ export class ShippingService {
     let highest = STATUS_RANK[shipment.status];
     let highestStatus = shipment.status;
     let sawDelivered = false;
+    // The delivery instant is taken ONLY from DELIVERED events whose courier
+    // timestamp was trusted (in range). An out-of-range/invalid delivery time is
+    // ignored for the business `deliveredAt` so a backlog replay can never
+    // re-date a delivery to now() and reopen the 7-day returns window.
     let latestDeliveredAt: Date | null = null;
 
     for (const ev of events) {
@@ -461,24 +482,34 @@ export class ShippingService {
       }
       if (ev.mappedStatus === ShipmentStatus.DELIVERED) {
         sawDelivered = true;
-        if (!latestDeliveredAt || ev.occurredAt > latestDeliveredAt) {
+        if (
+          ev.occurredAtTrusted &&
+          (!latestDeliveredAt || ev.occurredAt > latestDeliveredAt)
+        ) {
           latestDeliveredAt = ev.occurredAt;
         }
       }
     }
 
     // Advance the shipment status forward-only (never regress), stamp sync time.
+    // Pass deliveredAt ONLY when we have a trusted delivery time; otherwise leave
+    // any existing Shipment.deliveredAt untouched (no silent re-date to now()).
     await this.advanceShipmentStatus(
       shipment.id,
       highestStatus,
-      sawDelivered ? (latestDeliveredAt ?? new Date()) : undefined,
+      latestDeliveredAt ?? undefined,
     );
 
     // On DELIVERED: advance the order + stamp deliveredAt (opens returns window).
+    // When no trusted delivery time exists we still advance the order to DELIVERED
+    // but do NOT pass a fabricated deliveredAt — the order/shipment keep whatever
+    // deliveredAt they already hold (the order-level transition itself only stamps
+    // when currently null), so the returns window is neither reopened nor anchored
+    // to a wrong instant.
     if (sawDelivered) {
       await this.markOrderDelivered(
         shipment.orderId,
-        latestDeliveredAt ?? new Date(),
+        latestDeliveredAt ?? undefined,
       ).catch((e) =>
         this.logger.error(
           `Failed to mark order ${shipment.orderId} delivered: ${(e as Error)?.message}`,
@@ -604,7 +635,8 @@ export class ShippingService {
       const codeStr = String(ev.code ?? ev.status ?? '').trim();
       if (!statusStr && !codeStr) continue;
 
-      const occurredAt = this.toDate(ev.occurredAt);
+      const { date: occurredAt, trusted: occurredAtTrusted } =
+        this.parseEventTime(ev.occurredAt);
       const mappedStatus = ShippingService.mapStatus(`${statusStr} ${codeStr}`);
       const courierEventId =
         ev.courierEventId !== undefined &&
@@ -627,6 +659,7 @@ export class ShippingService {
             ? String(ev.location).slice(0, COURIER_EVENT_LOCATION_MAX)
             : undefined,
         occurredAt,
+        occurredAtTrusted,
         raw: ev.raw ?? ev,
       });
     }
@@ -691,6 +724,16 @@ export class ShippingService {
     orderId: string,
     viewer: { customerId?: string; guestOrderId?: string },
   ) {
+    // Fail CLOSED before touching the DB: a viewer with NEITHER a customerId nor a
+    // guestOrderId has no identity to scope ownership against. Both checks below
+    // are conditional (`if (viewer.customerId ...)`), so an empty viewer would
+    // skip them and leak ANY order's tracking. Reject up front instead.
+    if (!viewer.customerId && !viewer.guestOrderId) {
+      throw new ForbiddenException(
+        'Authentication required to view order tracking',
+      );
+    }
+
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       select: {
@@ -761,7 +804,7 @@ export class ShippingService {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`shipment_status_${shipmentId}`}))`;
       const current = await tx.shipment.findUnique({
         where: { id: shipmentId },
-        select: { status: true },
+        select: { status: true, deliveredAt: true },
       });
       if (!current) return;
 
@@ -770,7 +813,15 @@ export class ShippingService {
       if (STATUS_RANK[toStatus] > STATUS_RANK[current.status]) {
         data.status = toStatus;
       }
-      if (deliveredAt && STATUS_RANK[toStatus] >= STATUS_RANK.DELIVERED) {
+      // Stamp deliveredAt exactly once, and ONLY from a trusted delivery time the
+      // caller supplied. Never overwrite an existing stamp (a backlog replay /
+      // duplicate DELIVERED must not re-date the delivery and reopen the returns
+      // window); an absent (out-of-range) time leaves the field untouched.
+      if (
+        deliveredAt &&
+        STATUS_RANK[toStatus] >= STATUS_RANK.DELIVERED &&
+        current.deliveredAt === null
+      ) {
         data.deliveredAt = deliveredAt;
       }
       await tx.shipment.update({ where: { id: shipmentId }, data });
@@ -792,7 +843,7 @@ export class ShippingService {
    */
   private async markOrderDelivered(
     orderId: string,
-    deliveredAt: Date,
+    deliveredAt?: Date,
   ): Promise<void> {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
@@ -803,11 +854,20 @@ export class ShippingService {
     // Only SHIPPED → DELIVERED is a legal hop. If already DELIVERED, a parallel
     // webhook won the race; nothing to do (deliveredAt was stamped by that call).
     if (order.status === OrderStatus.SHIPPED) {
+      // deliveredAt is supplied ONLY when the courier reported a trusted, in-range
+      // delivery time. When it is absent (out-of-range/invalid courier timestamp)
+      // we still advance the order to DELIVERED but pass no deliveredAt, so
+      // transitionStatus leaves Order.deliveredAt as-is rather than anchoring the
+      // returns window to a fabricated now(). (transitionStatus already only
+      // stamps when delivering AND deliveredAt is currently null.)
+      const note = deliveredAt
+        ? `Delivery confirmed by courier at ${deliveredAt.toISOString()}`
+        : `Delivery confirmed by courier (no trusted timestamp; deliveredAt left untouched)`;
       await this.orders.transitionStatus(
         orderId,
         OrderStatus.DELIVERED,
         { id: 'SYSTEM', role: 'SYSTEM' },
-        `Delivery confirmed by courier at ${deliveredAt.toISOString()}`,
+        note,
         { deliveredAt },
       );
     }
@@ -872,7 +932,8 @@ export class ShippingService {
       const codeStr = String(raw.code ?? raw.status ?? '').trim();
       if (!statusStr && !codeStr) continue; // empty event — skip
 
-      const occurredAt = this.toDate(raw.occurredAt);
+      const { date: occurredAt, trusted: occurredAtTrusted } =
+        this.parseEventTime(raw.occurredAt);
       const mappedStatus = ShippingService.mapStatus(`${statusStr} ${codeStr}`);
       // Bound the courier-supplied id BEFORE it is used as a unique key. A courier
       // could otherwise send a multi-megabyte id and bloat the index / row.
@@ -899,6 +960,7 @@ export class ShippingService {
             ? String(raw.location).slice(0, COURIER_EVENT_LOCATION_MAX)
             : undefined,
         occurredAt,
+        occurredAtTrusted,
         raw,
       });
     }
@@ -1012,6 +1074,21 @@ export class ShippingService {
 
   // ── pure static helpers (unit-testable) ──────────────────────────────────
 
+  /**
+   * Is this a known "courier not configured / disabled / gated" error — the ONLY
+   * provider failure class it is safe to swallow and fall back to manual shipping
+   * for? Gated providers throw a `ServiceUnavailableException` whose message
+   * carries the `COURIER_NOT_CONFIGURED:` marker (see ShiprocketCourierProvider).
+   * Everything else (timeout, 5xx, network reset) might have created a shipment on
+   * the courier side already, so the caller must rethrow rather than double-ship.
+   */
+  private static isCourierNotConfiguredError(e: unknown): boolean {
+    const message = (e as { message?: unknown })?.message;
+    return (
+      typeof message === 'string' && message.includes('COURIER_NOT_CONFIGURED')
+    );
+  }
+
   /** Constant-time HMAC-SHA256 verification over the raw body. */
   private static verifyHmac(
     rawBody: Buffer,
@@ -1067,40 +1144,50 @@ export class ShippingService {
   }
 
   /**
-   * Coerce a courier-supplied timestamp into a valid, BOUNDED Date. The courier
-   * payload is untrusted: an arbitrary past `occurredAt` would retroactively open
-   * the 7-day returns window, and a future one would close it prematurely (or
-   * mis-stamp deliveredAt). So after parsing we clamp:
-   *   - reject anything > MAX_EVENT_FUTURE_MS in the future → now
-   *   - reject anything > MAX_EVENT_PAST_MS in the past      → now
-   * Invalid / absent values also fall back to now. Out-of-range values are logged.
+   * Parse a courier-supplied timestamp, distinguishing a TRUSTED business time
+   * from a display-only fallback.
+   *
+   * The courier payload is untrusted. An out-of-range `occurredAt` (far past or
+   * far future) on a DELIVERED event is the dangerous case: it would mis-stamp
+   * `deliveredAt` and so re-anchor / reopen the 7-day returns window — especially
+   * on a BACKLOG REPLAY, where re-dating to `now()` would silently move a long-ago
+   * delivery to today. So we do NOT silently re-date out-of-range values for the
+   * business path:
+   *   - in range (within [now-MAX_EVENT_PAST_MS, now+MAX_EVENT_FUTURE_MS]) →
+   *     `{ date, trusted: true }` — usable to stamp deliveredAt.
+   *   - out of range OR invalid/absent → `{ date: now, trusted: false }` — the
+   *     `now()` here is ONLY a display fallback for the timeline/dedupe id; callers
+   *     MUST NOT use it as a business `deliveredAt`. The rejection is logged.
    */
-  private toDate(value: string | number | Date | undefined): Date {
+  private parseEventTime(value: string | number | Date | undefined): {
+    date: Date;
+    trusted: boolean;
+  } {
     const now = Date.now();
     let d: Date;
     if (value instanceof Date) {
       d = value;
     } else if (value === undefined || value === null) {
-      return new Date(now);
+      return { date: new Date(now), trusted: false };
     } else {
       d = new Date(value);
     }
-    if (Number.isNaN(d.getTime())) return new Date(now);
+    if (Number.isNaN(d.getTime())) return { date: new Date(now), trusted: false };
 
     const delta = d.getTime() - now;
     if (delta > MAX_EVENT_FUTURE_MS) {
       this.logger.warn(
-        `Courier event timestamp ${d.toISOString()} is in the future; clamping to now`,
+        `Courier event timestamp ${d.toISOString()} is in the future; rejecting as a business time (display fallback to now, deliveredAt left untouched)`,
       );
-      return new Date(now);
+      return { date: new Date(now), trusted: false };
     }
     if (-delta > MAX_EVENT_PAST_MS) {
       this.logger.warn(
-        `Courier event timestamp ${d.toISOString()} is too far in the past; clamping to now`,
+        `Courier event timestamp ${d.toISOString()} is too far in the past; rejecting as a business time (display fallback to now, deliveredAt left untouched)`,
       );
-      return new Date(now);
+      return { date: new Date(now), trusted: false };
     }
-    return d;
+    return { date: d, trusted: true };
   }
 
   /**
@@ -1127,6 +1214,13 @@ interface NormalizedEvent {
   courierEventId: string;
   description?: string;
   location?: string;
+  /**
+   * The event time used for the timeline + dedupe id. When `occurredAtTrusted` is
+   * false this is a display-only `now()` fallback (the courier value was
+   * out-of-range/invalid) and MUST NOT be used to stamp a business `deliveredAt`.
+   */
   occurredAt: Date;
+  /** True only when `occurredAt` is a trusted, in-range courier business time. */
+  occurredAtTrusted: boolean;
   raw: unknown;
 }

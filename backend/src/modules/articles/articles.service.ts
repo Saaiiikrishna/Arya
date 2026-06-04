@@ -195,8 +195,16 @@ export class ArticlesService implements OnModuleInit {
   /**
    * Public paginated list of PUBLISHED articles. Filters: tag (array overlap),
    * category (treated as a tag — articles carry tags, not a category column),
-   * and a bounded ILIKE search over title/excerpt. Featured-first then
-   * publishedAt desc.
+   * and a bounded ILIKE search over title/excerpt.
+   *
+   * Ordered PURELY by recency (publishedAt desc, createdAt desc) so pagination is
+   * correct and consistent across pages. Featured-first is NOT applied here: with
+   * a column-less featured flag (it is the reserved FEATURED_TAG, not an orderBy-
+   * able column) the only way to honor it would be an in-memory re-sort of the
+   * already-paginated page slice — which silently reorders just the current page
+   * and breaks featured-first across pages (a featured article on page 3 never
+   * gets promoted). The page-1 "featured strip" is derived by the frontend from
+   * the returned `isFeatured` flag, so the list makes no false cross-page promise.
    */
   async listPublic(query: ArticleListQueryDto) {
     const { page, limit, skip } = this.resolvePaging(query.page, query.limit);
@@ -228,9 +236,11 @@ export class ArticlesService implements OnModuleInit {
     const [rows, total] = await Promise.all([
       this.prisma.article.findMany({
         where,
-        // Featured-first cannot be expressed as a column orderBy (featured is a
-        // reserved tag), so order by recency in SQL and stable-partition
-        // featured to the front in-memory on the page slice.
+        // Pure recency order so pagination is correct and stable across pages.
+        // (Featured cannot be a column orderBy — it is the reserved FEATURED_TAG,
+        // not a column — and an in-memory re-sort would only reorder this page,
+        // breaking featured-first across pages. The frontend derives its page-1
+        // featured strip from the returned `isFeatured` flag instead.)
         orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
         skip,
         take: limit,
@@ -248,10 +258,7 @@ export class ArticlesService implements OnModuleInit {
       this.prisma.article.count({ where }),
     ]);
 
-    const data = rows
-      .map((r) => ArticlesService.toPublicListItem(r))
-      // Featured first, preserving the recency order within each partition.
-      .sort((a, b) => Number(b.isFeatured) - Number(a.isFeatured));
+    const data = rows.map((r) => ArticlesService.toPublicListItem(r));
 
     return {
       data,
@@ -410,13 +417,20 @@ export class ArticlesService implements OnModuleInit {
     const authorName = await this.resolveAuthorName(authorType, authorId);
     const tags = this.normalizeTags(dto.tags);
 
-    // Validate the cover key shape if supplied. The article id does not exist
-    // yet, so only the prefix is checkable here (a cover normally comes from a
-    // confirmed media row attached AFTER create and set via PATCH — that path
-    // gets the stronger ownership check). This still blocks foreign-prefix /
-    // path-traversal keys at submit time.
+    // A cover is NOT accepted at create time. The article id does not exist yet,
+    // so only the generic `articles/{uuid}/` prefix is checkable here — NOT that
+    // the key belongs to a CONFIRMED media row on THIS article. Accepting it now
+    // would let a caller pin a cover to another article's (or a not-yet-owned)
+    // key (cross-article key injection). A cover is therefore set later via the
+    // PATCH update path, which validates the key against this article's own
+    // prefix + a CONFIRMED ArticleMedia IMAGE row it owns. Reject rather than
+    // silently drop so the client learns the correct flow.
     if (dto.coverS3Key !== undefined) {
-      await this.validateCoverS3Key(dto.coverS3Key);
+      throw new BadRequestException({
+        code: 'COVER_NOT_ALLOWED_ON_CREATE',
+        message:
+          'coverS3Key cannot be set at create time; upload the image via the article media flow, then set the cover via PATCH /api/articles/:id',
+      });
     }
 
     return this.insertWithUniqueSlug(dto.title, (slug) =>
@@ -426,7 +440,6 @@ export class ArticlesService implements OnModuleInit {
           title: dto.title,
           body: dto.body as Prisma.InputJsonValue,
           excerpt: dto.excerpt,
-          coverS3Key: dto.coverS3Key,
           authorType,
           authorId,
           authorName,

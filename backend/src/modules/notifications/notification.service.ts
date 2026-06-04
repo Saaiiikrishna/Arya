@@ -46,6 +46,43 @@ export class NotificationService {
   private bn(a: NotifiableApplicant) {
     return String(a.batchNumber ?? '');
   }
+
+  /**
+   * Escape text for safe interpolation into an HTML body. Prevents HTML/email
+   * injection when dynamic fields (names, order/RMA numbers, courier, AWB, URLs)
+   * are placed inside `htmlBody`. Escapes the five HTML-significant characters.
+   */
+  private escapeHtml(value: unknown): string {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  /**
+   * Render a tracking URL as a safe HTML anchor, but ONLY if it parses as an
+   * http(s) URL. Anything else (javascript:, data:, relative, garbage) is
+   * rendered as escaped plain text so it can never become an injection vector.
+   * Returns an empty string when there is no usable value.
+   */
+  private trackingLink(raw: string | null | undefined): string {
+    const value = raw?.trim();
+    if (!value) return '';
+    let parsed: URL | undefined;
+    try {
+      parsed = new URL(value);
+    } catch {
+      parsed = undefined;
+    }
+    if (parsed && (parsed.protocol === 'http:' || parsed.protocol === 'https:')) {
+      const href = this.escapeHtml(parsed.toString());
+      return `<p>Track it here: <a href="${href}">${href}</a></p>`;
+    }
+    // Not a valid http(s) URL: show as escaped plain text, no link.
+    return `<p>Track it here: ${this.escapeHtml(value)}</p>`;
+  }
   private async email1(to: string, slug: string, vars: Record<string, string>, id?: string) {
     try {
       await this.email.sendTemplatedEmail(to, slug, vars, id);
@@ -168,12 +205,19 @@ export class NotificationService {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
+    // Plain-text variants for WhatsApp (no HTML escaping there).
+    const nameText = name;
+    const rmaText = params.rmaNumber;
+    // HTML-escaped variants for the email body.
+    const nameHtml = this.escapeHtml(name);
+    const rmaHtml = this.escapeHtml(params.rmaNumber);
+    const rupeesHtml = this.escapeHtml(rupees);
     if (params.email) {
       try {
         await this.email.sendEmail({
           to: params.email,
           subject: `Your return ${params.rmaNumber} has been refunded`,
-          htmlBody: `<p>Hi ${name},</p><p>We have received your returned item(s) for <strong>${params.rmaNumber}</strong> and processed a refund of <strong>₹${rupees}</strong> to your original payment method. It may take a few business days to reflect.</p><p>Thank you for shopping with Aryavartham.</p>`,
+          htmlBody: `<p>Hi ${nameHtml},</p><p>We have received your returned item(s) for <strong>${rmaHtml}</strong> and processed a refund of <strong>₹${rupeesHtml}</strong> to your original payment method. It may take a few business days to reflect.</p><p>Thank you for shopping with Aryavartham.</p>`,
         });
       } catch (e) {
         this.logger.error(
@@ -189,8 +233,8 @@ export class NotificationService {
         // skipped (sendAnnouncement skips logging when applicantId is falsy).
         await this.whatsapp.sendAnnouncement(
           params.phone,
-          `Return ${params.rmaNumber} refunded`,
-          `Hi ${name}, your return ${params.rmaNumber} has been refunded (₹${rupees}). It may take a few business days to reflect.`,
+          `Return ${rmaText} refunded`,
+          `Hi ${nameText}, your return ${rmaText} has been refunded (₹${rupees}). It may take a few business days to reflect.`,
           undefined as unknown as string,
         );
       } catch (e) {
@@ -219,15 +263,20 @@ export class NotificationService {
   }): Promise<void> {
     const name = params.firstName?.trim() || 'there';
     const courier = params.courier?.trim();
-    const trackLine = params.trackingUrl
-      ? `<p>Track it here: <a href="${params.trackingUrl}">${params.trackingUrl}</a></p>`
-      : '';
+    // HTML-escaped variants for the email body.
+    const nameHtml = this.escapeHtml(name);
+    const orderHtml = this.escapeHtml(params.orderNumber);
+    const courierHtml = courier ? this.escapeHtml(courier) : '';
+    const awbHtml = this.escapeHtml(params.awb);
+    // Tracking URL is only rendered as a link when it parses as http(s);
+    // otherwise it is shown as escaped plain text (or omitted when absent).
+    const trackLine = this.trackingLink(params.trackingUrl);
     if (params.email) {
       try {
         await this.email.sendEmail({
           to: params.email,
           subject: `Your order ${params.orderNumber} has shipped`,
-          htmlBody: `<p>Hi ${name},</p><p>Good news — your order <strong>${params.orderNumber}</strong> is on its way${courier ? ` via <strong>${courier}</strong>` : ''}. Tracking number (AWB): <strong>${params.awb}</strong>.</p>${trackLine}<p>Thank you for shopping with Aryavartham.</p>`,
+          htmlBody: `<p>Hi ${nameHtml},</p><p>Good news — your order <strong>${orderHtml}</strong> is on its way${courierHtml ? ` via <strong>${courierHtml}</strong>` : ''}. Tracking number (AWB): <strong>${awbHtml}</strong>.</p>${trackLine}<p>Thank you for shopping with Aryavartham.</p>`,
         });
       } catch (e) {
         this.logger.error(

@@ -224,16 +224,16 @@
   pointer-events: none;
   z-index: 1;
 }
-.mkt-btn::after { /* moving sheen */
+.mkt-btn::after { /* moving sheen — GPU-composited (transform, not layout) */
   content: '';
   position: absolute;
   top: 0;
-  left: -160%;
+  left: 0;
   width: 60%;
   height: 100%;
   background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.55), transparent);
-  transform: skewX(-20deg);
-  transition: left 0.7s var(--ease-editorial);
+  transform: translateX(-160%) skewX(-20deg);
+  transition: transform 0.7s var(--ease-editorial);
   pointer-events: none;
   z-index: 1;
 }
@@ -243,7 +243,7 @@
   box-shadow: 0 16px 36px -10px rgba(232, 93, 4, 0.72), inset 0 1px 0 rgba(255, 255, 255, 0.48);
   filter: saturate(1.05);
 }
-.mkt-btn:hover::after { left: 160%; }
+.mkt-btn:hover::after { transform: translateX(160%) skewX(-20deg); }
 .mkt-btn:active { transform: translateY(0); }
 
 /* Glass secondary CTA — frosted, rounded, forest text. */
@@ -401,6 +401,8 @@
   .mkt-btn-ghost,
   .mkt-card { transition: none; }
   .mkt-btn::after { transition: none; }
+  /* keep the sheen parked off-canvas; don't sweep it on hover */
+  .mkt-btn:hover::after { transform: translateX(-160%) skewX(-20deg); }
   .mkt-btn:hover,
   .mkt-btn-ghost:hover,
   .mkt-card:hover { transform: none; }

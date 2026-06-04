@@ -29,14 +29,16 @@ interface AdminRequest extends Request {
 
 /**
  * Articles vertical — ADMIN moderation surface (architecture Section 10).
- * All routes are AdminGuard-protected. `decidedByAdminId` is ALWAYS sourced from
- * the verified JWT (req.user.id), never the request body (repo security rule
- * 4ebf502).
+ * Every route is admin-only, so AdminGuard is applied once at the CONTROLLER
+ * level (repo controller-level-guard rule) rather than duplicated per method.
+ * `decidedByAdminId` is ALWAYS sourced from the verified JWT (req.user.id), never
+ * the request body (repo security rule 4ebf502).
  *
  * Author-vs-admin visibility invariant: these endpoints (and ONLY these) expose
  * the richer view metrics (unique IPs, geo, referrers). Authors see only their
  * own viewCount via the author surface.
  */
+@UseGuards(AdminGuard)
 @Controller('api')
 export class ArticlesAdminController {
   constructor(private readonly articles: ArticlesService) {}
@@ -45,14 +47,12 @@ export class ArticlesAdminController {
   // default so the per-route intent is documented and consistent with the
   // author/public controller, which annotates every route).
   @Throttle({ medium: { limit: 60, ttl: 60000 } })
-  @UseGuards(AdminGuard)
   @Get('admin/store/articles')
   list(@Query() query: AdminArticleQueryDto) {
     return this.articles.adminList(query);
   }
 
   @Throttle({ medium: { limit: 60, ttl: 60000 } })
-  @UseGuards(AdminGuard)
   @Get('admin/store/articles/:id')
   get(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.articles.adminGet(id);
@@ -61,7 +61,6 @@ export class ArticlesAdminController {
   // Mutating moderation actions — strict short tier so a brute-forced admin
   // token cannot mass-approve / mass-delete the catalog at the global rate.
   @Throttle({ short: { limit: 10, ttl: 60000 } })
-  @UseGuards(AdminGuard)
   @Post('admin/store/articles/:id/approve')
   approve(
     @Req() req: AdminRequest,
@@ -71,7 +70,6 @@ export class ArticlesAdminController {
   }
 
   @Throttle({ short: { limit: 10, ttl: 60000 } })
-  @UseGuards(AdminGuard)
   @Post('admin/store/articles/:id/reject')
   reject(
     @Req() req: AdminRequest,
@@ -82,7 +80,6 @@ export class ArticlesAdminController {
   }
 
   @Throttle({ short: { limit: 10, ttl: 60000 } })
-  @UseGuards(AdminGuard)
   @Patch('admin/store/articles/:id')
   update(
     @Req() req: AdminRequest,
@@ -93,7 +90,6 @@ export class ArticlesAdminController {
   }
 
   @Throttle({ short: { limit: 10, ttl: 60000 } })
-  @UseGuards(AdminGuard)
   @Post('admin/store/articles/:id/restore')
   restore(
     @Req() req: AdminRequest,
@@ -103,7 +99,6 @@ export class ArticlesAdminController {
   }
 
   @Throttle({ short: { limit: 10, ttl: 60000 } })
-  @UseGuards(AdminGuard)
   @Delete('admin/store/articles/:id')
   remove(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.articles.remove(id);
