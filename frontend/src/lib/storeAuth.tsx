@@ -134,6 +134,21 @@ export function StoreAuthProvider({ children }: { children: ReactNode }) {
     void hydrate();
   }, [hydrate]);
 
+  // After a fresh authentication, merge any guest cart that existed before login
+  // into the now-authenticated customer's server-side cart, then drop the guest
+  // token (convertGuestCart clears it on success). Without this, items added as a
+  // guest are silently abandoned on login and the guest token lingers in
+  // localStorage (data-integrity gap). It is best-effort and must NEVER fail the
+  // login: the customer is already authenticated by the time we reach here.
+  const mergeGuestCart = useCallback(async () => {
+    if (!storeApi.getCartToken()) return;
+    try {
+      await storeApi.convertGuestCart();
+    } catch {
+      /* non-fatal — login already succeeded; a failed merge just leaves the guest cart behind */
+    }
+  }, []);
+
   const login = useCallback(
     async (input: StoreLoginInput): Promise<StoreCustomer> => {
       setLoading(true);
@@ -142,6 +157,8 @@ export function StoreAuthProvider({ children }: { children: ReactNode }) {
         // arya_store_refresh), matching how api.login handles the platform pair.
         const res = await storeApi.loginCustomer(input);
         const next = pickCustomer(res) ?? pickCustomer(await storeApi.meCustomer());
+        // Merge the guest cart while the session is live (before returning).
+        await mergeGuestCart();
         setCustomer(next);
         if (!next) throw new Error('Login succeeded but no customer profile was returned');
         return next;
@@ -151,7 +168,7 @@ export function StoreAuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       }
     },
-    [],
+    [mergeGuestCart],
   );
 
   const register = useCallback(
@@ -160,6 +177,7 @@ export function StoreAuthProvider({ children }: { children: ReactNode }) {
       try {
         const res = await storeApi.registerCustomer(input);
         const next = pickCustomer(res) ?? pickCustomer(await storeApi.meCustomer());
+        await mergeGuestCart();
         setCustomer(next);
         if (!next) throw new Error('Registration succeeded but no customer profile was returned');
         return next;
@@ -167,7 +185,7 @@ export function StoreAuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       }
     },
-    [],
+    [mergeGuestCart],
   );
 
   const logout = useCallback(async (): Promise<void> => {

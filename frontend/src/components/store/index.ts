@@ -46,6 +46,9 @@ export type { MediaGalleryProps, GalleryMedia } from './MediaGallery';
 export { default as CodeBlock } from './CodeBlock';
 export type { CodeBlockProps } from './CodeBlock';
 
+export { default as BlockRenderer } from './BlockRenderer';
+export type { BlockRendererProps, ContentBlock, BlockType } from './BlockRenderer';
+
 export { default as CartLineItem } from './CartLineItem';
 export type { CartLineItemProps } from './CartLineItem';
 

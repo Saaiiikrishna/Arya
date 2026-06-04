@@ -305,6 +305,25 @@
   box-shadow: 0 18px 40px -22px rgba(19, 48, 34, 0.5);
 }
 
+/* Premium frosted form input — the SCOPED mkt exception for inputs on public
+   marketing surfaces (checkout / account). Matches the rounding language of
+   mkt-card/mkt-btn so a form sits coherently inside a `.mkt` container. Like the
+   other mkt-* utilities it is the ONLY place an input may have a non-0px radius,
+   and it must NEVER be used in /admin, /hub, /apply, /investors. */
+.mkt-input {
+  border-radius: 12px;
+  border: 1px solid var(--color-hairline);
+  background: rgba(255, 255, 255, 0.7);
+  padding: 0.625rem 1rem;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  color: var(--color-ink);
+  outline: none;
+  transition: border-color 0.2s var(--ease-editorial);
+}
+.mkt-input::placeholder { color: rgba(28, 28, 28, 0.35); }
+.mkt-input:focus { border-color: var(--color-saffron); }
+
 /* Darker glass card for forest sections. */
 .mkt-glass {
   border-radius: 22px;
@@ -327,6 +346,52 @@
   0%, 100% { opacity: 0.45; transform: scale(1); }
   50% { opacity: 0.75; transform: scale(1.08); }
 }
+
+/* Sanitised rich-text body (RICH_TEXT blocks rendered by BlockRenderer). Scoped
+   to the marketing layer; gives author HTML editorial defaults without pulling in
+   a Tailwind typography plugin. Links use forest/terracotta per DESIGN.md (never
+   standard blue). */
+.mkt-prose > * + * { margin-top: 0.85em; }
+.mkt-prose h1,
+.mkt-prose h2,
+.mkt-prose h3,
+.mkt-prose h4 {
+  font-family: var(--font-serif);
+  color: var(--color-forest);
+  line-height: 1.25;
+  font-weight: 600;
+}
+.mkt-prose h2 { font-size: 1.4rem; }
+.mkt-prose h3 { font-size: 1.15rem; }
+.mkt-prose h4 { font-size: 1rem; }
+.mkt-prose p { line-height: 1.7; }
+.mkt-prose ul,
+.mkt-prose ol { padding-left: 1.4em; }
+.mkt-prose ul { list-style: disc; }
+.mkt-prose ol { list-style: decimal; }
+.mkt-prose li { margin-top: 0.35em; }
+.mkt-prose a {
+  color: var(--color-terracotta);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.mkt-prose a:hover { color: var(--color-forest); }
+.mkt-prose strong { font-weight: 700; color: var(--color-forest); }
+.mkt-prose em { font-style: italic; }
+.mkt-prose blockquote {
+  border-left: 2px solid var(--color-saffron, #f4a300);
+  padding-left: 1em;
+  color: rgba(0, 0, 0, 0.6);
+  font-style: italic;
+}
+.mkt-prose code {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.875em;
+  background: rgba(19, 48, 34, 0.06);
+  padding: 0.1em 0.35em;
+  border-radius: 6px;
+}
+.mkt-prose img { max-width: 100%; height: auto; border-radius: 14px; }
 
 /* Accessibility: respect reduced-motion for all marketing motion. */
 @media (prefers-reduced-motion: reduce) {

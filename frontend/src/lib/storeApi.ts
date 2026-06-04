@@ -87,7 +87,18 @@ export interface CheckoutResult {
 /** Cursor/offset list envelope used by paginated store reads. */
 export interface ListResponse<T> {
   data: T[];
-  meta?: { total?: number; page?: number; limit?: number; [k: string]: unknown };
+  /**
+   * Pagination envelope per COMMERCE_ARCHITECTURE §1488: `{page, limit, total,
+   * totalPages}`. `totalPages` is first-class (server-computed) so consumers can
+   * read it without a cast; the open index keeps any extra fields reachable.
+   */
+  meta?: {
+    total?: number;
+    page?: number;
+    limit?: number;
+    totalPages?: number;
+    [k: string]: unknown;
+  };
   [k: string]: unknown;
 }
 
@@ -100,9 +111,23 @@ export interface ProductSummary {
   brand?: string | null;
   /** Lowest available SKU price in INTEGER PAISE (server-computed). */
   priceFrom?: number | null;
+  /** Highest available SKU price in INTEGER PAISE — drives the "From …" range hint. */
+  priceTo?: number | null;
   currency?: string;
   isFeatured?: boolean;
   primaryImageUrl?: string | null;
+  /**
+   * Card thumbnail (a `ProductMedia` per COMMERCE_ARCHITECTURE §2.2) served on the
+   * list payload as a fallback when `primaryImageUrl` is absent.
+   */
+  thumbnail?: { url?: string | null; altText?: string | null; caption?: string | null } | null;
+  /**
+   * Category for the card eyebrow. On the LIST payload this is the denormalised
+   * category NAME string (§2.2); on `ProductDetail` it is the full category object.
+   * The union covers both so a subtype can narrow without an incompatible-override
+   * error. List consumers read it as a string; detail consumers narrow to the object.
+   */
+  category?: string | Record<string, unknown> | null;
   [k: string]: unknown;
 }
 
@@ -116,6 +141,7 @@ export interface ProductDetail extends ProductSummary {
   skus?: Array<Record<string, unknown>>;
   media?: Array<Record<string, unknown>>;
   tabs?: Array<Record<string, unknown>>;
+  /** On the PDP this is the full category object (overrides the list's string form). */
   category?: Record<string, unknown> | null;
   [k: string]: unknown;
 }
