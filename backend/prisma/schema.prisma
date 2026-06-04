@@ -1761,6 +1761,14 @@ enum ArticleAuthorType {
   APPLICANT
 }
 
+// product review moderation lifecycle: reviews land PENDING and only contribute to
+// the denormalized Product.ratingCount/ratingSum aggregate once APPROVED.
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 // NOTE: CustomerRole is NOT added to AdminRole. Customer JWTs carry role="CUSTOMER"
 // minted by a dedicated customer-auth surface, validated by a DEDICATED Passport strategy
 // 'jwt-customer' so they never reach the platform validateUser() / refreshToken() admin
@@ -1785,6 +1793,11 @@ model Product {
   seoTitle         String?       @map("seo_title")
   seoDescription   String?       @map("seo_description") @db.Text
   viewCount        Int           @default(0) @map("view_count") // updated via batched queue job, NOT inline
+  // Denormalized review aggregate so list/detail reads never N+1 over reviews.
+  // avg = ratingSum / ratingCount, computed at read (integer columns avoid float drift).
+  // Updated ATOMICALLY by the reviews service on approve/reject — never recomputed inline.
+  ratingCount      Int           @default(0) @map("rating_count")
+  ratingSum        Int           @default(0) @map("rating_sum")
   publishedAt      DateTime?     @map("published_at")
   createdAt        DateTime      @default(now()) @map("created_at")
   updatedAt        DateTime      @updatedAt @map("updated_at")
@@ -1796,6 +1809,7 @@ model Product {
   diyGuide      DiyGuide?
   bundle        ComponentBundle?
   bomReferences DiyBomItem[]     @relation("BomProductRef")
+  reviews       Review[]
 
   @@index([status])
   @@index([categoryId])
@@ -2175,6 +2189,7 @@ model Customer {
   orders            Order[]
   returns           Return[]
   couponRedemptions CouponRedemption[]
+  reviews           Review[]
 
   // Partial-unique on email for REGISTERED only is enforced in the migration (SQL-only);
   // guests may share NULL email. Coupon per-customer-limit dedupes on REGISTERED identity
@@ -2303,6 +2318,7 @@ model Order {
   returns                Return[]
   invoices               Invoice[]
   couponRedemption       CouponRedemption?
+  reviews                Review[]
 
   @@index([customerId])
   @@index([status])
@@ -2366,6 +2382,38 @@ model OrderEvent {
   @@index([type])
   @@index([createdAt])
   @@map("order_events")
+}
+
+// ─── PRODUCT REVIEWS & RATINGS ───────────────────────────
+
+model Review {
+  id                 String       @id @default(uuid()) @db.Uuid
+  productId          String       @map("product_id") @db.Uuid
+  customerId         String       @map("customer_id") @db.Uuid
+  // Optional verified-purchase linkage; SetNull keeps the review if the order is purged.
+  orderId            String?      @map("order_id") @db.Uuid
+  // 1..5 enforced by a CHECK constraint in the migration (reviews_rating_check).
+  rating             Int
+  title              String?
+  body               String       @db.Text
+  status             ReviewStatus @default(PENDING)
+  isVerifiedPurchase Boolean      @default(false) @map("is_verified_purchase")
+  helpfulCount       Int          @default(0) @map("helpful_count")
+  createdAt          DateTime     @default(now()) @map("created_at")
+  updatedAt          DateTime     @updatedAt @map("updated_at")
+
+  // onDelete Cascade: a product's reviews are deleted with the product.
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  // onDelete Restrict: preserve review history / aggregate integrity — customers
+  // with reviews can't be hard-deleted out from under the denormalized totals.
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  // onDelete SetNull: verified-purchase linkage survives order deletion.
+  order    Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@unique([productId, customerId]) // one review per customer per product
+  @@index([productId, status])
+  @@index([customerId])
+  @@map("reviews")
 }
 
 // ─── COUPONS, SHIPPING, RETURNS, INVOICING ───────────────

@@ -22,6 +22,9 @@ import {
   Loader2,
   PackageX,
   ShoppingCart,
+  ThumbsUp,
+  BadgeCheck,
+  MessageSquare,
 } from 'lucide-react';
 import Layout from '@/components/Layout';
 import {
@@ -31,10 +34,21 @@ import {
   Tabs,
   BlockRenderer,
   JsonLd,
+  Stars,
+  StarInput,
 } from '@/components/store';
-import type { GalleryMedia, ContentBlock } from '@/components/store';
-import { storeApi, ProductDetail } from '@/lib/storeApi';
+import type {
+  GalleryMedia,
+  ContentBlock,
+} from '@/components/store';
+import {
+  storeApi,
+  ProductDetail,
+  type ProductReview,
+  type ReviewSummary,
+} from '@/lib/storeApi';
 import { ApiError } from '@/lib/api';
+import { useStoreAuth } from '@/lib/storeAuth';
 import { cn } from '@/lib/cn';
 import { str, num } from '../_util';
 
@@ -140,6 +154,21 @@ function buildProductJsonLd(
     '@type': 'Product',
     name: product.name,
   };
+
+  // Aggregate rating → enables star rich-results in Google search. Emitted only
+  // when there is at least one approved rating; values come straight off the
+  // denormalised ProductDetail fields (Product.ratingSum / Product.ratingCount).
+  const ratingAverage = num(product.ratingAverage);
+  const ratingCount = num(product.ratingCount) ?? 0;
+  if (ratingAverage != null && ratingCount > 0) {
+    data.aggregateRating = {
+      '@type': 'AggregateRating',
+      ratingValue: ratingAverage.toFixed(1),
+      reviewCount: ratingCount,
+      bestRating: '5',
+      worstRating: '1',
+    };
+  }
 
   const desc = str(product.shortDescription) ?? str(product.subtitle) ?? str(product.description);
   if (desc) data.description = desc;
@@ -375,6 +404,12 @@ function ProductView({
   // subtitle — never the full long-form `description` (that belongs in a tab).
   const shortDesc = str(product.shortDescription) ?? str(product.subtitle);
 
+  // Denormalised rating off the ProductDetail (named fields on ProductSummary).
+  // Shown near the title when there is at least one rating.
+  const ratingAverage = num(product.ratingAverage);
+  const ratingCount = num(product.ratingCount) ?? 0;
+  const productId = str(product.id) ?? '';
+
   // Tabs: admin-defined tab/section tree. Each tab.sections → BlockRenderer.
   const tabItems = useMemo(() => {
     const rawTabs = Array.isArray(product.tabs) ? product.tabs : [];
@@ -442,6 +477,21 @@ function ProductView({
           <h1 className="font-serif-display text-4xl font-bold leading-[1.02] tracking-[-0.02em] text-forest md:text-5xl">
             {product.name}
           </h1>
+
+          {ratingCount > 0 && (
+            <a
+              href="#reviews"
+              className="inline-flex items-center gap-2 transition-opacity hover:opacity-80"
+            >
+              <Stars value={ratingAverage ?? 0} size="h-4 w-4" />
+              <span className="font-sans text-sm text-ink/65">
+                {(ratingAverage ?? 0).toFixed(1)}
+                <span className="text-ink/45">
+                  {' '}· {ratingCount} {ratingCount === 1 ? 'review' : 'reviews'}
+                </span>
+              </span>
+            </a>
+          )}
 
           {shortDesc && (
             <p className="font-sans text-base leading-relaxed text-ink/70">
@@ -608,6 +658,529 @@ function ProductView({
           />
         </div>
       )}
+
+      {/* Customer reviews */}
+      {productId && (
+        <div id="reviews" className="mt-14 scroll-mt-24 border-t border-hairline/70 pt-10">
+          <ReviewsSection productId={productId} productName={product.name} />
+        </div>
+      )}
     </motion.div>
+  );
+}
+
+// ── Reviews section ────────────────────────────────────────────────────────────
+
+const REVIEWS_PAGE_SIZE = 5;
+
+type ReviewSort = 'recent' | 'helpful' | 'rating_desc';
+
+const REVIEW_SORTS: { value: ReviewSort; label: string }[] = [
+  { value: 'recent', label: 'Most recent' },
+  { value: 'helpful', label: 'Most helpful' },
+  { value: 'rating_desc', label: 'Highest rated' },
+];
+
+const EMPTY_BREAKDOWN: ReviewSummary['breakdown'] = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+
+function fmtReviewDate(d: string | null | undefined): string {
+  if (!d) return '';
+  const date = new Date(d);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function ReviewsSection({
+  productId,
+  productName,
+}: {
+  productId: string;
+  productName: string;
+}) {
+  const { isAuthed } = useStoreAuth();
+
+  // List + summary state
+  const [reviews, setReviews] = useState<ProductReview[]>([]);
+  const [summary, setSummary] = useState<ReviewSummary>({
+    average: 0,
+    count: 0,
+    breakdown: EMPTY_BREAKDOWN,
+  });
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [sort, setSort] = useState<ReviewSort>('recent');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Helpful-vote optimistic tracking (best-effort idempotency client-side too).
+  const [voted, setVoted] = useState<Record<string, boolean>>({});
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await storeApi.listProductReviews(productId, {
+        page,
+        limit: REVIEWS_PAGE_SIZE,
+        sort,
+      });
+      const data = Array.isArray(res.data) ? res.data : [];
+      setReviews(data);
+      const metaTotal =
+        typeof res.meta?.total === 'number' ? res.meta.total : data.length;
+      const metaPages =
+        typeof res.meta?.totalPages === 'number'
+          ? res.meta.totalPages
+          : Math.max(1, Math.ceil(metaTotal / REVIEWS_PAGE_SIZE));
+      setTotalPages(metaPages);
+      if (res.summary) {
+        setSummary({
+          average: num(res.summary.average) ?? 0,
+          count: num(res.summary.count) ?? 0,
+          breakdown: res.summary.breakdown ?? EMPTY_BREAKDOWN,
+        });
+      }
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : 'We could not load reviews right now. Please try again.',
+      );
+      setReviews([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [productId, page, sort]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const onHelpful = useCallback(
+    async (reviewId: string) => {
+      if (voted[reviewId]) return;
+      // Optimistic bump + lock; reconcile with the server count on success.
+      setVoted((v) => ({ ...v, [reviewId]: true }));
+      setReviews((rows) =>
+        rows.map((r) =>
+          r.id === reviewId ? { ...r, helpfulCount: (r.helpfulCount ?? 0) + 1 } : r,
+        ),
+      );
+      try {
+        const res = await storeApi.markReviewHelpful(reviewId);
+        if (typeof res.helpfulCount === 'number') {
+          setReviews((rows) =>
+            rows.map((r) =>
+              r.id === reviewId ? { ...r, helpfulCount: res.helpfulCount as number } : r,
+            ),
+          );
+        }
+      } catch {
+        // Roll back the optimistic bump on failure; allow a retry.
+        setVoted((v) => ({ ...v, [reviewId]: false }));
+        setReviews((rows) =>
+          rows.map((r) =>
+            r.id === reviewId
+              ? { ...r, helpfulCount: Math.max(0, (r.helpfulCount ?? 1) - 1) }
+              : r,
+          ),
+        );
+      }
+    },
+    [voted],
+  );
+
+  // After a successful submission, jump to the freshest sort so the author sees
+  // the list refresh (their own review stays PENDING and won't appear yet). We do
+  // NOT call load() here: it is a closure over the CURRENT page/sort, so invoking
+  // it now would fire a redundant fetch with the pre-update values (setState is
+  // async/batched). Setting page→1 + sort→'recent' changes the load() identity,
+  // and the useEffect on [load] re-runs the (correct) fetch once React re-renders.
+  const onSubmitted = useCallback(() => {
+    setPage(1);
+    setSort('recent');
+  }, []);
+
+  const breakdown = summary.breakdown ?? EMPTY_BREAKDOWN;
+  const total = summary.count || 0;
+
+  return (
+    <div>
+      <h2 className="font-serif-display text-3xl font-bold tracking-[-0.02em] text-forest">
+        Customer reviews
+      </h2>
+
+      <div className="mt-8 grid grid-cols-1 gap-10 lg:grid-cols-[20rem_1fr]">
+        {/* ── Summary + write-a-review ──────────────────────────── */}
+        <div className="flex flex-col gap-8">
+          <div className="mkt-card p-6">
+            {total > 0 ? (
+              <>
+                <div className="flex items-end gap-3">
+                  <span className="font-serif-display text-5xl font-bold leading-none text-forest">
+                    {summary.average.toFixed(1)}
+                  </span>
+                  <div className="pb-1">
+                    <Stars value={summary.average} size="h-4 w-4" />
+                    <p className="mt-1 font-sans text-xs text-ink/55">
+                      {total} {total === 1 ? 'review' : 'reviews'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Per-star breakdown bars */}
+                <div className="mt-6 flex flex-col gap-2">
+                  {[5, 4, 3, 2, 1].map((star) => {
+                    const c =
+                      breakdown[star as 5 | 4 | 3 | 2 | 1] ?? 0;
+                    const pct = total > 0 ? (c / total) * 100 : 0;
+                    return (
+                      <div key={star} className="flex items-center gap-2.5">
+                        <span className="w-6 shrink-0 font-sans text-xs tabular-nums text-ink/55">
+                          {star}★
+                        </span>
+                        <div className="h-2 flex-1 overflow-hidden rounded-full bg-parchment-dark/60">
+                          <div
+                            className="h-full rounded-full bg-saffron"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <span className="w-8 shrink-0 text-right font-sans text-xs tabular-nums text-ink/45">
+                          {c}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            ) : (
+              <div className="flex flex-col items-start gap-2">
+                <Stars value={0} size="h-5 w-5" />
+                <p className="font-sans text-sm text-ink/60">
+                  No reviews yet — be the first to share your experience.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Write a review (logged-in customers only) */}
+          {isAuthed ? (
+            <WriteReviewForm
+              productId={productId}
+              productName={productName}
+              onSubmitted={onSubmitted}
+            />
+          ) : (
+            <div className="mkt-card flex flex-col gap-3 p-6">
+              <h3 className="font-serif text-lg text-forest">Share your thoughts</h3>
+              <p className="font-sans text-sm text-ink/60">
+                Sign in to your store account to write a review for this product.
+              </p>
+              <Link href="/account" className="mkt-btn-ghost w-full">
+                <span>Sign in to review</span>
+              </Link>
+            </div>
+          )}
+        </div>
+
+        {/* ── Review list ───────────────────────────────────────── */}
+        <div>
+          {/* Sort control */}
+          {total > 0 && (
+            <div className="mb-5 flex items-center justify-end gap-3">
+              <label
+                htmlFor="reviews-sort"
+                className="font-sans text-[10px] font-semibold uppercase tracking-[0.12em] text-ink/50"
+              >
+                Sort
+              </label>
+              <select
+                id="reviews-sort"
+                value={sort}
+                onChange={(e) => {
+                  setSort(e.target.value as ReviewSort);
+                  setPage(1);
+                }}
+                className="rounded-full border border-hairline bg-white/70 px-4 py-2 font-sans text-sm text-forest backdrop-blur focus:border-saffron focus:outline-none focus:ring-2 focus:ring-saffron/30"
+              >
+                {REVIEW_SORTS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {loading ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="h-7 w-7 animate-spin text-saffron" aria-label="Loading reviews" />
+            </div>
+          ) : error ? (
+            <div className="mkt-card flex flex-col items-center gap-3 p-10 text-center">
+              <p className="font-sans text-sm text-ink/70">{error}</p>
+              <button type="button" onClick={() => void load()} className="mkt-btn-ghost">
+                <span>Try again</span>
+              </button>
+            </div>
+          ) : reviews.length === 0 ? (
+            <div className="mkt-card flex flex-col items-center gap-3 p-12 text-center">
+              <MessageSquare className="h-8 w-8 text-ink/25" aria-hidden />
+              <p className="font-sans text-sm text-ink/60">
+                No reviews yet. Yours could be the first.
+              </p>
+            </div>
+          ) : (
+            <ul className="flex flex-col gap-5">
+              {reviews.map((r) => {
+                const author = str(r.authorName) ?? 'Verified customer';
+                const dateLabel = fmtReviewDate(r.createdAt);
+                return (
+                  <li key={r.id} className="mkt-card p-6">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <Stars value={r.rating} size="h-4 w-4" />
+                        {r.isVerifiedPurchase && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-forest/[0.07] px-2.5 py-0.5 font-sans text-[10px] font-semibold uppercase tracking-[0.06em] text-forest">
+                            <BadgeCheck className="h-3.5 w-3.5" />
+                            Verified purchase
+                          </span>
+                        )}
+                      </div>
+                      {dateLabel && (
+                        <span className="font-sans text-[11px] uppercase tracking-[0.06em] text-ink/45">
+                          {dateLabel}
+                        </span>
+                      )}
+                    </div>
+
+                    {str(r.title) && (
+                      <h4 className="mt-3 font-serif text-lg leading-snug text-forest">
+                        {r.title}
+                      </h4>
+                    )}
+                    {str(r.body) && (
+                      <p className="mt-2 whitespace-pre-line font-sans text-sm leading-relaxed text-ink/70">
+                        {r.body}
+                      </p>
+                    )}
+
+                    <div className="mt-4 flex items-center gap-3">
+                      <span className="font-sans text-xs text-ink/55">{author}</span>
+                      <span aria-hidden className="text-ink/25">·</span>
+                      <button
+                        type="button"
+                        onClick={() => void onHelpful(r.id)}
+                        disabled={!!voted[r.id]}
+                        className={cn(
+                          'inline-flex items-center gap-1.5 font-sans text-xs transition-colors',
+                          voted[r.id]
+                            ? 'cursor-default text-saffron-deep'
+                            : 'text-ink/55 hover:text-saffron-deep',
+                        )}
+                      >
+                        <ThumbsUp
+                          className={cn('h-3.5 w-3.5', voted[r.id] && 'fill-saffron-deep')}
+                        />
+                        <span>
+                          Helpful{r.helpfulCount > 0 ? ` (${r.helpfulCount})` : ''}
+                        </span>
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          {/* Pagination (simple prev/next inline to match the mkt buy surface) */}
+          {!loading && !error && totalPages > 1 && (
+            <div className="mt-8 flex items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="mkt-btn-ghost !py-2 !px-4 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <span>Previous</span>
+              </button>
+              <span className="font-sans text-xs uppercase tracking-[0.08em] text-ink/50">
+                Page {page} of {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+                className="mkt-btn-ghost !py-2 !px-4 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <span>Next</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Write-a-review form ────────────────────────────────────────────────────────
+
+function WriteReviewForm({
+  productId,
+  productName,
+  onSubmitted,
+}: {
+  productId: string;
+  productName: string;
+  onSubmitted: () => void;
+}) {
+  const [rating, setRating] = useState(0);
+  const [title, setTitle] = useState('');
+  const [body, setBody] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  const submit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (rating < 1 || rating > 5) {
+        setError('Please choose a star rating from 1 to 5.');
+        return;
+      }
+      // The backend CreateReviewDto requires a non-empty `body`. Guard client-side
+      // so the customer gets a clear, friendly message instead of a raw 400
+      // validation error (and so an empty review never round-trips).
+      const trimmedBody = body.trim();
+      if (!trimmedBody) {
+        setError('Please write a few words about your experience.');
+        return;
+      }
+      setSubmitting(true);
+      setError(null);
+      try {
+        await storeApi.submitReview(productId, {
+          rating,
+          title: title.trim() || undefined,
+          body: trimmedBody,
+        });
+        setDone(true);
+        setRating(0);
+        setTitle('');
+        setBody('');
+        onSubmitted();
+      } catch (err) {
+        setError(
+          err instanceof ApiError
+            ? err.message
+            : 'We could not submit your review. Please try again.',
+        );
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [productId, rating, title, body, onSubmitted],
+  );
+
+  if (done) {
+    return (
+      <div className="mkt-card flex flex-col items-start gap-2 p-6">
+        <div className="inline-flex items-center gap-2 text-forest">
+          <Check className="h-5 w-5" />
+          <h3 className="font-serif text-lg">Thanks for your review</h3>
+        </div>
+        <p className="font-sans text-sm text-ink/60">
+          Your review is pending moderation and will appear once it has been
+          approved.
+        </p>
+        <button
+          type="button"
+          onClick={() => setDone(false)}
+          className="mt-1 font-sans text-xs font-semibold uppercase tracking-[0.08em] text-saffron-deep transition-opacity hover:opacity-80"
+        >
+          Write another
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={submit} className="mkt-card flex flex-col gap-4 p-6">
+      <h3 className="font-serif text-lg text-forest">Write a review</h3>
+      <p className="-mt-2 font-sans text-xs text-ink/55">
+        Share your experience with {productName}.
+      </p>
+
+      <div className="flex flex-col gap-1.5">
+        <span className="font-sans text-[10px] font-semibold uppercase tracking-[0.08em] text-ink/55">
+          Your rating
+        </span>
+        <StarInput value={rating} onChange={setRating} disabled={submitting} />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label
+          htmlFor="review-title"
+          className="font-sans text-[10px] font-semibold uppercase tracking-[0.08em] text-ink/55"
+        >
+          Title <span className="text-ink/35">(optional)</span>
+        </label>
+        <input
+          id="review-title"
+          type="text"
+          value={title}
+          maxLength={120}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Sum it up in a line"
+          disabled={submitting}
+          className="rounded-xl border border-hairline bg-white/70 px-4 py-2.5 font-sans text-sm text-ink backdrop-blur placeholder:text-ink/40 focus:border-saffron focus:outline-none focus:ring-2 focus:ring-saffron/30 disabled:opacity-60"
+        />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label
+          htmlFor="review-body"
+          className="font-sans text-[10px] font-semibold uppercase tracking-[0.08em] text-ink/55"
+        >
+          Review <span className="text-terracotta">*</span>
+        </label>
+        <textarea
+          id="review-body"
+          rows={4}
+          value={body}
+          maxLength={4000}
+          required
+          aria-required="true"
+          onChange={(e) => setBody(e.target.value)}
+          placeholder="What did you like or dislike? How did it perform?"
+          disabled={submitting}
+          className="resize-none rounded-xl border border-hairline bg-white/70 px-4 py-3 font-sans text-sm text-ink backdrop-blur placeholder:text-ink/40 focus:border-saffron focus:outline-none focus:ring-2 focus:ring-saffron/30 disabled:opacity-60"
+        />
+      </div>
+
+      {error && (
+        <p className="font-sans text-xs text-terracotta" role="alert">
+          {error}
+        </p>
+      )}
+
+      <button
+        type="submit"
+        disabled={submitting || rating < 1 || !body.trim()}
+        className={cn(
+          'mkt-btn',
+          (submitting || rating < 1 || !body.trim()) && 'cursor-not-allowed opacity-60',
+        )}
+      >
+        {submitting ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>Submitting…</span>
+          </>
+        ) : (
+          <span>Submit review</span>
+        )}
+      </button>
+    </form>
   );
 }

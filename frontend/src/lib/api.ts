@@ -1976,6 +1976,36 @@ class ApiClient {
   async adminDeleteArticle(id: string) {
     return this.request<any>(`/admin/store/articles/${id}`, { method: 'DELETE' });
   }
+
+  // ─── Store Admin: Reviews moderation ──────────────────────────────────────
+  //
+  // GET  /admin/store/reviews?status=&page=&limit= (AdminGuard)
+  // PATCH /admin/store/reviews/:id  { status: 'APPROVED' | 'REJECTED' }
+  // On approve the backend adds the rating to Product.ratingSum/ratingCount under
+  // an advisory lock + CAS (idempotent); on un-approve it subtracts. The actor is
+  // pinned server-side from the JWT — never sent in the body.
+
+  async adminListReviews(params: {
+    status?: string;
+    page?: number;
+    limit?: number;
+  } = {}) {
+    const qs = new URLSearchParams(
+      Object.entries(params)
+        .filter(([, v]) => v !== undefined && v !== null && v !== '')
+        .map(([k, v]) => [k, String(v)]),
+    ).toString();
+    return this.request<{ data: any[]; meta: any }>(
+      `/admin/store/reviews${qs ? `?${qs}` : ''}`,
+    );
+  }
+
+  async adminModerateReview(id: string, status: 'APPROVED' | 'REJECTED') {
+    return this.request<any>(`/admin/store/reviews/${id}`, {
+      method: 'PATCH',
+      body: { status },
+    });
+  }
 }
 
 export const api = new ApiClient();

@@ -1,40 +1,25 @@
-'use client';
-
-import { useEffect } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
-import { useAuth } from '@/lib/auth';
-
-const ADMIN_ROLES = ['ADMIN', 'SUPER_ADMIN', 'MODERATOR'];
+import type { Metadata } from 'next';
+import AdminGuard from './AdminGuard';
 
 /**
- * Client-side guard for the entire /admin/* tree (defense-in-depth — the
- * backend already rejects unauthorized API calls, but this stops the admin UI
- * from rendering for applicants/anonymous users). The /admin/login page is
- * exempt so unauthenticated admins can sign in.
+ * Admin subtree layout (SERVER component).
+ *
+ * Defence-in-depth `noindex, nofollow` for the entire /admin/* tree: robots.ts
+ * disallows /admin at the robots.txt level, but a crawler that ignores robots.txt
+ * (common for non-Google bots) could otherwise index any admin route reached via
+ * the SSR HTML. Emitting `<meta name="robots" content="noindex, nofollow">` from
+ * this server layout closes that gap at the per-page level. A `'use client'`
+ * layout cannot export `metadata`, so the actual client-side auth guard lives in
+ * the nested `<AdminGuard>` client component (unchanged behaviour).
  */
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, role, loading } = useAuth();
-  const router = useRouter();
-  const pathname = usePathname();
-  const isLoginPage = pathname === '/admin/login';
-  const allowed = isAuthenticated && ADMIN_ROLES.includes(role || '');
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 
-  useEffect(() => {
-    if (loading || isLoginPage) return;
-    if (!allowed) router.replace('/admin/login');
-  }, [loading, isLoginPage, allowed, router]);
-
-  if (isLoginPage) return <>{children}</>;
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-parchment">
-        <div className="w-8 h-8 border-2 border-forest border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
-
-  if (!allowed) return null; // redirecting to /admin/login
-
-  return <>{children}</>;
+export default function AdminLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return <AdminGuard>{children}</AdminGuard>;
 }

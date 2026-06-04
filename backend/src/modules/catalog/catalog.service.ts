@@ -37,6 +37,7 @@ import {
   MEDIA_MAX_BYTES,
 } from './dto/media.dto';
 import { rupeesToPaise, optionalRupeesToPaise } from './dto/money';
+import { ratingAverage } from '../../shared/rating.utils';
 
 /** Max slug-collision retries before surfacing a 409 SLUG_CONFLICT. */
 const SLUG_MAX_ATTEMPTS = 10;
@@ -322,14 +323,6 @@ export class CatalogService {
       where.isFeatured = true;
     }
 
-    if (query.search) {
-      where.OR = [
-        { name: { contains: query.search, mode: 'insensitive' } },
-        { subtitle: { contains: query.search, mode: 'insensitive' } },
-        { brand: { contains: query.search, mode: 'insensitive' } },
-      ];
-    }
-
     // Price filter is applied against the SKU effective price; we constrain on
     // the related SKU rows so a product with at least one in-range SKU matches.
     if (query.minPrice !== undefined || query.maxPrice !== undefined) {
@@ -341,6 +334,20 @@ export class CatalogService {
       where.skus = { some: { isActive: true, basePrice: priceCond } };
     }
 
+    // ── FULL-TEXT SEARCH branch ──────────────────────────────
+    // With a search term, relevance-rank against the products.search_vector
+    // tsvector (a Postgres GENERATED column + GIN index that is NOT modeled in
+    // Prisma) via the approved $queryRaw idiom: websearch_to_tsquery + ts_rank.
+    // The raw query resolves the page of product ids (in rank order) AND the
+    // total; we then hydrate those ids with the normal Prisma include so the
+    // response shape, thumbnail presigning, and price/rating projection all
+    // stay identical to the curated path. With NO term, the curated Prisma
+    // ordering below is preserved unchanged.
+    const term = query.search?.trim();
+    if (term) {
+      return this.listPublicProductsByFts(where, term, page, limit, skip);
+    }
+
     const orderBy = this.buildProductOrderBy(query.sort);
 
     const [rows, total] = await Promise.all([
@@ -349,28 +356,195 @@ export class CatalogService {
         orderBy,
         skip,
         take: limit,
-        include: {
-          // Primary image only: first CONFIRMED IMAGE by sortOrder. A presigned
-          // READ url is resolved per row below (batched). VIDEO media never act
-          // as the list thumbnail.
-          media: {
-            where: { status: 'CONFIRMED', type: ProductMediaType.IMAGE },
-            orderBy: { sortOrder: 'asc' },
-            take: 1,
-          },
-          skus: {
-            where: { isActive: true },
-            select: { basePrice: true, salePrice: true, currency: true },
-          },
-        },
+        include: this.publicListInclude(),
       }),
       this.prisma.product.count({ where }),
     ]);
 
+    const data = await this.toPublicListItems(rows);
+
+    return {
+      data,
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
+  /**
+   * FULL-TEXT SEARCH path for {@link listPublicProducts}. Ranks the ACTIVE,
+   * non-DIGITAL catalog (further narrowed by the same category/tag/featured/
+   * price filters already encoded in `where`) against `products.search_vector`
+   * using `websearch_to_tsquery('english', $term)` and orders by
+   * `ts_rank(search_vector, query) DESC`. Returns the paginated product ids +
+   * the total match count, then re-loads those ids with the standard public
+   * include and re-imposes the rank order in Node (a single hydration query — no
+   * N+1). `search_vector` is a SQL-only GENERATED column, so it MUST be queried
+   * raw; every value is a bound parameter (`${}`), never interpolated, so the
+   * query is injection-safe. The category/tag/price predicates are mirrored from
+   * the Prisma `where` so search results obey the exact same visibility +
+   * filtering rules as the curated listing.
+   */
+  private async listPublicProductsByFts(
+    where: Prisma.ProductWhereInput,
+    term: string,
+    page: number,
+    limit: number,
+    skip: number,
+  ) {
+    // Mirror the Prisma `where` filters as raw SQL predicate fragments. Each
+    // bound via ${} (never string-interpolated) so the query stays injection-safe.
+    const filters: Prisma.Sql[] = [
+      Prisma.sql`p.status = ${ProductStatus.ACTIVE}::"ProductStatus"`,
+      Prisma.sql`p.type <> 'DIGITAL'::"ProductType"`,
+    ];
+
+    // Category slug already resolved to its denormalized name (or the sentinel
+    // for an unknown slug) in the caller's `where.category`.
+    if (typeof where.category === 'string') {
+      filters.push(Prisma.sql`p.category = ${where.category}`);
+    }
+
+    // Tag filter → array membership against the text[] tags column. Written as
+    // the idiomatic containment form (`tags @> ARRAY[$1]::text[]`) so the bound
+    // parameter ($1) is visually unambiguous — equivalent to, and clearer than,
+    // the `$1 = ANY(p.tags)` left-hand-bind form. Still fully parameterized
+    // (injection-safe) and GIN-index friendly.
+    const tagHas = (where.tags as Prisma.StringNullableListFilter | undefined)
+      ?.has;
+    if (typeof tagHas === 'string') {
+      filters.push(Prisma.sql`p.tags @> ARRAY[${tagHas}]::text[]`);
+    }
+
+    if (where.isFeatured === true) {
+      filters.push(Prisma.sql`p.is_featured = true`);
+    }
+
+    // Price filter → EXISTS an active SKU whose basePrice is in range (mirrors
+    // the relational `skus.some({ isActive, basePrice })` predicate the caller
+    // encoded in `where.skus`). The caller always sets `basePrice` as an
+    // `IntFilter` object ({ gte?, lte? }) — see listPublicProducts — but Prisma
+    // also permits a bare-number equality shorthand, so both shapes are narrowed
+    // here without an unsafe `as`-through-`any` chain. The `skus` table name
+    // matches the Sku model's `@@map("skus")`; columns are its snake_case @map
+    // names (product_id / is_active / base_price), so the raw EXISTS join binds
+    // against the right table/columns.
+    const some: Prisma.SkuWhereInput | undefined = where.skus?.some;
+    const basePriceFilter = some?.basePrice;
+    let priceGte: number | undefined;
+    let priceLte: number | undefined;
+    if (typeof basePriceFilter === 'number') {
+      // Bare-number shorthand → equality (gte === lte).
+      priceGte = basePriceFilter;
+      priceLte = basePriceFilter;
+    } else if (basePriceFilter && typeof basePriceFilter === 'object') {
+      // Narrowed to the IntFilter object shape ({ gte?, lte?, ... }); read the
+      // range bounds directly. Only numeric bounds are honored (field-ref inputs
+      // are never produced by this module's caller).
+      if (typeof basePriceFilter.gte === 'number') {
+        priceGte = basePriceFilter.gte;
+      }
+      if (typeof basePriceFilter.lte === 'number') {
+        priceLte = basePriceFilter.lte;
+      }
+    }
+    if (priceGte !== undefined || priceLte !== undefined) {
+      const priceParts: Prisma.Sql[] = [
+        Prisma.sql`s.product_id = p.id`,
+        Prisma.sql`s.is_active = true`,
+      ];
+      if (priceGte !== undefined) {
+        priceParts.push(Prisma.sql`s.base_price >= ${priceGte}`);
+      }
+      if (priceLte !== undefined) {
+        priceParts.push(Prisma.sql`s.base_price <= ${priceLte}`);
+      }
+      filters.push(
+        Prisma.sql`EXISTS (SELECT 1 FROM skus s WHERE ${Prisma.join(
+          priceParts,
+          ' AND ',
+        )})`,
+      );
+    }
+
+    const whereSql = Prisma.join(filters, ' AND ');
+
+    const ranked = await this.prisma.$queryRaw<
+      Array<{ id: string; total: bigint }>
+    >(Prisma.sql`
+      SELECT p.id,
+             COUNT(*) OVER () AS total
+      FROM products p,
+           websearch_to_tsquery('english', ${term}) AS query
+      WHERE ${whereSql}
+        AND p.search_vector @@ query
+      ORDER BY ts_rank(p.search_vector, query) DESC,
+               p.published_at DESC NULLS LAST,
+               p.created_at DESC
+      LIMIT ${limit} OFFSET ${skip}
+    `);
+
+    const total = ranked.length > 0 ? Number(ranked[0].total) : 0;
+    const ids = ranked.map((r) => r.id);
+
+    if (ids.length === 0) {
+      return {
+        data: [] as Awaited<ReturnType<typeof this.toPublicListItems>>,
+        meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+      };
+    }
+
+    // Hydrate the ranked ids with the standard include, then re-impose the FTS
+    // rank order (findMany does not preserve the IN-list order).
+    const rows = await this.prisma.product.findMany({
+      where: { id: { in: ids } },
+      include: this.publicListInclude(),
+    });
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    const ordered = ids
+      .map((id) => byId.get(id))
+      .filter((r): r is (typeof rows)[number] => r !== undefined);
+
+    const data = await this.toPublicListItems(ordered);
+
+    return {
+      data,
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
+  /** Shared Prisma include for the public product listing (thumbnail + prices). */
+  private publicListInclude() {
+    return {
+      // Primary image only: first CONFIRMED IMAGE by sortOrder. A presigned
+      // READ url is resolved per row below (batched). VIDEO media never act
+      // as the list thumbnail.
+      media: {
+        where: { status: 'CONFIRMED' as const, type: ProductMediaType.IMAGE },
+        orderBy: { sortOrder: 'asc' as const },
+        take: 1,
+      },
+      skus: {
+        where: { isActive: true },
+        select: { basePrice: true, salePrice: true, currency: true },
+      },
+    } satisfies Prisma.ProductInclude;
+  }
+
+  /**
+   * Map hydrated public product rows to the listing DTO — preserving the input
+   * order — including the presigned thumbnail (batched), the SKU price range,
+   * and the denormalized review aggregate (ratingAverage + ratingCount).
+   */
+  private async toPublicListItems(
+    rows: Array<
+      Prisma.ProductGetPayload<{
+        include: ReturnType<CatalogService['publicListInclude']>;
+      }>
+    >,
+  ) {
     // Resolve presigned thumbnail URLs for the whole page in parallel.
     const thumbnails = await this.resolveThumbnails(rows);
 
-    const data = rows.map((p, i) => {
+    return rows.map((p, i) => {
       const prices = p.skus.map((s) =>
         this.effectivePrice(s.basePrice, s.salePrice),
       );
@@ -390,14 +564,11 @@ export class CatalogService {
         priceTo: maxPrice,
         currency: p.skus[0]?.currency ?? 'INR',
         viewCount: p.viewCount,
+        ratingAverage: ratingAverage(p.ratingSum, p.ratingCount),
+        ratingCount: p.ratingCount,
         publishedAt: p.publishedAt,
       };
     });
-
-    return {
-      data,
-      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
-    };
   }
 
   /**
@@ -419,18 +590,27 @@ export class CatalogService {
       params.limit,
     );
 
+    const term = params.search?.trim();
+
+    // ── FULL-TEXT SEARCH branch ──────────────────────────────
+    // Same FTS approach as the public listing: when a search term is present,
+    // relevance-rank against products.search_vector via the approved $queryRaw
+    // idiom (websearch_to_tsquery + ts_rank), narrowed by the optional status
+    // filter only (admin spans DRAFT/ACTIVE/ARCHIVED, no type gate). With NO
+    // term, the curated updatedAt/createdAt ordering below is preserved.
+    if (term) {
+      return this.adminListProductsByFts(
+        params.status,
+        term,
+        page,
+        limit,
+        skip,
+      );
+    }
+
     const where: Prisma.ProductWhereInput = {};
     if (params.status) {
       where.status = params.status;
-    }
-    if (params.search) {
-      const term = params.search.trim();
-      if (term) {
-        where.OR = [
-          { name: { contains: term, mode: 'insensitive' } },
-          { slug: { contains: term, mode: 'insensitive' } },
-        ];
-      }
     }
 
     const [rows, total] = await Promise.all([
@@ -439,24 +619,116 @@ export class CatalogService {
         orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
         skip,
         take: limit,
-        include: {
-          media: {
-            where: { status: 'CONFIRMED', type: ProductMediaType.IMAGE },
-            orderBy: { sortOrder: 'asc' },
-            take: 1,
-          },
-          skus: {
-            where: { isActive: true },
-            select: { basePrice: true, salePrice: true, currency: true },
-          },
-        },
+        include: this.adminListInclude(),
       }),
       this.prisma.product.count({ where }),
     ]);
 
+    const data = await this.toAdminListItems(rows);
+
+    return {
+      data,
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
+  /**
+   * FULL-TEXT SEARCH path for {@link adminListProducts}. Mirrors
+   * {@link listPublicProductsByFts} but applies NO status/type gate by default
+   * (the admin manager sees DRAFT/ACTIVE/ARCHIVED) — only the optional `status`
+   * narrows it. Ranks against products.search_vector with websearch_to_tsquery +
+   * ts_rank, returns the paginated ids + total, then hydrates with the admin
+   * include and re-imposes the rank order. All values are bound parameters
+   * (injection-safe). `search_vector` is SQL-only, hence the raw query.
+   */
+  private async adminListProductsByFts(
+    status: ProductStatus | undefined,
+    term: string,
+    page: number,
+    limit: number,
+    skip: number,
+  ) {
+    const filters: Prisma.Sql[] = [];
+    if (status) {
+      filters.push(Prisma.sql`p.status = ${status}::"ProductStatus"`);
+    }
+    // websearch_to_tsquery + GIN match is always part of the predicate.
+    const statusSql =
+      filters.length > 0
+        ? Prisma.sql`${Prisma.join(filters, ' AND ')} AND `
+        : Prisma.empty;
+
+    const ranked = await this.prisma.$queryRaw<
+      Array<{ id: string; total: bigint }>
+    >(Prisma.sql`
+      SELECT p.id,
+             COUNT(*) OVER () AS total
+      FROM products p,
+           websearch_to_tsquery('english', ${term}) AS query
+      WHERE ${statusSql}p.search_vector @@ query
+      ORDER BY ts_rank(p.search_vector, query) DESC,
+               p.updated_at DESC,
+               p.created_at DESC
+      LIMIT ${limit} OFFSET ${skip}
+    `);
+
+    const total = ranked.length > 0 ? Number(ranked[0].total) : 0;
+    const ids = ranked.map((r) => r.id);
+
+    if (ids.length === 0) {
+      return {
+        data: [] as Awaited<ReturnType<typeof this.toAdminListItems>>,
+        meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+      };
+    }
+
+    const rows = await this.prisma.product.findMany({
+      where: { id: { in: ids } },
+      include: this.adminListInclude(),
+    });
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    const ordered = ids
+      .map((id) => byId.get(id))
+      .filter((r): r is (typeof rows)[number] => r !== undefined);
+
+    const data = await this.toAdminListItems(ordered);
+
+    return {
+      data,
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
+  /** Shared Prisma include for the admin product listing (thumbnail + prices). */
+  private adminListInclude() {
+    return {
+      media: {
+        where: { status: 'CONFIRMED' as const, type: ProductMediaType.IMAGE },
+        orderBy: { sortOrder: 'asc' as const },
+        take: 1,
+      },
+      skus: {
+        where: { isActive: true },
+        select: { basePrice: true, salePrice: true, currency: true },
+      },
+    } satisfies Prisma.ProductInclude;
+  }
+
+  /**
+   * Map hydrated admin product rows to the admin listing DTO — preserving input
+   * order — with the presigned thumbnail, SKU price range, and the denormalized
+   * review aggregate (ratingAverage + ratingCount).
+   */
+  private async toAdminListItems(
+    rows: Array<
+      Prisma.ProductGetPayload<{
+        include: ReturnType<CatalogService['adminListInclude']>;
+      }>
+    >,
+  ) {
     const thumbnails = await this.resolveThumbnails(rows);
 
-    const data = rows.map((p, i) => {
+    return rows.map((p, i) => {
       const prices = p.skus.map((s) =>
         this.effectivePrice(s.basePrice, s.salePrice),
       );
@@ -478,15 +750,12 @@ export class CatalogService {
         priceTo: maxPrice,
         currency: p.skus[0]?.currency ?? 'INR',
         viewCount: p.viewCount,
+        ratingAverage: ratingAverage(p.ratingSum, p.ratingCount),
+        ratingCount: p.ratingCount,
         publishedAt: p.publishedAt,
         updatedAt: p.updatedAt,
       };
     });
-
-    return {
-      data,
-      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
-    };
   }
 
   /**
@@ -608,7 +877,16 @@ export class CatalogService {
       };
     });
 
-    return { ...product, skus };
+    // Expose the denormalized review aggregate so the detail page can render
+    // stars without a separate reviews round-trip. ratingSum/ratingCount are
+    // already on the row (scalar columns); ratingCount is surfaced explicitly
+    // alongside the rounded ratingAverage.
+    return {
+      ...product,
+      ratingAverage: ratingAverage(product.ratingSum, product.ratingCount),
+      ratingCount: product.ratingCount,
+      skus,
+    };
   }
 
   // NOTE: the public DIY `/build` view and the admin DIY-guide / bundle upsert

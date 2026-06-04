@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
+import type { IncomingHttpHeaders } from 'http';
 import { ArticleAuthorType, ArticleStatus } from '@prisma/client';
 import { ArticleAuthorGuard } from '../store-auth/guards';
 import { VisitorService } from '../settings/visitor.service';
@@ -231,12 +232,19 @@ export class ArticlesController {
    */
   private trackView(req: Request, path: string): void {
     try {
-      const headers: import('http').IncomingHttpHeaders = req.headers;
+      const headers: IncomingHttpHeaders = req.headers;
       const headerStr = (name: string): string | undefined => {
         const v: string | string[] | undefined = headers[name];
         return Array.isArray(v) ? v[0] : v;
       };
-      const sessionId: string = headerStr('x-session-id') ?? 'anonymous';
+      // x-session-id is a fully client-controlled header. Validate it before it
+      // becomes the analytics session key: a missing, malformed, or oversized
+      // value (e.g. another visitor's known id, or a megabyte-long string to
+      // pollute/bloat the Visitor table) falls back to 'anonymous'. Accept only a
+      // bounded safe charset (UUIDs + opaque alphanumeric session tokens).
+      const sessionId: string = ArticlesController.sanitizeSessionId(
+        headerStr('x-session-id'),
+      );
       void this.visitor
         .trackPageView({
           sessionId,
@@ -249,5 +257,34 @@ export class ArticlesController {
     } catch {
       /* tracking must never affect the response */
     }
+  }
+
+  /** Max accepted length for a client-supplied x-session-id header. */
+  private static readonly SESSION_ID_MAX_LEN = 64;
+
+  /**
+   * Safe-format allowlist for a visitor session id: alphanumerics plus the few
+   * separators real session tokens / UUIDs use. Anything outside this set (or a
+   * value over the length cap) is rejected and treated as anonymous.
+   */
+  private static readonly SESSION_ID_PATTERN = /^[A-Za-z0-9._-]+$/;
+
+  /**
+   * Validate + bound the client-controlled x-session-id header. Returns the
+   * trimmed value only when it is a non-empty, length-capped, safe-charset
+   * string; otherwise 'anonymous'. Prevents a client from injecting an arbitrary
+   * or oversized session key to pollute / inflate visitor analytics.
+   */
+  private static sanitizeSessionId(raw: string | undefined): string {
+    if (typeof raw !== 'string') return 'anonymous';
+    const trimmed = raw.trim();
+    if (
+      !trimmed ||
+      trimmed.length > ArticlesController.SESSION_ID_MAX_LEN ||
+      !ArticlesController.SESSION_ID_PATTERN.test(trimmed)
+    ) {
+      return 'anonymous';
+    }
+    return trimmed;
   }
 }

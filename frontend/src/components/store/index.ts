@@ -27,6 +27,9 @@ export type { StockBadgeProps } from './StockBadge';
 export { default as ProductCard } from './ProductCard';
 export type { ProductCardProps } from './ProductCard';
 
+export { default as Stars, StarInput } from './Stars';
+export type { StarsProps, StarInputProps } from './Stars';
+
 export { default as ArticleCard } from './ArticleCard';
 export type { ArticleCardProps } from './ArticleCard';
 

@@ -7,6 +7,7 @@ import { ImageOff } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import Money from './Money';
 import StockBadge from './StockBadge';
+import Stars from './Stars';
 
 /**
  * Public storefront product card — rounded glass `mkt-card` (DESIGN.md §7 premium
@@ -35,6 +36,10 @@ export interface ProductCardProps {
   eyebrow?: string | null;
   /** One-line subtitle under the name. */
   subtitle?: string | null;
+  /** Average rating (0..5, may be fractional). Stars render only when ratingCount>0. */
+  ratingAverage?: number | null;
+  /** Number of approved ratings. The star row is hidden when this is 0/absent. */
+  ratingCount?: number | null;
   /**
    * Eager-load the thumbnail (sets next/image `priority`, disabling lazy-load).
    * Set this on the first above-the-fold card in a catalog grid — it is frequently
@@ -56,6 +61,8 @@ export default function ProductCard({
   stockQty,
   eyebrow,
   subtitle,
+  ratingAverage,
+  ratingCount,
   priority = false,
   className,
 }: ProductCardProps) {
@@ -117,6 +124,15 @@ export default function ProductCard({
         </h3>
         {subtitle && (
           <p className="font-sans text-xs text-ink/55 line-clamp-1">{subtitle}</p>
+        )}
+
+        {ratingCount != null && ratingCount > 0 && (
+          <Stars
+            value={ratingAverage ?? 0}
+            count={ratingCount}
+            size="h-3.5 w-3.5"
+            className="mt-1"
+          />
         )}
 
         <div className="mt-2 flex items-baseline gap-2">

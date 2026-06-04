@@ -128,6 +128,14 @@ export interface ProductSummary {
    * error. List consumers read it as a string; detail consumers narrow to the object.
    */
   category?: string | Record<string, unknown> | null;
+  /**
+   * Denormalised average rating (0..5, may be fractional) derived server-side from
+   * `Product.ratingSum / Product.ratingCount`. Present on both list and detail
+   * payloads; `null`/absent when the product has no approved ratings yet.
+   */
+  ratingAverage?: number | null;
+  /** Count of APPROVED ratings (the `Product.ratingCount` denormalised column). */
+  ratingCount?: number | null;
   [k: string]: unknown;
 }
 
@@ -233,6 +241,44 @@ export interface ArticleDetail extends ArticleSummary {
   media?: Array<Record<string, unknown>>;
   author?: Record<string, unknown> | null;
   [k: string]: unknown;
+}
+
+// ── Reviews ─────────────────────────────────────────────────────────────────
+// Fixed contract (REVIEW API CONTRACT). All shapes match the backend DTOs the
+// reviews-backend unit emits. `rating` is always an integer 1..5.
+
+/** A single APPROVED, public-facing product review row. */
+export interface ProductReview {
+  id: string;
+  rating: number;
+  title?: string | null;
+  body?: string | null;
+  isVerifiedPurchase: boolean;
+  helpfulCount: number;
+  authorName?: string | null;
+  createdAt: string;
+  [k: string]: unknown;
+}
+
+/** Aggregate rating summary for a product (average + count + per-star breakdown). */
+export interface ReviewSummary {
+  average: number;
+  count: number;
+  breakdown: { 5: number; 4: number; 3: number; 2: number; 1: number };
+  [k: string]: unknown;
+}
+
+/**
+ * The public reviews list envelope: paginated data + the rating summary.
+ *
+ * `summary` is typed OPTIONAL: the backend always emits it, but `ListResponse<T>`
+ * carries an open `[k: string]: unknown` index so TypeScript cannot enforce its
+ * presence at the call site. A required annotation would let careless callers skip
+ * the guard and crash on a malformed/empty response; optional forces the
+ * resilience-minded `if (res.summary)` check that the consumer already performs.
+ */
+export interface ProductReviewListResponse extends ListResponse<ProductReview> {
+  summary?: ReviewSummary;
 }
 
 class StoreApiClient {
@@ -575,6 +621,52 @@ class StoreApiClient {
 
   async getAvailability(skuId: string): Promise<unknown> {
     return this.request(`/store/availability/${encodeURIComponent(skuId)}`, { auth: false });
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  //  REVIEWS (public list + helpful; customer create)
+  // ════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Public list of APPROVED reviews for a product, plus the aggregate `summary`
+   * ({ average, count, breakdown }). `params` supports page / limit / sort
+   * (e.g. 'recent' | 'helpful' | 'rating_desc' — server-validated). Public read,
+   * so no auth header.
+   */
+  async listProductReviews(
+    productId: string,
+    params: Record<string, unknown> = {},
+  ): Promise<ProductReviewListResponse> {
+    return this.request(
+      `/store/products/${encodeURIComponent(productId)}/reviews${this.qs(params)}`,
+      { auth: false },
+    );
+  }
+
+  /**
+   * Submit a review for a product (CustomerJwtGuard — requires a logged-in
+   * customer). Creates a PENDING review awaiting moderation; one per customer per
+   * product (server-enforced @@unique). `isVerifiedPurchase` is set server-side.
+   */
+  async submitReview(
+    productId: string,
+    payload: { rating: number; title?: string; body?: string },
+  ): Promise<ProductReview> {
+    return this.request(`/store/products/${encodeURIComponent(productId)}/reviews`, {
+      method: 'POST',
+      body: payload,
+    });
+  }
+
+  /**
+   * Mark a review as helpful (idempotency is best-effort server-side). Public —
+   * no auth header. Returns the updated helpful count.
+   */
+  async markReviewHelpful(reviewId: string): Promise<{ helpfulCount?: number } & Record<string, unknown>> {
+    return this.request(`/store/reviews/${encodeURIComponent(reviewId)}/helpful`, {
+      method: 'POST',
+      auth: false,
+    });
   }
 
   // ════════════════════════════════════════════════════════════════════════
