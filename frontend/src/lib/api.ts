@@ -38,20 +38,25 @@ class ApiClient {
     // Collapse concurrent callers onto a single in-flight refresh.
     if (this.refreshPromise) return this.refreshPromise;
 
-    const refreshToken = sessionStorage.getItem('arya_refresh');
-    if (!refreshToken) return false;
+    // The refresh token itself lives in an HttpOnly cookie (invisible to JS, so
+    // an XSS payload can't exfiltrate it). We only keep a non-sensitive boolean
+    // hint in sessionStorage to know whether a session may exist — avoids a
+    // pointless refresh call for users who never logged in this tab.
+    if (!sessionStorage.getItem('arya_has_session')) return false;
 
     this.refreshPromise = (async () => {
       try {
-        const data = await this.request<{ accessToken: string; refreshToken: string }>(
+        const data = await this.request<{ accessToken: string }>(
           '/admin/auth/refresh',
-          // skipAuthRetry: a 401 here means the refresh token is dead — don't recurse.
-          { method: 'POST', body: { refreshToken }, skipAuthRetry: true },
+          // No body token — the HttpOnly cookie carries it (credentials:include).
+          // skipAuthRetry: a 401 here means the session is dead — don't recurse.
+          { method: 'POST', body: {}, skipAuthRetry: true },
         );
         this.token = data.accessToken;
-        sessionStorage.setItem('arya_refresh', data.refreshToken);
+        sessionStorage.setItem('arya_has_session', '1');
         return true;
       } catch {
+        sessionStorage.removeItem('arya_has_session');
         return false;
       } finally {
         this.refreshPromise = null;
@@ -85,6 +90,10 @@ class ApiClient {
         headers,
         body: body ? JSON.stringify(body) : undefined,
         signal: controller.signal,
+        // Send the HttpOnly refresh cookie on auth calls (refresh/logout). The
+        // backend CORS runs with an explicit origin allow-list + credentials,
+        // so this is safe cross-origin.
+        credentials: 'include',
       });
     } catch (error: any) {
       clearTimeout(timeoutId);
@@ -120,7 +129,7 @@ class ApiClient {
     this.token = null;
     this.refreshPromise = null;
     if (typeof window !== 'undefined') {
-      sessionStorage.removeItem('arya_refresh');
+      sessionStorage.removeItem('arya_has_session');
       sessionStorage.removeItem('arya_profile');
       localStorage.removeItem('arya_admin');
       // Bounce to the right login for the current area, avoiding redirect loops.
@@ -141,7 +150,9 @@ class ApiClient {
     }>('/admin/auth/login', { method: 'POST', body: { email, password } });
     this.setToken(data.accessToken);
     if (typeof window !== 'undefined') {
-      sessionStorage.setItem('arya_refresh', data.refreshToken);
+      // Refresh token is now an HttpOnly cookie set by the server; only record
+      // the non-sensitive session hint.
+      sessionStorage.setItem('arya_has_session', '1');
     }
     return data;
   }
@@ -154,19 +165,19 @@ class ApiClient {
     }>('/admin/auth/google/callback', { method: 'POST', body: { token } });
     this.setToken(data.accessToken);
     if (typeof window !== 'undefined') {
-      sessionStorage.setItem('arya_refresh', data.refreshToken);
+      sessionStorage.setItem('arya_has_session', '1');
     }
     return data;
   }
 
   logout() {
     if (typeof window !== 'undefined') {
-      const rt = sessionStorage.getItem('arya_refresh');
-      if (rt) {
-        // Fire-and-forget revocation — don't block the local logout on network
-        this.request('/admin/auth/logout', { method: 'POST', body: { refreshToken: rt } }).catch(() => {});
+      // Fire-and-forget revocation — the HttpOnly cookie carries the token
+      // (credentials:include) and the server clears it. Don't block on network.
+      if (sessionStorage.getItem('arya_has_session')) {
+        this.request('/admin/auth/logout', { method: 'POST', body: {} }).catch(() => {});
       }
-      sessionStorage.removeItem('arya_refresh');
+      sessionStorage.removeItem('arya_has_session');
       sessionStorage.removeItem('arya_profile'); // clear cached user/role too
       localStorage.removeItem('arya_admin'); // legacy key cleanup
     }
@@ -199,7 +210,7 @@ class ApiClient {
     }>('/auth/otp/verify', { method: 'POST', body: { email, otp } });
     this.setToken(data.accessToken);
     if (typeof window !== 'undefined') {
-      sessionStorage.setItem('arya_refresh', data.refreshToken);
+      sessionStorage.setItem('arya_has_session', '1');
     }
     return data;
   }

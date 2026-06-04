@@ -1,17 +1,30 @@
-import { Controller, Post, Get, Patch, Param, Body, Req, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Param, Body, Req, Res, UseGuards } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import type { Response } from 'express';
 import { MentorService } from './mentor.service';
 import { AdminGuard } from '../auth/guards/admin.guard';
 import { MentorGuard } from './mentor.guard';
+import { setRefreshCookie } from '../auth/refresh-cookie';
 
 @Controller('api')
 export class MentorController {
-  constructor(private readonly mentorService: MentorService) {}
+  constructor(
+    private readonly mentorService: MentorService,
+    private readonly config: ConfigService,
+  ) {}
 
   // ─── Mentor auth ──────────────────────────────────────────
+  // Refresh/logout reuse the shared /admin/auth/* endpoints (which resolve the
+  // MENTOR role from the token), so login just needs to set the cookie.
 
   @Post('mentor/login')
-  login(@Body() body: { email: string; password: string }) {
-    return this.mentorService.login(body.email, body.password);
+  async login(
+    @Body() body: { email: string; password: string },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.mentorService.login(body.email, body.password);
+    setRefreshCookie(res, result.refreshToken, this.config);
+    return result;
   }
 
   // ─── Mentor portal ────────────────────────────────────────

@@ -3,9 +3,8 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 import * as bcrypt from 'bcrypt';
-import { randomInt, createHash, timingSafeEqual } from 'crypto';
+import { randomInt, createHash, timingSafeEqual, randomUUID } from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
-import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../../prisma';
 import { EmailService } from '../email/email.service';
 import { NotificationService } from '../notifications/notification.service';
@@ -16,12 +15,22 @@ export interface JwtPayload {
   email: string;
   role: string;
   tokenId?: string; // For refresh token rotation tracking
+  jti?: string; // Unique per-token id — guarantees every refresh token is distinct
 }
 
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
   private readonly redis: Redis;
+
+  /**
+   * Grace window (ms) during which presenting an already-rotated token is
+   * treated as a benign concurrent/retried refresh rather than a replay. Keeps
+   * multi-tab/cold-start double-refreshes from spuriously revoking the family,
+   * while a genuine stolen-token replay (arriving well after rotation) still
+   * trips reuse detection.
+   */
+  private static readonly REFRESH_REUSE_LEEWAY_MS = 10_000;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -62,10 +71,7 @@ export class AuthService {
       role: admin.role,
     };
 
-    const refreshToken = this.jwtService.sign(payload, {
-      secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
-      expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRATION') as any,
-    });
+    const refreshToken = this.signRefreshToken(payload);
     await this.storeRefreshToken(admin.id, refreshToken);
 
     return {
@@ -181,7 +187,7 @@ export class AuthService {
           email,
           firstName: payload.given_name || 'Founder',
           lastName: payload.family_name || '',
-          accessToken: uuidv4(),
+          accessToken: randomUUID(),
           batchId: (batch as any).id,
           avatarUrl,
         } as any
@@ -221,9 +227,30 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
-    // Verify the token exists in the DB and hasn't been revoked
+    // Look up the presented token. Three outcomes:
+    //  - not found            → unknown/forged (or pruned) token → reject.
+    //  - found, already revoked → a rotated token is being replayed (RFC 9700):
+    //      the chain is compromised → revoke the whole family and reject. A
+    //      small leeway absorbs benign concurrent/retried rotations (the loser
+    //      of a race presents a just-revoked token) without nuking the family.
+    //  - found, live, unexpired → legitimate → rotate within the family below.
     const stored = await this.prisma.refreshToken.findUnique({ where: { token: this.hashToken(token) } });
-    if (!stored || stored.revokedAt || stored.expiresAt < new Date()) {
+    if (!stored) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+    if (stored.revokedAt) {
+      const revokedAgoMs = Date.now() - stored.revokedAt.getTime();
+      if (revokedAgoMs > AuthService.REFRESH_REUSE_LEEWAY_MS) {
+        await this.revokeFamily(stored.familyId);
+        this.logger.warn(
+          `Refresh token reuse detected for user ${stored.userId}; revoked family ${stored.familyId}`,
+        );
+        throw new UnauthorizedException('Refresh token reuse detected. Please sign in again.');
+      }
+      // Within leeway: benign concurrent rotation — reject softly, family intact.
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+    if (stored.expiresAt < new Date()) {
       throw new UnauthorizedException('Refresh token revoked or expired');
     }
 
@@ -251,14 +278,35 @@ export class AuthService {
       newPayload = { sub: admin.id, email: admin.email, role: admin.role };
     }
 
-    // Rotate atomically: delete old token and create new one in a single transaction
+    // Rotate atomically within the same family. The old token is REVOKED (not
+    // deleted) so a later replay of it is still detectable as reuse. The CAS
+    // (revokedAt: null guard) makes the revoke-then-issue race-safe: if a
+    // concurrent refresh already consumed this token, our updateMany matches 0
+    // rows and we abort the rotation instead of minting a second live sibling.
     const newRefresh = this.signRefreshToken(newPayload);
     const expStr = this.configService.get<string>('JWT_REFRESH_EXPIRATION', '7d');
     const expiresAt = new Date(Date.now() + this.parseExpirationMs(expStr));
-    await this.prisma.$transaction([
-      this.prisma.refreshToken.delete({ where: { id: stored.id } }),
-      this.prisma.refreshToken.create({ data: { userId: newPayload.sub, token: this.hashToken(newRefresh), expiresAt } }),
-    ]);
+    const rotated = await this.prisma.$transaction(async (tx) => {
+      const res = await tx.refreshToken.updateMany({
+        where: { id: stored.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      if (res.count !== 1) return false; // lost the rotation race
+      await tx.refreshToken.create({
+        data: {
+          userId: newPayload.sub,
+          familyId: stored.familyId,
+          token: this.hashToken(newRefresh),
+          expiresAt,
+        },
+      });
+      return true;
+    });
+    if (!rotated) {
+      // A concurrent refresh consumed this exact token first → benign race,
+      // family intact (a genuine replay would arrive past the leeway window).
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
 
     return {
       accessToken: this.jwtService.sign(newPayload),
@@ -266,11 +314,30 @@ export class AuthService {
     };
   }
 
-  async logout(token: string) {
+  /** Revoke every still-live token in a rotation family (reuse/logout). */
+  private async revokeFamily(familyId: string): Promise<void> {
     await this.prisma.refreshToken.updateMany({
-      where: { token: this.hashToken(token) },
+      where: { familyId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
+  }
+
+  async logout(token: string) {
+    // Revoke the whole family so logging out kills every rotated sibling, not
+    // just the token presented. Falls back to a by-hash revoke if the token
+    // isn't on record (already pruned / never stored).
+    const stored = await this.prisma.refreshToken.findUnique({
+      where: { token: this.hashToken(token) },
+      select: { familyId: true },
+    });
+    if (stored) {
+      await this.revokeFamily(stored.familyId);
+    } else {
+      await this.prisma.refreshToken.updateMany({
+        where: { token: this.hashToken(token) },
+        data: { revokedAt: new Date() },
+      });
+    }
     return { success: true };
   }
 
@@ -279,10 +346,16 @@ export class AuthService {
   }
 
   private signRefreshToken(payload: JwtPayload): string {
-    return this.jwtService.sign(payload, {
-      secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
-      expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRATION', '7d') as any,
-    });
+    // A unique jti makes every issued token distinct even when two are signed in
+    // the same second with an identical payload — required now that rotated
+    // tokens are RETAINED (revoked) for reuse detection and `token` is @unique.
+    return this.jwtService.sign(
+      { ...payload, jti: randomUUID() },
+      {
+        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+        expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRATION', '7d') as any,
+      },
+    );
   }
 
   private parseExpirationMs(expStr: string): number {
@@ -294,10 +367,21 @@ export class AuthService {
     return value * 1_000;
   }
 
-  private async storeRefreshToken(userId: string, token: string): Promise<void> {
+  /**
+   * Persist a refresh token (hashed). `familyId` ties a rotation chain together
+   * for RFC 9700 reuse detection — omit it on a fresh login to start a new
+   * family; pass the existing family on rotation.
+   */
+  private async storeRefreshToken(
+    userId: string,
+    token: string,
+    familyId?: string,
+  ): Promise<void> {
     const expStr = this.configService.get<string>('JWT_REFRESH_EXPIRATION', '7d');
     const expiresAt = new Date(Date.now() + this.parseExpirationMs(expStr));
-    await this.prisma.refreshToken.create({ data: { userId, token: this.hashToken(token), expiresAt } });
+    await this.prisma.refreshToken.create({
+      data: { userId, familyId: familyId ?? randomUUID(), token: this.hashToken(token), expiresAt },
+    });
   }
 
   async createAdmin(dto: CreateAdminDto) {
@@ -493,7 +577,7 @@ export class AuthService {
           email: normalizedEmail,
           firstName: normalizedEmail.split('@')[0],
           lastName: '',
-          accessToken: uuidv4(),
+          accessToken: randomUUID(),
           batchId: (batch as any).id,
         } as any,
       });

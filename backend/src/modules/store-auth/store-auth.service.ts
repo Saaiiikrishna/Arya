@@ -13,7 +13,7 @@ import { CartStatus, CustomerType, Prisma } from '@prisma/client';
 import Redis from 'ioredis';
 import axios from 'axios';
 import * as bcrypt from 'bcrypt';
-import { createHash, randomBytes, randomInt, timingSafeEqual } from 'crypto';
+import { createHash, randomBytes, randomInt, randomUUID, timingSafeEqual } from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
 import { PrismaService } from '@/prisma/prisma.service';
 import { EmailService } from '../email/email.service';
@@ -171,8 +171,9 @@ export class StoreAuthService implements OnModuleDestroy {
     );
     const expiresAt = new Date(Date.now() + this.parseExpirationMs(expStr));
     const client = tx ?? this.prisma;
+    // New login → new rotation family (familyId carried forward on rotation).
     await client.refreshToken.create({
-      data: { userId, token: this.hashToken(token), expiresAt },
+      data: { userId, familyId: randomUUID(), token: this.hashToken(token), expiresAt },
     });
   }
 
@@ -860,6 +861,7 @@ export class StoreAuthService implements OnModuleDestroy {
       this.prisma.refreshToken.create({
         data: {
           userId: customer.id,
+          familyId: stored.familyId, // keep the rotation family across the chain
           token: this.hashToken(newRefresh),
           expiresAt,
         },

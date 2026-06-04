@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { createHash } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../prisma';
 import { EmailService } from '../email/email.service';
@@ -274,7 +274,7 @@ export class MentorService {
     const expStr = this.configService.get<string>('JWT_REFRESH_EXPIRATION', '7d');
     const expiresAt = new Date(Date.now() + this.parseExpirationMs(expStr));
     const hashed = createHash('sha256').update(token).digest('hex');
-    await this.prisma.refreshToken.create({ data: { userId, token: hashed, expiresAt } });
+    await this.prisma.refreshToken.create({ data: { userId, familyId: randomUUID(), token: hashed, expiresAt } });
   }
 
   private parseExpirationMs(expStr: string): number {
