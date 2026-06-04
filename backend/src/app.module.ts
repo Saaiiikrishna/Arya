@@ -50,6 +50,8 @@ import { DiyModule } from './modules/diy/diy.module';
 import { PurchasingModule } from './modules/purchasing/purchasing.module';
 import { InvoicingModule } from './modules/invoicing';
 import { OrdersModule } from './modules/orders';
+import { ShippingModule } from './modules/shipping';
+import { ReturnsModule } from './modules/returns';
 
 /**
  * Fail-fast environment validation. Signing secrets must ALWAYS be strong
@@ -79,6 +81,9 @@ function validateEnv(config: Record<string, unknown>): Record<string, unknown> {
     // webhook handler in orders.service fails closed when absent). Enforce at boot
     // so a missing value never silently 500s every Razorpay store callback.
     requirePresent('RAZORPAY_STORE_WEBHOOK_SECRET');
+    // Courier tracking webhook secret — the shipping webhook fails closed without
+    // it, so enforce at boot rather than rejecting every courier callback at runtime.
+    requirePresent('COURIER_WEBHOOK_SECRET');
     requirePresent('WHATSAPP_APP_SECRET');
   }
 
@@ -187,6 +192,8 @@ function validateEnv(config: Record<string, unknown>): Record<string, unknown> {
     PurchasingModule,
     InvoicingModule,
     OrdersModule,
+    ShippingModule,
+    ReturnsModule,
   ],
   providers: [
     // Apply rate limiting globally; per-route @Throttle still tunes the tiers.

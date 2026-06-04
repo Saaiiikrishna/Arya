@@ -147,6 +147,113 @@ export class NotificationService {
     }
   }
 
+  // ─── Store / commerce: customer notifications ──────────────
+
+  /**
+   * Best-effort "your return was refunded" notification to a STORE customer.
+   * Store customers are not applicants (different identity model), so this takes
+   * the raw contact fields directly. Email is sent via SES; WhatsApp is sent only
+   * if a phone is on file. Every channel is non-throwing — a notification failure
+   * never blocks the return settlement.
+   */
+  async customerReturnRefunded(params: {
+    email?: string | null;
+    firstName?: string | null;
+    phone?: string | null;
+    rmaNumber: string;
+    refundAmountPaise: number;
+  }): Promise<void> {
+    const name = params.firstName?.trim() || 'there';
+    const rupees = (params.refundAmountPaise / 100).toLocaleString('en-IN', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+    if (params.email) {
+      try {
+        await this.email.sendEmail({
+          to: params.email,
+          subject: `Your return ${params.rmaNumber} has been refunded`,
+          htmlBody: `<p>Hi ${name},</p><p>We have received your returned item(s) for <strong>${params.rmaNumber}</strong> and processed a refund of <strong>₹${rupees}</strong> to your original payment method. It may take a few business days to reflect.</p><p>Thank you for shopping with Aryavartham.</p>`,
+        });
+      } catch (e) {
+        this.logger.error(
+          `Return-refunded email for ${params.rmaNumber} failed: ${(e as Error)?.message}`,
+        );
+      }
+    }
+    if (params.phone) {
+      try {
+        // No applicantId: store customers are not applicants, and passing a
+        // non-UUID here would corrupt the applicant-scoped notification log. The
+        // WhatsApp send itself still goes out; only the per-applicant log row is
+        // skipped (sendAnnouncement skips logging when applicantId is falsy).
+        await this.whatsapp.sendAnnouncement(
+          params.phone,
+          `Return ${params.rmaNumber} refunded`,
+          `Hi ${name}, your return ${params.rmaNumber} has been refunded (₹${rupees}). It may take a few business days to reflect.`,
+          undefined as unknown as string,
+        );
+      } catch (e) {
+        this.logger.error(
+          `Return-refunded WhatsApp for ${params.rmaNumber} failed: ${(e as Error)?.message}`,
+        );
+      }
+    }
+  }
+
+  /**
+   * Best-effort "your order has shipped" notification to a STORE customer.
+   * Store customers are not applicants (different identity model), so this takes
+   * the raw contact fields directly — mirroring {@link customerReturnRefunded}.
+   * Email is sent via SES; WhatsApp is sent only if a phone is on file. Every
+   * channel is non-throwing — a notification failure never blocks the shipment.
+   */
+  async customerOrderShipped(params: {
+    email?: string | null;
+    firstName?: string | null;
+    phone?: string | null;
+    orderNumber: string;
+    courier?: string | null;
+    awb: string;
+    trackingUrl?: string | null;
+  }): Promise<void> {
+    const name = params.firstName?.trim() || 'there';
+    const courier = params.courier?.trim();
+    const trackLine = params.trackingUrl
+      ? `<p>Track it here: <a href="${params.trackingUrl}">${params.trackingUrl}</a></p>`
+      : '';
+    if (params.email) {
+      try {
+        await this.email.sendEmail({
+          to: params.email,
+          subject: `Your order ${params.orderNumber} has shipped`,
+          htmlBody: `<p>Hi ${name},</p><p>Good news — your order <strong>${params.orderNumber}</strong> is on its way${courier ? ` via <strong>${courier}</strong>` : ''}. Tracking number (AWB): <strong>${params.awb}</strong>.</p>${trackLine}<p>Thank you for shopping with Aryavartham.</p>`,
+        });
+      } catch (e) {
+        this.logger.error(
+          `Order-shipped email for ${params.orderNumber} failed: ${(e as any)?.message}`,
+        );
+      }
+    }
+    if (params.phone) {
+      try {
+        // No applicantId: store customers are not applicants, and passing a
+        // non-UUID here would corrupt the applicant-scoped notification log
+        // (sendAnnouncement skips logging when applicantId is falsy).
+        await this.whatsapp.sendAnnouncement(
+          params.phone,
+          `Order ${params.orderNumber} shipped`,
+          `Hi ${name}, your order ${params.orderNumber} has shipped${courier ? ` via ${courier}` : ''} (AWB ${params.awb}).${params.trackingUrl ? ` Track: ${params.trackingUrl}` : ''}`,
+          undefined as unknown as string,
+        );
+      } catch (e) {
+        this.logger.error(
+          `Order-shipped WhatsApp for ${params.orderNumber} failed: ${(e as any)?.message}`,
+        );
+      }
+    }
+  }
+
   // ─── Admin: notification log + re-send ─────────────────────
 
   /** Paginated notification log (newest first), filterable for the admin UI. */

@@ -786,6 +786,18 @@ export class OrdersService {
    * stock (so a paid-then-cancelled order returns its units). EXPOSED for the
    * fulfillment/returns siblings.
    *
+   * @param opts.deliveredAt when transitioning to DELIVERED, stamps
+   *   Order.deliveredAt ATOMICALLY in the same update (the 7-day returns window
+   *   anchors on this — it must never be mutated in a separate, unlocked write).
+   *   Only applied when toStatus is DELIVERED and deliveredAt is currently null.
+   * @param opts.tx run inside an EXISTING transaction (and its advisory lock)
+   *   instead of opening a new one. Callers that must commit the transition
+   *   atomically with their own writes (e.g. the shipping ship() flow creating a
+   *   Shipment in the same tx) pass their TransactionClient so this stays the
+   *   single source of truth for the allowed hops without nesting $transaction.
+   *   The caller is responsible for taking the `order_status_{orderId}` advisory
+   *   lock before calling with its own tx (ship() takes it).
+   *
    * @throws NotFoundException order does not exist
    * @throws ConflictException illegal transition for the current status
    */
@@ -794,66 +806,115 @@ export class OrdersService {
     toStatus: OrderStatus,
     actor: OrderActor,
     note?: string,
+    opts?: { deliveredAt?: Date; tx?: Prisma.TransactionClient },
   ) {
-    return this.prisma.$transaction(async (tx) => {
-      // Lock the order row for the duration of the transition so two concurrent
-      // admin actions can't both flip from the same source status.
-      //
-      // DEADLOCK INVARIANT (architecture 5.1): on a CANCEL this method calls
-      // releaseOrRestockForCancel, which in turn calls inventory.releaseReservation
-      // / inventory.restock — each acquires a per-(sku,warehouse) advisory lock.
-      // Safety relies ENTIRELY on inventory acquiring those (sku,wh) locks in the
-      // GLOBAL ascending order (skuId, then warehouseId) it documents in §5.1. Do
-      // NOT call transitionStatus from a path that already holds a (sku,wh)
-      // advisory lock in a different order, or a lock-cycle deadlock becomes
-      // possible. The order_status_{orderId} lock here is disjoint from the stock
-      // locks (different key space) so it does not itself participate in any cycle.
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`order_status_${orderId}`}))`;
-
-      const order = await tx.order.findUnique({ where: { id: orderId } });
-      if (!order) throw new NotFoundException('Order not found');
-
-      const from = order.status;
-      if (from === toStatus) {
-        return order; // idempotent no-op
-      }
-      const allowed = ALLOWED_TRANSITIONS[from] ?? [];
-      if (!allowed.includes(toStatus)) {
-        throw new ConflictException(
-          `Illegal order transition ${from} → ${toStatus}`,
-        );
-      }
-
-      // CANCEL from a pre-shipped state: free the held/committed stock.
-      if (
-        toStatus === OrderStatus.CANCELLED &&
-        PRE_SHIPPED_STATUSES.has(from)
-      ) {
-        await this.releaseOrRestockForCancel(tx, order, actor);
-      }
-
-      // paymentStatus is left untouched here: an unpaid cancel stays UNPAID; a
-      // paid cancel keeps PAID until a refund flips it via refundOrder (the
-      // OrderPaymentStatus enum has no CANCELLED/FAILED member).
-      const updated = await tx.order.update({
-        where: { id: orderId },
-        data: { status: toStatus },
-      });
-
-      await tx.orderEvent.create({
-        data: {
-          orderId,
-          type: OrdersService.eventTypeFor(toStatus),
-          fromStatus: from,
-          toStatus,
-          triggeredBy: actor.id,
-          actorRole: actor.role ?? null,
-          note: note ?? null,
+    // When the caller supplies its own transaction we run the core inline (the
+    // caller owns the advisory lock + commit boundary); otherwise we open our own
+    // transaction and take the per-order advisory lock here.
+    if (opts?.tx) {
+      return this.transitionStatusInTx(
+        opts.tx,
+        orderId,
+        toStatus,
+        actor,
+        note,
+        {
+          deliveredAt: opts.deliveredAt,
+          ownLock: false,
         },
-      });
+      );
+    }
+    return this.prisma.$transaction((tx) =>
+      this.transitionStatusInTx(tx, orderId, toStatus, actor, note, {
+        deliveredAt: opts?.deliveredAt,
+        ownLock: true,
+      }),
+    );
+  }
 
-      return updated;
+  /**
+   * Core state-machine transition, executed against a given transaction client.
+   * Shared by the standalone public path (which opens its own tx + lock) and the
+   * tx-forwarding path (ship() supplies its tx + has already taken the lock).
+   */
+  private async transitionStatusInTx(
+    tx: Prisma.TransactionClient,
+    orderId: string,
+    toStatus: OrderStatus,
+    actor: OrderActor,
+    note: string | undefined,
+    opts: { deliveredAt?: Date; ownLock: boolean },
+  ) {
+    // Lock the order row for the duration of the transition so two concurrent
+    // admin actions can't both flip from the same source status. When a caller
+    // forwards its own tx it MUST have already taken this exact lock.
+    //
+    // DEADLOCK INVARIANT (architecture 5.1): on a CANCEL this method calls
+    // releaseOrRestockForCancel, which in turn calls inventory.releaseReservation
+    // / inventory.restock — each acquires a per-(sku,warehouse) advisory lock.
+    // Safety relies ENTIRELY on inventory acquiring those (sku,wh) locks in the
+    // GLOBAL ascending order (skuId, then warehouseId) it documents in §5.1. Do
+    // NOT call transitionStatus from a path that already holds a (sku,wh)
+    // advisory lock in a different order, or a lock-cycle deadlock becomes
+    // possible. The order_status_{orderId} lock here is disjoint from the stock
+    // locks (different key space) so it does not itself participate in any cycle.
+    if (opts.ownLock) {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`order_status_${orderId}`}))`;
+    }
+
+    const order = await tx.order.findUnique({ where: { id: orderId } });
+    if (!order) throw new NotFoundException('Order not found');
+
+    const from = order.status;
+    if (from === toStatus) {
+      return order; // idempotent no-op
+    }
+    const allowed = ALLOWED_TRANSITIONS[from] ?? [];
+    if (!allowed.includes(toStatus)) {
+      throw new ConflictException(
+        `Illegal order transition ${from} → ${toStatus}`,
+      );
+    }
+
+    // CANCEL from a pre-shipped state: free the held/committed stock.
+    if (toStatus === OrderStatus.CANCELLED && PRE_SHIPPED_STATUSES.has(from)) {
+      await this.releaseOrRestockForCancel(tx, order, actor);
+    }
+
+    // paymentStatus is left untouched here: an unpaid cancel stays UNPAID; a
+    // paid cancel keeps PAID until a refund flips it via refundOrder (the
+    // OrderPaymentStatus enum has no CANCELLED/FAILED member).
+    //
+    // deliveredAt is stamped ATOMICALLY with the DELIVERED flip (never in a
+    // separate write): the 7-day returns window anchors on it, so it must be set
+    // exactly once, under this lock. Only set it when delivering and when it is
+    // still null so a re-delivered/late webhook never overwrites the first stamp.
+    const data: Prisma.OrderUpdateInput = { status: toStatus };
+    if (
+      toStatus === OrderStatus.DELIVERED &&
+      opts.deliveredAt &&
+      order.deliveredAt === null
+    ) {
+      data.deliveredAt = opts.deliveredAt;
+    }
+    const updated = await tx.order.update({
+      where: { id: orderId },
+      data,
     });
+
+    await tx.orderEvent.create({
+      data: {
+        orderId,
+        type: OrdersService.eventTypeFor(toStatus),
+        fromStatus: from,
+        toStatus,
+        triggeredBy: actor.id,
+        actorRole: actor.role ?? null,
+        note: note ?? null,
+      },
+    });
+
+    return updated;
   }
 
   /**

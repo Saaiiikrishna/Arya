@@ -2275,6 +2275,7 @@ model Order {
   razorpayPaymentId        String?            @unique @map("razorpay_payment_id")
   placedAt                 DateTime?          @map("placed_at")
   paidAt                   DateTime?          @map("paid_at")
+  deliveredAt              DateTime?          @map("delivered_at") // stamped by the courier-delivery webhook; anchors the 7-day returns window
   createdAt                DateTime           @default(now()) @map("created_at")
   updatedAt                DateTime           @updatedAt @map("updated_at")
 
@@ -2412,21 +2413,22 @@ model CouponRedemption {
 }
 
 model Shipment {
-  id           String         @id @default(uuid()) @db.Uuid
-  orderId      String         @map("order_id") @db.Uuid
-  warehouseId  String?        @map("warehouse_id") @db.Uuid
-  courier      Courier        @default(OTHER)
-  awb          String?        @unique
-  trackingUrl  String?        @map("tracking_url")
-  status       ShipmentStatus @default(PENDING)
-  shippingCost Int            @default(0) @map("shipping_cost") // paise
-  weightGrams  Int?           @map("weight_grams")
-  labelS3Key   String?        @map("label_s3_key")
-  shippedAt    DateTime?      @map("shipped_at")
-  deliveredAt  DateTime?      @map("delivered_at")
-  lastSyncedAt DateTime?      @map("last_synced_at")
-  createdAt    DateTime       @default(now()) @map("created_at")
-  updatedAt    DateTime       @updatedAt @map("updated_at")
+  id             String         @id @default(uuid()) @db.Uuid
+  orderId        String         @map("order_id") @db.Uuid
+  warehouseId    String?        @map("warehouse_id") @db.Uuid
+  shipmentNumber String?        @unique @map("shipment_number") // gapless human ref (AS-000001), nullable for legacy rows
+  courier        Courier        @default(OTHER)
+  awb            String?        @unique
+  trackingUrl    String?        @map("tracking_url")
+  status         ShipmentStatus @default(PENDING)
+  shippingCost   Int            @default(0) @map("shipping_cost") // paise
+  weightGrams    Int?           @map("weight_grams")
+  labelS3Key     String?        @map("label_s3_key")
+  shippedAt      DateTime?      @map("shipped_at")
+  deliveredAt    DateTime?      @map("delivered_at")
+  lastSyncedAt   DateTime?      @map("last_synced_at")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
 
   order     Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
   warehouse Warehouse?      @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
