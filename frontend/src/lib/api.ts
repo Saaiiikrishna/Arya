@@ -175,10 +175,20 @@ class ApiClient {
 
   // OTP Auth
   async sendOtp(email: string) {
-    return this.request<{ success: boolean; message: string; otp?: string }>('/auth/otp/send', {
-      method: 'POST',
-      body: { email },
-    });
+    const res = await this.request<{ success: boolean; message: string; otp?: string }>(
+      '/auth/otp/send',
+      { method: 'POST', body: { email } },
+    );
+    // SECURITY (information disclosure): the backend may echo the OTP in the
+    // response body for a hardcoded test account so the dev login UI can autofill
+    // it. That value must NEVER survive into a production bundle — a network
+    // observer (proxy, extension, HTTP logs) could otherwise read the code in
+    // plaintext. Hard-strip it here whenever we are not in development so the
+    // field is structurally absent in prod, regardless of what the server sends.
+    if (process.env.NODE_ENV === 'production' && res && typeof res === 'object') {
+      delete (res as { otp?: string }).otp;
+    }
+    return res;
   }
 
   async verifyOtp(email: string, otp: string) {
@@ -725,7 +735,11 @@ class ApiClient {
     return this.request<{ data: any[]; meta: any }>(`/admin/settings/visitors/pageviews?${qs}`);
   }
 
-  async trackPageView(data: { sessionId: string; path: string; referrer?: string; screenWidth?: number; screenHeight?: number; language?: string; applicantId?: string; applicantEmail?: string; applicantName?: string }) {
+  // DPDP Act 2023 (data minimisation): the analytics payload carries ONLY the
+  // opaque applicantId for server-side attribution — never the applicant's email
+  // or name. The server already has those keyed to applicantId, so sending PII on
+  // every page navigation would exceed the minimum necessary data.
+  async trackPageView(data: { sessionId: string; path: string; referrer?: string; screenWidth?: number; screenHeight?: number; language?: string; applicantId?: string }) {
     return this.request<void>('/track/pageview', { method: 'POST', body: data });
   }
 
@@ -1024,16 +1038,23 @@ class ApiClient {
 
   // ─── Sprints (admin) ──────────────────────────────────────
 
-  // Read a team's current sprint (admin-readable). Used by the team controls to
-  // know which sprint to complete / add milestones to.
+  // Read a team's current sprint via the NON-admin founder-facing endpoint
+  // (GET /sprints/team/:teamId — requires a member/founder token, NOT an admin
+  // prefix). For the admin-token equivalent use adminGetSprintByTeam() which hits
+  // GET /admin/sprints/team/:teamId.
   async getSprintByTeamId(teamId: string) {
     return this.request<any>(`/sprints/team/${teamId}`);
   }
 
+  // DEPRECATED: prefer the typed adminCreateSprint(). Kept because AdminTeamControls
+  // still calls this; both target POST /admin/sprints, so a path change must be
+  // mirrored in adminCreateSprint() below until this is migrated away.
   async createSprint(data: any) {
     return this.request<any>('/admin/sprints', { method: 'POST', body: data });
   }
 
+  // DEPRECATED: prefer the typed adminCreateMilestone(). Same backend route
+  // (POST /admin/sprints/:sprintId/milestones); retained for AdminTeamControls.
   async createMilestone(sprintId: string, data: any) {
     return this.request<any>(`/admin/sprints/${sprintId}/milestones`, { method: 'POST', body: data });
   }
@@ -1311,9 +1332,11 @@ class ApiClient {
     return this.request<any>(`/admin/pitch/events/${pitchEventId}/funding`, { method: 'POST', body: data });
   }
 
+  // Alias of getInvestors (kept for the pitch-events call sites that import this
+  // name). Delegates so the GET /admin/investors path is defined in exactly one
+  // place — DRY: a path change only has to land in getInvestors.
   async getAdminInvestors(isApproved?: boolean) {
-    const qs = isApproved !== undefined ? `?isApproved=${isApproved}` : '';
-    return this.request<any[]>(`/admin/investors${qs}`);
+    return this.getInvestors(isApproved);
   }
 
   // ─── Admin: WhatsApp ──────────────────────────────────────
@@ -1335,6 +1358,607 @@ class ApiClient {
 
   async whatsappSendOne(data: { phone: string; templateName: string; parameters: string[] }) {
     return this.request<{ sent: boolean }>('/admin/whatsapp/send', { method: 'POST', body: data });
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // STORE ADMIN (platform admin token) — SpaceKart commerce back-office.
+  //
+  // Every store admin route has the sub-path `admin/store/*`. The controllers use
+  // the `@Controller('api')` prefix and carry the FULL sub-path on each route
+  // decorator (e.g. `@Get('admin/store/products')`), not a `@Controller('api/admin/store')`
+  // prefix. API_BASE already ends in `/api`, so the endpoints below omit the
+  // leading `/api`. NOTE: a few inventory reads live under `admin/store/stock/*`
+  // (movements, reorder) rather than `admin/store/inventory/*` — see the backend
+  // InventoryController; the mismatch is intentional, not a typo.
+  //
+  // Money is ALWAYS integer paise in both directions — format to rupees in the UI.
+  // Request bodies for create/update routes are typed loosely (Record / any) where
+  // the backend DTO is large; the load-bearing path + key fields are pinned.
+  // ════════════════════════════════════════════════════════════════════════
+
+  // ─── Store Admin: Products ────────────────────────────────────────────────
+
+  /**
+   * Admin product LIST — returns products of ALL statuses (DRAFT/ACTIVE/ARCHIVED),
+   * unlike the public `storeApi.listProducts` (ACTIVE-only). Each row carries a
+   * presigned `thumbnail` ({ url, altText } | null). Money is integer paise.
+   */
+  async adminListProducts(
+    params: {
+      status?: string;
+      search?: string;
+      page?: number;
+      limit?: number;
+    } = {},
+  ) {
+    const qs = new URLSearchParams(
+      Object.entries(params)
+        .filter(([, v]) => v !== undefined && v !== null && v !== '')
+        .map(([k, v]) => [k, String(v)]),
+    ).toString();
+    return this.request<{ data: any[]; meta: any }>(
+      `/admin/store/products${qs ? `?${qs}` : ''}`,
+    );
+  }
+
+  async adminGetStoreProduct(id: string) {
+    return this.request<any>(`/admin/store/products/${id}`);
+  }
+
+  async adminCreateStoreProduct(data: {
+    name: string;
+    subtitle?: string;
+    brand?: string;
+    shortDescription?: string;
+    status?: string;
+    type?: string;
+    categoryId?: string | null;
+    tags?: string[];
+    isFeatured?: boolean;
+    sortOrder?: number;
+    seoTitle?: string;
+    seoDescription?: string;
+    [k: string]: any;
+  }) {
+    return this.request<any>('/admin/store/products', { method: 'POST', body: data });
+  }
+
+  async adminUpdateStoreProduct(id: string, data: Record<string, any>) {
+    return this.request<any>(`/admin/store/products/${id}`, { method: 'PATCH', body: data });
+  }
+
+  /** Archive (soft-delete) a product. */
+  async adminArchiveStoreProduct(id: string) {
+    return this.request<any>(`/admin/store/products/${id}`, { method: 'DELETE' });
+  }
+
+  // ─── Store Admin: SKUs + price tiers ──────────────────────────────────────
+
+  async adminCreateSku(productId: string, data: Record<string, any>) {
+    return this.request<any>(`/admin/store/products/${productId}/skus`, {
+      method: 'POST',
+      body: data,
+    });
+  }
+
+  async adminUpdateSku(skuId: string, data: Record<string, any>) {
+    return this.request<any>(`/admin/store/skus/${skuId}`, { method: 'PATCH', body: data });
+  }
+
+  async adminAddPriceTier(skuId: string, data: { minQty: number; unitPrice: number; [k: string]: any }) {
+    return this.request<any>(`/admin/store/skus/${skuId}/price-tiers`, {
+      method: 'POST',
+      body: data,
+    });
+  }
+
+  // ─── Store Admin: Product media ───────────────────────────────────────────
+
+  async adminPresignProductMedia(productId: string, data: { fileName: string; mimeType: string; [k: string]: any }) {
+    return this.request<any>(`/admin/store/products/${productId}/media/presign`, {
+      method: 'POST',
+      body: data,
+    });
+  }
+
+  async adminConfirmProductMedia(productId: string, data: Record<string, any>) {
+    return this.request<any>(`/admin/store/products/${productId}/media/confirm`, {
+      method: 'POST',
+      body: data,
+    });
+  }
+
+  async adminListProductMedia(productId: string, confirmedOnly?: boolean) {
+    const qs = confirmedOnly !== undefined ? `?confirmedOnly=${confirmedOnly}` : '';
+    return this.request<any[]>(`/admin/store/products/${productId}/media${qs}`);
+  }
+
+  async adminDeleteProductMedia(productId: string, mediaId: string) {
+    return this.request<any>(`/admin/store/products/${productId}/media/${mediaId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // ─── Store Admin: Tabs ────────────────────────────────────────────────────
+
+  /** Replace the product's editorial tab set (PUT — full upsert). */
+  async adminUpsertProductTabs(productId: string, data: { tabs: any[]; [k: string]: any }) {
+    return this.request<any>(`/admin/store/products/${productId}/tabs`, {
+      method: 'PUT',
+      body: data,
+    });
+  }
+
+  // ─── Store Admin: Categories ──────────────────────────────────────────────
+
+  async adminGetStoreCategoryTree() {
+    return this.request<any[]>('/admin/store/categories');
+  }
+
+  async adminCreateStoreCategory(data: { name: string; slug?: string; parentId?: string | null; [k: string]: any }) {
+    return this.request<any>('/admin/store/categories', { method: 'POST', body: data });
+  }
+
+  async adminUpdateStoreCategory(id: string, data: Record<string, any>) {
+    return this.request<any>(`/admin/store/categories/${id}`, { method: 'PATCH', body: data });
+  }
+
+  /** Delete a category; pass confirm=true to force when it has children/products. */
+  async adminDeleteStoreCategory(id: string, confirm = false) {
+    const qs = confirm ? '?confirm=true' : '';
+    return this.request<any>(`/admin/store/categories/${id}${qs}`, { method: 'DELETE' });
+  }
+
+  // ─── Store Admin: Sections (catalog tax classes live under tax admin) ──────
+  // NOTE: "sections" on a product are the editorial tabs handled by
+  // adminUpsertProductTabs above; there is no separate /sections route.
+
+  // ─── Store Admin: DIY guides + bundles ────────────────────────────────────
+
+  /** Upsert a product's DIY guide (BOM + steps). Returns { created, guide }. */
+  async adminUpsertDiyGuide(productId: string, data: Record<string, any>) {
+    return this.request<any>(`/admin/store/products/${productId}/diy`, {
+      method: 'POST',
+      body: data,
+    });
+  }
+
+  /** Create a sellable component bundle (its own SKU + BOM). */
+  async adminCreateBundle(data: Record<string, any>) {
+    return this.request<any>('/admin/store/bundles', { method: 'POST', body: data });
+  }
+
+  // ─── Store Admin: Inventory — warehouses ──────────────────────────────────
+
+  async adminListWarehouses(includeInactive?: boolean) {
+    const qs = includeInactive ? '?includeInactive=true' : '';
+    return this.request<any[]>(`/admin/store/warehouses${qs}`);
+  }
+
+  async adminGetWarehouse(id: string) {
+    return this.request<any>(`/admin/store/warehouses/${id}`);
+  }
+
+  async adminCreateWarehouse(data: { name: string; code?: string; [k: string]: any }) {
+    return this.request<any>('/admin/store/warehouses', { method: 'POST', body: data });
+  }
+
+  async adminUpdateWarehouse(id: string, data: Record<string, any>) {
+    return this.request<any>(`/admin/store/warehouses/${id}`, { method: 'PATCH', body: data });
+  }
+
+  async adminDeactivateWarehouse(id: string) {
+    return this.request<any>(`/admin/store/warehouses/${id}/deactivate`, { method: 'PATCH' });
+  }
+
+  // ─── Store Admin: Inventory — stock ───────────────────────────────────────
+
+  /** Stock matrix (SKU × warehouse): on-hand / reserved / available. */
+  async adminGetStockMatrix(params: Record<string, string | number> = {}) {
+    const qs = new URLSearchParams(
+      Object.entries(params).map(([k, v]) => [k, String(v)]),
+    ).toString();
+    return this.request<any>(`/admin/store/inventory${qs ? `?${qs}` : ''}`);
+  }
+
+  async adminGetSkuInventory(skuId: string) {
+    return this.request<any>(`/admin/store/inventory/${skuId}`);
+  }
+
+  // Path is `admin/store/stock/movements` (NOT `.../inventory/movements`) — this
+  // matches the backend InventoryController route exactly; do not "normalise" it.
+  async adminListStockMovements(params: Record<string, string | number> = {}) {
+    const qs = new URLSearchParams(
+      Object.entries(params).map(([k, v]) => [k, String(v)]),
+    ).toString();
+    return this.request<any>(`/admin/store/stock/movements${qs ? `?${qs}` : ''}`);
+  }
+
+  async adminGetReorderReport(warehouseId?: string) {
+    const qs = warehouseId ? `?warehouseId=${warehouseId}` : '';
+    return this.request<any>(`/admin/store/stock/reorder${qs}`);
+  }
+
+  /** Manual stock adjustment (audited; ADMIN/SUPER_ADMIN only). */
+  async adminAdjustStock(data: {
+    skuId: string;
+    warehouseId: string;
+    quantityDelta: number;
+    reason?: string;
+    [k: string]: any;
+  }) {
+    return this.request<any>('/admin/store/inventory/adjust', { method: 'POST', body: data });
+  }
+
+  /** Transfer stock between warehouses (audited; ADMIN/SUPER_ADMIN only). */
+  async adminTransferStock(data: {
+    skuId: string;
+    fromWarehouseId: string;
+    toWarehouseId: string;
+    quantity: number;
+    reason?: string;
+    [k: string]: any;
+  }) {
+    return this.request<any>('/admin/store/inventory/transfer', { method: 'POST', body: data });
+  }
+
+  // ─── Store Admin: Purchasing — suppliers ──────────────────────────────────
+
+  async adminListSuppliers(params: Record<string, string | number> = {}) {
+    const qs = new URLSearchParams(
+      Object.entries(params).map(([k, v]) => [k, String(v)]),
+    ).toString();
+    return this.request<{ data: any[]; meta: any }>(
+      `/admin/store/suppliers${qs ? `?${qs}` : ''}`,
+    );
+  }
+
+  async adminGetSupplier(id: string) {
+    return this.request<any>(`/admin/store/suppliers/${id}`);
+  }
+
+  async adminCreateSupplier(data: { name: string; [k: string]: any }) {
+    return this.request<any>('/admin/store/suppliers', { method: 'POST', body: data });
+  }
+
+  async adminUpdateSupplier(id: string, data: Record<string, any>) {
+    return this.request<any>(`/admin/store/suppliers/${id}`, { method: 'PATCH', body: data });
+  }
+
+  async adminDeactivateSupplier(id: string) {
+    return this.request<any>(`/admin/store/suppliers/${id}/deactivate`, { method: 'PATCH' });
+  }
+
+  // ─── Store Admin: Purchasing — purchase orders ────────────────────────────
+
+  async adminListPurchaseOrders(params: Record<string, string | number> = {}) {
+    const qs = new URLSearchParams(
+      Object.entries(params).map(([k, v]) => [k, String(v)]),
+    ).toString();
+    return this.request<{ data: any[]; meta: any }>(
+      `/admin/store/purchase-orders${qs ? `?${qs}` : ''}`,
+    );
+  }
+
+  async adminGetPurchaseOrder(id: string) {
+    return this.request<any>(`/admin/store/purchase-orders/${id}`);
+  }
+
+  /** Create a DRAFT purchase order (supplier + line items at integer paise). */
+  async adminCreatePurchaseOrder(data: {
+    supplierId: string;
+    warehouseId: string;
+    lines: Array<{ skuId: string; orderedQty: number; unitCostPaise: number; lotNo?: string; taxBps?: number; [k: string]: any }>;
+    [k: string]: any;
+  }) {
+    return this.request<any>('/admin/store/purchase-orders', { method: 'POST', body: data });
+  }
+
+  /** Submit (place) a DRAFT purchase order. */
+  async adminSubmitPurchaseOrder(id: string) {
+    return this.request<any>(`/admin/store/purchase-orders/${id}/submit`, { method: 'PATCH' });
+  }
+
+  async adminCancelPurchaseOrder(id: string) {
+    return this.request<any>(`/admin/store/purchase-orders/${id}/cancel`, { method: 'PATCH' });
+  }
+
+  /** Receive PO lines into stock (full/partial; audited + idempotent server-side). */
+  async adminReceivePurchaseOrder(id: string, data: {
+    lines: Array<{ lineId: string; receivedQty: number; [k: string]: any }>;
+    [k: string]: any;
+  }) {
+    return this.request<any>(`/admin/store/purchase-orders/${id}/receive`, {
+      method: 'POST',
+      body: data,
+    });
+  }
+
+  /** Build a DRAFT PO from the reorder report (auto-reorder). */
+  async adminReorderToDraftPo(warehouseId?: string) {
+    const qs = warehouseId ? `?warehouseId=${warehouseId}` : '';
+    return this.request<any>(`/admin/store/purchase-orders/reorder-draft${qs}`, {
+      method: 'POST',
+    });
+  }
+
+  // ─── Store Admin: Orders ──────────────────────────────────────────────────
+
+  async adminListOrders(params: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    paymentStatus?: string;
+    search?: string;
+    customerId?: string;
+  } = {}) {
+    const qs = new URLSearchParams(
+      Object.entries(params)
+        .filter(([, v]) => v !== undefined && v !== null && v !== '')
+        .map(([k, v]) => [k, String(v)]),
+    ).toString();
+    return this.request<{ data: any[]; meta: any }>(
+      `/admin/store/orders${qs ? `?${qs}` : ''}`,
+    );
+  }
+
+  async adminGetOrder(id: string) {
+    return this.request<any>(`/admin/store/orders/${id}`);
+  }
+
+  /** Advance an order through the validated state machine (audited). */
+  async adminTransitionOrder(id: string, data: { toStatus: string; note?: string }) {
+    return this.request<any>(`/admin/store/orders/${id}/transition`, {
+      method: 'POST',
+      body: data,
+    });
+  }
+
+  /** Create a shipment for an order (manual courier+awb or active provider). */
+  async adminShipOrder(id: string, data: { courier?: string; awb?: string; useProvider?: boolean; [k: string]: any }) {
+    return this.request<any>(`/admin/store/orders/${id}/ship`, { method: 'POST', body: data });
+  }
+
+  /** Issue (idempotent) an order's GST tax invoice → fresh presigned download URL. */
+  async adminIssueOrderInvoice(orderId: string) {
+    return this.request<any>(`/admin/store/orders/${orderId}/invoice`, {
+      method: 'POST',
+      body: {},
+    });
+  }
+
+  // ─── Store Admin: Shipping ────────────────────────────────────────────────
+
+  async adminListShipments(params: Record<string, string | number> = {}) {
+    const qs = new URLSearchParams(
+      Object.entries(params).map(([k, v]) => [k, String(v)]),
+    ).toString();
+    return this.request<{ data: any[]; meta: any }>(
+      `/admin/store/shipments${qs ? `?${qs}` : ''}`,
+    );
+  }
+
+  // ─── Store Admin: Returns ─────────────────────────────────────────────────
+
+  async adminListReturns(params: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    search?: string;
+  } = {}) {
+    const qs = new URLSearchParams(
+      Object.entries(params)
+        .filter(([, v]) => v !== undefined && v !== null && v !== '')
+        .map(([k, v]) => [k, String(v)]),
+    ).toString();
+    return this.request<{ data: any[]; meta: any }>(
+      `/admin/store/returns${qs ? `?${qs}` : ''}`,
+    );
+  }
+
+  async adminGetReturn(id: string) {
+    return this.request<any>(`/admin/store/returns/${id}`);
+  }
+
+  /** Approve a REQUESTED return (no money / stock moves yet). */
+  async adminApproveReturn(id: string, note?: string) {
+    return this.request<any>(`/admin/store/returns/${id}/approve`, {
+      method: 'PATCH',
+      body: { note },
+    });
+  }
+
+  /** Reject a REQUESTED return with a structured reason. */
+  async adminRejectReturn(id: string, data: { reason: string; note?: string }) {
+    return this.request<any>(`/admin/store/returns/${id}/reject`, {
+      method: 'PATCH',
+      body: data,
+    });
+  }
+
+  /** Mark an APPROVED return IN_TRANSIT (optional intermediate step). */
+  async adminMarkReturnInTransit(id: string) {
+    return this.request<any>(`/admin/store/returns/${id}/in-transit`, { method: 'PATCH' });
+  }
+
+  /** Receive a returned parcel: restock + Razorpay refund + credit note (idempotent). */
+  async adminReceiveReturn(id: string, note?: string) {
+    return this.request<any>(`/admin/store/returns/${id}/receive`, {
+      method: 'POST',
+      body: { note },
+    });
+  }
+
+  // ─── Store Admin: Coupons ─────────────────────────────────────────────────
+
+  async adminListCoupons(params: Record<string, string | number> = {}) {
+    const qs = new URLSearchParams(
+      Object.entries(params).map(([k, v]) => [k, String(v)]),
+    ).toString();
+    return this.request<{ data: any[]; meta: any }>(
+      `/admin/store/coupons${qs ? `?${qs}` : ''}`,
+    );
+  }
+
+  async adminGetCoupon(id: string) {
+    return this.request<any>(`/admin/store/coupons/${id}`);
+  }
+
+  async adminCreateCoupon(data: {
+    code: string;
+    type: string; // PERCENT | FIXED etc.
+    value: number; // percent bps or fixed paise per backend DTO
+    [k: string]: any;
+  }) {
+    return this.request<any>('/admin/store/coupons', { method: 'POST', body: data });
+  }
+
+  async adminUpdateCoupon(id: string, data: Record<string, any>) {
+    return this.request<any>(`/admin/store/coupons/${id}`, { method: 'PATCH', body: data });
+  }
+
+  // ─── Store Admin: Tax (classes + HSN rates) ───────────────────────────────
+
+  async adminListTaxClasses() {
+    return this.request<any[]>('/admin/store/tax-classes');
+  }
+
+  async adminGetTaxClass(id: string) {
+    return this.request<any>(`/admin/store/tax-classes/${id}`);
+  }
+
+  async adminCreateTaxClass(data: { name: string; [k: string]: any }) {
+    return this.request<any>('/admin/store/tax-classes', { method: 'POST', body: data });
+  }
+
+  async adminUpdateTaxClass(id: string, data: Record<string, any>) {
+    return this.request<any>(`/admin/store/tax-classes/${id}`, { method: 'PATCH', body: data });
+  }
+
+  async adminDeactivateTaxClass(id: string) {
+    return this.request<any>(`/admin/store/tax-classes/${id}`, { method: 'DELETE' });
+  }
+
+  async adminListTaxRates() {
+    return this.request<any[]>('/admin/store/tax-rates');
+  }
+
+  async adminGetTaxRate(id: string) {
+    return this.request<any>(`/admin/store/tax-rates/${id}`);
+  }
+
+  /** Create-or-update a tax rate by its unique hsnCode. */
+  async adminUpsertTaxRate(data: { hsnCode: string; rateBps: number; [k: string]: any }) {
+    return this.request<any>('/admin/store/tax-rates', { method: 'POST', body: data });
+  }
+
+  async adminUpdateTaxRate(id: string, data: Record<string, any>) {
+    return this.request<any>(`/admin/store/tax-rates/${id}`, { method: 'PATCH', body: data });
+  }
+
+  async adminDeleteTaxRate(id: string) {
+    return this.request<any>(`/admin/store/tax-rates/${id}`, { method: 'DELETE' });
+  }
+
+  // ─── Store Admin: Analytics (all money fields are paise) ───────────────────
+
+  async adminStoreAnalyticsSummary(range?: string) {
+    const qs = range ? `?range=${encodeURIComponent(range)}` : '';
+    return this.request<any>(`/admin/store/analytics/summary${qs}`);
+  }
+
+  async adminStoreAnalyticsRevenue(range?: string) {
+    const qs = range ? `?range=${encodeURIComponent(range)}` : '';
+    return this.request<any>(`/admin/store/analytics/revenue${qs}`);
+  }
+
+  async adminStoreTopProducts(params: { range?: string; limit?: number } = {}) {
+    const qs = new URLSearchParams(
+      Object.entries(params)
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => [k, String(v)]),
+    ).toString();
+    return this.request<any>(`/admin/store/analytics/top-products${qs ? `?${qs}` : ''}`);
+  }
+
+  async adminStoreLowStock(params: { page?: number; limit?: number; warehouseId?: string } = {}) {
+    const qs = new URLSearchParams(
+      Object.entries(params)
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => [k, String(v)]),
+    ).toString();
+    return this.request<any>(`/admin/store/analytics/low-stock${qs ? `?${qs}` : ''}`);
+  }
+
+  async adminStoreReturnsRate(range?: string) {
+    const qs = range ? `?range=${encodeURIComponent(range)}` : '';
+    return this.request<any>(`/admin/store/analytics/returns-rate${qs}`);
+  }
+
+  async adminStoreInventoryValue() {
+    return this.request<any>('/admin/store/analytics/inventory-value');
+  }
+
+  async adminStoreInventoryHealth() {
+    return this.request<any>('/admin/store/analytics/inventory-health');
+  }
+
+  // ─── Store Admin: Articles moderation ─────────────────────────────────────
+
+  async adminListArticles(params: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    search?: string;
+  } = {}) {
+    const qs = new URLSearchParams(
+      Object.entries(params)
+        .filter(([, v]) => v !== undefined && v !== null && v !== '')
+        .map(([k, v]) => [k, String(v)]),
+    ).toString();
+    return this.request<{ data: any[]; meta: any }>(
+      `/admin/store/articles${qs ? `?${qs}` : ''}`,
+    );
+  }
+
+  async adminGetArticle(id: string) {
+    return this.request<any>(`/admin/store/articles/${id}`);
+  }
+
+  /** Approve (publish) a submitted article. decidedByAdminId is pinned server-side. */
+  async adminApproveArticle(id: string) {
+    return this.request<any>(`/admin/store/articles/${id}/approve`, { method: 'POST' });
+  }
+
+  async adminRejectArticle(id: string, reason: string) {
+    return this.request<any>(`/admin/store/articles/${id}/reject`, {
+      method: 'POST',
+      body: { reason },
+    });
+  }
+
+  /** Admin edit / feature / unpublish. */
+  async adminUpdateArticle(id: string, data: {
+    title?: string;
+    body?: Record<string, unknown>;
+    excerpt?: string;
+    coverS3Key?: string;
+    tags?: string[];
+    featured?: boolean;
+    unpublish?: boolean;
+    [k: string]: any;
+  }) {
+    return this.request<any>(`/admin/store/articles/${id}`, { method: 'PATCH', body: data });
+  }
+
+  /** Restore a previously removed/soft-deleted article. */
+  async adminRestoreArticle(id: string) {
+    return this.request<any>(`/admin/store/articles/${id}/restore`, { method: 'POST' });
+  }
+
+  /** Hard-remove an article. */
+  async adminDeleteArticle(id: string) {
+    return this.request<any>(`/admin/store/articles/${id}`, { method: 'DELETE' });
   }
 }
 

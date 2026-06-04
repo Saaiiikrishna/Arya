@@ -3,6 +3,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { PrismaModule } from './prisma';
 import { AuthModule } from './modules/auth';
 import { QuestionModule } from './modules/question';
@@ -38,6 +39,24 @@ import { AutomationModule } from './modules/automation/automation.module';
 import { MentorModule } from './modules/mentor';
 import { CoFounderModule } from './modules/cofounder/cofounder.module';
 import { DocumentaryModule } from './modules/documentary/documentary.module';
+// Commerce / storefront (M2b foundational modules)
+import { StoreAuthModule } from './modules/store-auth';
+import { CatalogModule } from './modules/catalog/catalog.module';
+import { InventoryModule } from './modules/inventory/inventory.module';
+import { TaxModule } from './modules/tax/tax.module';
+import { StoreMediaModule } from './modules/store/store-media/store-media.module';
+import { CouponsModule } from './modules/coupons';
+import { CartModule } from './modules/cart';
+import { DiyModule } from './modules/diy/diy.module';
+import { PurchasingModule } from './modules/purchasing/purchasing.module';
+import { InvoicingModule } from './modules/invoicing';
+import { OrdersModule } from './modules/orders';
+import { ShippingModule } from './modules/shipping';
+import { ReturnsModule } from './modules/returns';
+import { StoreRealtimeModule } from './modules/store-realtime/store-realtime.module';
+import { StoreJobsModule } from './modules/store-jobs/store-jobs.module';
+import { StoreAnalyticsModule } from './modules/store-analytics/store-analytics.module';
+import { ArticlesModule } from './modules/articles/articles.module';
 
 /**
  * Fail-fast environment validation. Signing secrets must ALWAYS be strong
@@ -60,10 +79,42 @@ function validateEnv(config: Record<string, unknown>): Record<string, unknown> {
   requireStrong('JWT_SECRET');
   requireStrong('JWT_REFRESH_SECRET');
   if (isProd) {
+    // Dedicated customer-token secret: must be strong AND distinct from
+    // JWT_SECRET so a platform token is cryptographically rejected on the
+    // customer ('jwt-customer') path. A shared secret would defeat the isolation.
+    requireStrong('JWT_CUSTOMER_SECRET');
+    if (
+      String(config.JWT_CUSTOMER_SECRET ?? '') === String(config.JWT_SECRET ?? '')
+    ) {
+      problems.push(
+        'JWT_CUSTOMER_SECRET must differ from JWT_SECRET (customer/platform token isolation)',
+      );
+    }
     requirePresent('DATABASE_URL');
     requirePresent('RAZORPAY_KEY_SECRET');
     requirePresent('RAZORPAY_WEBHOOK_SECRET');
+    // Store webhook secret is SEPARATE from the pledge webhook secret (the store
+    // webhook handler in orders.service fails closed when absent). Enforce at boot
+    // so a missing value never silently 500s every Razorpay store callback.
+    requirePresent('RAZORPAY_STORE_WEBHOOK_SECRET');
+    // Courier tracking webhook secret — the shipping webhook fails closed without
+    // it, so enforce at boot rather than rejecting every courier callback at runtime.
+    requirePresent('COURIER_WEBHOOK_SECRET');
     requirePresent('WHATSAPP_APP_SECRET');
+  } else {
+    // Non-prod: don't block local dev, but warn loudly if customer tokens are
+    // NOT isolated from platform tokens — i.e. JWT_CUSTOMER_SECRET is unset
+    // (falls back to JWT_SECRET) or explicitly equals JWT_SECRET. This is the
+    // exact misconfiguration that the isProd block above hard-rejects.
+    const customerSecret = String(config.JWT_CUSTOMER_SECRET ?? '');
+    if (!customerSecret || customerSecret === String(config.JWT_SECRET ?? '')) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `\x1b[33m[config] JWT_CUSTOMER_SECRET is ${
+          customerSecret ? 'equal to JWT_SECRET' : 'unset (falling back to JWT_SECRET)'
+        }; customer and platform tokens are NOT cryptographically isolated. Set a DISTINCT JWT_CUSTOMER_SECRET before deploying.\x1b[0m`,
+      );
+    }
   }
 
   if (problems.length) {
@@ -79,6 +130,12 @@ function validateEnv(config: Record<string, unknown>): Record<string, unknown> {
   imports: [
     // Config
     ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
+
+    // In-process domain events (decouples commerce services from the Socket.io
+    // gateways: services emit 'stock.updated'/'order.updated'/... and the store
+    // gateways broadcast). Note: cross-replica fan-out needs the Socket.io Redis
+    // adapter (documented follow-up); listeners are wildcard-enabled.
+    EventEmitterModule.forRoot({ wildcard: true, delimiter: '.' }),
 
     // Rate limiting: multi-tier configuration
     ThrottlerModule.forRoot([{
@@ -159,6 +216,24 @@ function validateEnv(config: Record<string, unknown>): Record<string, unknown> {
     MentorModule,
     CoFounderModule,
     DocumentaryModule,
+    // Commerce / storefront (M2b foundational modules)
+    StoreAuthModule,
+    CatalogModule,
+    InventoryModule,
+    TaxModule,
+    StoreMediaModule,
+    CouponsModule,
+    CartModule,
+    DiyModule,
+    PurchasingModule,
+    InvoicingModule,
+    OrdersModule,
+    ShippingModule,
+    ReturnsModule,
+    StoreRealtimeModule,
+    StoreJobsModule,
+    StoreAnalyticsModule,
+    ArticlesModule,
   ],
   providers: [
     // Apply rate limiting globally; per-route @Throttle still tunes the tiers.

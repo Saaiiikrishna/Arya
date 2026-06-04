@@ -181,3 +181,229 @@
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* ============================================================
+   PUBLIC MARKETING LAYER  (DESIGN.md §7 — SCOPED EXCEPTION)
+   These `mkt-*` utilities are the ONLY place rounded corners,
+   glossy gradients, glow, and soft shadow are permitted. They
+   are used exclusively inside a `.mkt` wrapper on the public
+   marketing surfaces (/, /store, /articles). They must NEVER be
+   used in /admin, /hub, /apply, /investors — those stay matte,
+   0px, no-shadow per DESIGN.md §1–6.
+   ============================================================ */
+
+/* Glossy primary CTA — saffron→marigold gradient, inner highlight,
+   soft saffron glow, and a sheen that sweeps across on hover. */
+.mkt-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 1rem 2rem;
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-parchment);
+  background: linear-gradient(135deg, #F4A300 0%, #E85D04 58%, #BC4604 100%);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 9999px;
+  overflow: hidden;
+  isolation: isolate;
+  cursor: pointer;
+  box-shadow: 0 10px 26px -10px rgba(232, 93, 4, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.38);
+  transition: transform 0.25s var(--ease-editorial), box-shadow 0.25s var(--ease-editorial), filter 0.25s var(--ease-editorial);
+}
+.mkt-btn::before { /* top gloss highlight */
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0) 48%);
+  pointer-events: none;
+  z-index: 1;
+}
+.mkt-btn::after { /* moving sheen — GPU-composited (transform, not layout) */
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  transform: translateX(-160%) skewX(-20deg);
+  transition: transform 0.7s var(--ease-editorial);
+  pointer-events: none;
+  z-index: 1;
+}
+.mkt-btn > * { position: relative; z-index: 2; }
+.mkt-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 36px -10px rgba(232, 93, 4, 0.72), inset 0 1px 0 rgba(255, 255, 255, 0.48);
+  filter: saturate(1.05);
+}
+.mkt-btn:hover::after { transform: translateX(160%) skewX(-20deg); }
+.mkt-btn:active { transform: translateY(0); }
+
+/* Glass secondary CTA — frosted, rounded, forest text. */
+.mkt-btn-ghost {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 1rem 2rem;
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-forest);
+  background: rgba(255, 255, 255, 0.55);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--color-hairline);
+  border-radius: 9999px;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  transition: transform 0.25s var(--ease-editorial), background-color 0.25s var(--ease-editorial), border-color 0.25s var(--ease-editorial);
+}
+.mkt-btn-ghost:hover {
+  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.82);
+  border-color: var(--color-saffron);
+}
+.mkt-btn-ghost:active { transform: translateY(0); }
+
+/* Rounded glass pill — hero eyebrow badges. */
+.mkt-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 1rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.6);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--color-hairline);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+/* Premium frosted rounded card. */
+.mkt-card {
+  border-radius: 22px;
+  border: 1px solid rgba(194, 200, 194, 0.7);
+  background: rgba(253, 251, 247, 0.72);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  transition: transform 0.3s var(--ease-editorial), border-color 0.3s var(--ease-editorial), box-shadow 0.3s var(--ease-editorial);
+}
+.mkt-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(232, 93, 4, 0.45);
+  box-shadow: 0 18px 40px -22px rgba(19, 48, 34, 0.5);
+}
+
+/* Premium frosted form input — the SCOPED mkt exception for inputs on public
+   marketing surfaces (checkout / account). Matches the rounding language of
+   mkt-card/mkt-btn so a form sits coherently inside a `.mkt` container. Like the
+   other mkt-* utilities it is the ONLY place an input may have a non-0px radius,
+   and it must NEVER be used in /admin, /hub, /apply, /investors. */
+.mkt-input {
+  border-radius: 12px;
+  border: 1px solid var(--color-hairline);
+  background: rgba(255, 255, 255, 0.7);
+  padding: 0.625rem 1rem;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  color: var(--color-ink);
+  outline: none;
+  transition: border-color 0.2s var(--ease-editorial);
+}
+.mkt-input::placeholder { color: rgba(28, 28, 28, 0.35); }
+.mkt-input:focus { border-color: var(--color-saffron); }
+
+/* Darker glass card for forest sections. */
+.mkt-glass {
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+
+/* Soft floating ambient accent (gradient orbs etc.). */
+.mkt-float { animation: mkt-float 7s ease-in-out infinite; }
+@keyframes mkt-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-14px); }
+}
+
+/* Slow brand glow pulse for ambient orbs. */
+.mkt-glow-pulse { animation: mkt-glow-pulse 6s ease-in-out infinite; }
+@keyframes mkt-glow-pulse {
+  0%, 100% { opacity: 0.45; transform: scale(1); }
+  50% { opacity: 0.75; transform: scale(1.08); }
+}
+
+/* Sanitised rich-text body (RICH_TEXT blocks rendered by BlockRenderer). Scoped
+   to the marketing layer; gives author HTML editorial defaults without pulling in
+   a Tailwind typography plugin. Links use forest/terracotta per DESIGN.md (never
+   standard blue). */
+.mkt-prose > * + * { margin-top: 0.85em; }
+.mkt-prose h1,
+.mkt-prose h2,
+.mkt-prose h3,
+.mkt-prose h4 {
+  font-family: var(--font-serif);
+  color: var(--color-forest);
+  line-height: 1.25;
+  font-weight: 600;
+}
+.mkt-prose h2 { font-size: 1.4rem; }
+.mkt-prose h3 { font-size: 1.15rem; }
+.mkt-prose h4 { font-size: 1rem; }
+.mkt-prose p { line-height: 1.7; }
+.mkt-prose ul,
+.mkt-prose ol { padding-left: 1.4em; }
+.mkt-prose ul { list-style: disc; }
+.mkt-prose ol { list-style: decimal; }
+.mkt-prose li { margin-top: 0.35em; }
+.mkt-prose a {
+  color: var(--color-terracotta);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.mkt-prose a:hover { color: var(--color-forest); }
+.mkt-prose strong { font-weight: 700; color: var(--color-forest); }
+.mkt-prose em { font-style: italic; }
+.mkt-prose blockquote {
+  border-left: 2px solid var(--color-saffron, #f4a300);
+  padding-left: 1em;
+  color: rgba(0, 0, 0, 0.6);
+  font-style: italic;
+}
+.mkt-prose code {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.875em;
+  background: rgba(19, 48, 34, 0.06);
+  padding: 0.1em 0.35em;
+  border-radius: 6px;
+}
+.mkt-prose img { max-width: 100%; height: auto; border-radius: 14px; }
+
+/* Accessibility: respect reduced-motion for all marketing motion. */
+@media (prefers-reduced-motion: reduce) {
+  .mkt-float,
+  .mkt-glow-pulse { animation: none; }
+  .mkt-btn,
+  .mkt-btn-ghost,
+  .mkt-card { transition: none; }
+  .mkt-btn::after { transition: none; }
+  /* keep the sheen parked off-canvas; don't sweep it on hover */
+  .mkt-btn:hover::after { transform: translateX(-160%) skewX(-20deg); }
+  .mkt-btn:hover,
+  .mkt-btn-ghost:hover,
+  .mkt-card:hover { transform: none; }
+}

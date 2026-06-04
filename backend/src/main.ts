@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { AppModule } from './app.module';
 import { PrismaService } from './prisma';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
+import { RedisIoAdapter } from './redis-io.adapter';
 
 async function autoSeed(app: any) {
   const logger = new Logger('AutoSeed');
@@ -181,6 +182,27 @@ async function bootstrap() {
   });
 
   const port = configService.get<number>('PORT', 3001);
+
+  // Socket.IO Redis adapter — fans real-time events out across all replicas
+  // (1–10 on Azure Container Apps). Applies to every gateway automatically.
+  // useWebSocketAdapter MUST be called before app.listen(): Nest binds the
+  // gateways' Socket.IO servers during listen(), so the adapter has to be
+  // installed first to take effect — calling it after listen() is a no-op.
+  // Wrapped in try/catch so a Redis outage still lets the app boot on the
+  // default in-memory adapter (degraded: single-replica fan-out only).
+  if (configService.get<string>('REDIS_HOST')) {
+    try {
+      const redisIoAdapter = new RedisIoAdapter(app);
+      await redisIoAdapter.connectToRedis(configService);
+      app.useWebSocketAdapter(redisIoAdapter);
+    } catch (error) {
+      new Logger('Bootstrap').warn(
+        'Socket.IO Redis adapter unavailable — falling back to in-memory adapter ' +
+          '(real-time events will not fan out across replicas): ' +
+          (error as any)?.message,
+      );
+    }
+  }
 
   // Auto-seed critical data (idempotent) — must complete before accepting traffic
   await autoSeed(app);

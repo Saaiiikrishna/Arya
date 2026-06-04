@@ -46,6 +46,43 @@ export class NotificationService {
   private bn(a: NotifiableApplicant) {
     return String(a.batchNumber ?? '');
   }
+
+  /**
+   * Escape text for safe interpolation into an HTML body. Prevents HTML/email
+   * injection when dynamic fields (names, order/RMA numbers, courier, AWB, URLs)
+   * are placed inside `htmlBody`. Escapes the five HTML-significant characters.
+   */
+  private escapeHtml(value: unknown): string {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  /**
+   * Render a tracking URL as a safe HTML anchor, but ONLY if it parses as an
+   * http(s) URL. Anything else (javascript:, data:, relative, garbage) is
+   * rendered as escaped plain text so it can never become an injection vector.
+   * Returns an empty string when there is no usable value.
+   */
+  private trackingLink(raw: string | null | undefined): string {
+    const value = raw?.trim();
+    if (!value) return '';
+    let parsed: URL | undefined;
+    try {
+      parsed = new URL(value);
+    } catch {
+      parsed = undefined;
+    }
+    if (parsed && (parsed.protocol === 'http:' || parsed.protocol === 'https:')) {
+      const href = this.escapeHtml(parsed.toString());
+      return `<p>Track it here: <a href="${href}">${href}</a></p>`;
+    }
+    // Not a valid http(s) URL: show as escaped plain text, no link.
+    return `<p>Track it here: ${this.escapeHtml(value)}</p>`;
+  }
   private async email1(to: string, slug: string, vars: Record<string, string>, id?: string) {
     try {
       await this.email.sendTemplatedEmail(to, slug, vars, id);
@@ -144,6 +181,125 @@ export class NotificationService {
       await this.whatsapp.sendAnnouncement(a.phone, title, message, a.id);
     } catch (e) {
       this.logger.error(`WhatsApp announcement failed: ${(e as any)?.message}`);
+    }
+  }
+
+  // ─── Store / commerce: customer notifications ──────────────
+
+  /**
+   * Best-effort "your return was refunded" notification to a STORE customer.
+   * Store customers are not applicants (different identity model), so this takes
+   * the raw contact fields directly. Email is sent via SES; WhatsApp is sent only
+   * if a phone is on file. Every channel is non-throwing — a notification failure
+   * never blocks the return settlement.
+   */
+  async customerReturnRefunded(params: {
+    email?: string | null;
+    firstName?: string | null;
+    phone?: string | null;
+    rmaNumber: string;
+    refundAmountPaise: number;
+  }): Promise<void> {
+    const name = params.firstName?.trim() || 'there';
+    const rupees = (params.refundAmountPaise / 100).toLocaleString('en-IN', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+    // Plain-text variants for WhatsApp (no HTML escaping there).
+    const nameText = name;
+    const rmaText = params.rmaNumber;
+    // HTML-escaped variants for the email body.
+    const nameHtml = this.escapeHtml(name);
+    const rmaHtml = this.escapeHtml(params.rmaNumber);
+    const rupeesHtml = this.escapeHtml(rupees);
+    if (params.email) {
+      try {
+        await this.email.sendEmail({
+          to: params.email,
+          subject: `Your return ${params.rmaNumber} has been refunded`,
+          htmlBody: `<p>Hi ${nameHtml},</p><p>We have received your returned item(s) for <strong>${rmaHtml}</strong> and processed a refund of <strong>₹${rupeesHtml}</strong> to your original payment method. It may take a few business days to reflect.</p><p>Thank you for shopping with Aryavartham.</p>`,
+        });
+      } catch (e) {
+        this.logger.error(
+          `Return-refunded email for ${params.rmaNumber} failed: ${(e as Error)?.message}`,
+        );
+      }
+    }
+    if (params.phone) {
+      try {
+        // No applicantId: store customers are not applicants, and passing a
+        // non-UUID here would corrupt the applicant-scoped notification log. The
+        // WhatsApp send itself still goes out; only the per-applicant log row is
+        // skipped (sendAnnouncement skips logging when applicantId is falsy).
+        await this.whatsapp.sendAnnouncement(
+          params.phone,
+          `Return ${rmaText} refunded`,
+          `Hi ${nameText}, your return ${rmaText} has been refunded (₹${rupees}). It may take a few business days to reflect.`,
+          undefined as unknown as string,
+        );
+      } catch (e) {
+        this.logger.error(
+          `Return-refunded WhatsApp for ${params.rmaNumber} failed: ${(e as Error)?.message}`,
+        );
+      }
+    }
+  }
+
+  /**
+   * Best-effort "your order has shipped" notification to a STORE customer.
+   * Store customers are not applicants (different identity model), so this takes
+   * the raw contact fields directly — mirroring {@link customerReturnRefunded}.
+   * Email is sent via SES; WhatsApp is sent only if a phone is on file. Every
+   * channel is non-throwing — a notification failure never blocks the shipment.
+   */
+  async customerOrderShipped(params: {
+    email?: string | null;
+    firstName?: string | null;
+    phone?: string | null;
+    orderNumber: string;
+    courier?: string | null;
+    awb: string;
+    trackingUrl?: string | null;
+  }): Promise<void> {
+    const name = params.firstName?.trim() || 'there';
+    const courier = params.courier?.trim();
+    // HTML-escaped variants for the email body.
+    const nameHtml = this.escapeHtml(name);
+    const orderHtml = this.escapeHtml(params.orderNumber);
+    const courierHtml = courier ? this.escapeHtml(courier) : '';
+    const awbHtml = this.escapeHtml(params.awb);
+    // Tracking URL is only rendered as a link when it parses as http(s);
+    // otherwise it is shown as escaped plain text (or omitted when absent).
+    const trackLine = this.trackingLink(params.trackingUrl);
+    if (params.email) {
+      try {
+        await this.email.sendEmail({
+          to: params.email,
+          subject: `Your order ${params.orderNumber} has shipped`,
+          htmlBody: `<p>Hi ${nameHtml},</p><p>Good news — your order <strong>${orderHtml}</strong> is on its way${courierHtml ? ` via <strong>${courierHtml}</strong>` : ''}. Tracking number (AWB): <strong>${awbHtml}</strong>.</p>${trackLine}<p>Thank you for shopping with Aryavartham.</p>`,
+        });
+      } catch (e) {
+        this.logger.error(
+          `Order-shipped email for ${params.orderNumber} failed: ${(e as any)?.message}`,
+        );
+      }
+    }
+    if (params.phone) {
+      try {
+        // No applicantId: store customers are not applicants, and passing a
+        // non-UUID here would corrupt the applicant-scoped notification log
+        // (sendAnnouncement skips logging when applicantId is falsy).
+        await this.whatsapp.sendAnnouncement(
+          params.phone,
+          `Order ${params.orderNumber} shipped`,
+          `Hi ${name}, your order ${params.orderNumber} has shipped${courier ? ` via ${courier}` : ''} (AWB ${params.awb}).${params.trackingUrl ? ` Track: ${params.trackingUrl}` : ''}`,
+          undefined as unknown as string,
+        );
+      } catch (e) {
+        this.logger.error(
+          `Order-shipped WhatsApp for ${params.orderNumber} failed: ${(e as any)?.message}`,
+        );
+      }
     }
   }
 

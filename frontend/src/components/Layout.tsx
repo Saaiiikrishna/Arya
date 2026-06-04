@@ -10,7 +10,18 @@ import { useScroll, useTransform } from 'motion/react';
 
 interface LayoutProps {
   children: React.ReactNode;
-  activeTab?: 'manifesto' | 'apply' | 'archives' | 'hub' | 'pledge' | 'investors' | 'support';
+  activeTab?:
+    | 'home'
+    | 'manifesto'
+    | 'startup'
+    | 'store'
+    | 'articles'
+    | 'apply'
+    | 'archives'
+    | 'hub'
+    | 'pledge'
+    | 'investors'
+    | 'support';
   onTabChange?: (tabId: string) => void;
   showNav?: boolean;
 }
@@ -87,9 +98,11 @@ export default function Layout({ children, activeTab = 'manifesto', onTabChange,
                 </div>
               )}
             </div>
-            <div className="hidden md:flex items-center space-x-8">
+            <div className="hidden md:flex items-center space-x-6">
               {[
-                { id: 'manifesto', label: 'Manifesto' },
+                { id: 'startup', label: 'Start Up' },
+                { id: 'store', label: 'Store' },
+                { id: 'articles', label: 'Articles' },
                 { id: 'archives', label: 'Archives' },
                 { id: 'investors', label: 'Investors' },
                 { id: 'support', label: 'Support' },
@@ -162,13 +175,18 @@ export default function Layout({ children, activeTab = 'manifesto', onTabChange,
             
             <div className="flex flex-col gap-4 border-l border-forest/10 pl-6">
                <h4 className="font-serif italic text-forest mb-2">Navigation</h4>
-              {['Manifesto', 'Archives'].map((link) => (
+              {[
+                { id: 'startup', label: 'Start Up' },
+                { id: 'store', label: 'Store' },
+                { id: 'articles', label: 'Articles' },
+                { id: 'archives', label: 'Archives' },
+              ].map((link) => (
                 <button
-                  key={link}
-                  onClick={() => handleNavigation(link.toLowerCase())}
+                  key={link.id}
+                  onClick={() => handleNavigation(link.id)}
                   className="text-left font-sans text-xs uppercase tracking-widest text-ink/70 hover:text-terracotta-warm transition-colors"
                 >
-                  {link}
+                  {link.label}
                 </button>
               ))}
             </div>

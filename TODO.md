@@ -33,6 +33,24 @@
 - [x] Announcements (batch-scoped with deadlines)
 - [x] Security hardening — identity pinning, token storage, RBAC — `17edb1a`, `3d9b73a`, `fdc0655`, `1788c00`
 
+### Storefront / Articles / Marketing program (PR #9, branch `claude/storefront-articles-marketing`)
+- [x] New premium marketing landing at `/`; original landing moved to `/startup`; nav + DESIGN.md §7 "Public Marketing" layer (glossy/rounded `mkt-*`, scoped)
+- [x] Removed Sanskrit shloka + image from the (now `/startup`) landing; rounded hero pill
+- [x] Full-enterprise commerce architecture — `docs/COMMERCE_ARCHITECTURE.md` (architect→critic)
+- [x] Commerce schema + 10 migrations + shipment-number migration
+- [x] Commerce backend: catalog, inventory (multi-warehouse), tax (GST), store-media, coupons, cart, diy, purchasing, orders/checkout (Razorpay), invoicing (GST PDF), shipping (courier), returns (RMA), real-time gateways, jobs, analytics
+- [x] Articles backend: submission → moderation → publish, media (15img/3vid), view metrics, related, author-vs-admin visibility
+- [x] Frontend: storeApi/storeAuth/sockets + component kit; public storefront (catalog, product detail w/ dynamic tabs, DIY build, cart, Razorpay checkout, account, order tracking); public articles (list/detail/submit); admin `/admin/store/*` dashboards
+
+#### Storefront follow-ups
+- [x] Socket.io **Redis adapter** for cross-replica real-time fan-out (store + chat gateways) — `6256c31`
+- [x] Integration test suite on real Postgres (oversell/coupon/tax/invoice paths; 4 suites/23 tests) — `8f27a5d`
+- [x] `ArticleStatus` DRAFT + ARCHIVED states (enum migration `20260613000000`) + save-draft/archive/restore UI — `6256c31`
+- [x] Dedicated admin product-LIST endpoint (`GET /admin/store/products`, all statuses) — `6256c31`
+- [x] Backend list endpoints presign thumbnail read URLs (catalog + article covers) — `6256c31`
+- [ ] (ops, not code) Populate default warehouse state/GSTIN via `/admin/store/settings` before the first production invoice
+- [ ] (optional) Deeper checkout/refund e2e on real PG+Redis with a Razorpay test-mode client (current int-suite mocks external SDKs)
+
 ---
 
 ## P0 — Blockers (Platform Cannot Run Without These)

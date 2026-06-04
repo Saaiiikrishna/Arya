@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Req, HttpCode, HttpStatus, Headers } from '@nestjs/common';
+import { Controller, Post, UseGuards, Req, HttpCode, HttpStatus, Headers, BadRequestException } from '@nestjs/common';
 import { PaymentService } from './payment.service';
 import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
 
@@ -17,9 +17,17 @@ export class PaymentController {
   async razorpayWebhook(
     @Headers('x-razorpay-signature') signature: string,
     @Req() req: any,
-    @Body() body: any,
   ) {
     const rawBody: Buffer | undefined = req.rawBody;
-    return this.paymentService.handleWebhook(signature, rawBody ?? body);
+    // Fail closed: the HMAC must be verified over the EXACT bytes Razorpay signed.
+    // Falling back to the JSON-parsed body would re-serialize differently and make
+    // the signature silently never match — so a missing/non-Buffer raw body is a
+    // hard error, never a degraded-but-accepted path.
+    if (!rawBody || !Buffer.isBuffer(rawBody)) {
+      throw new BadRequestException(
+        'Raw request body unavailable; cannot verify webhook signature',
+      );
+    }
+    return this.paymentService.handleWebhook(signature, rawBody);
   }
 }

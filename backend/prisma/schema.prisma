@@ -254,13 +254,13 @@ model Question {
   label      String
   helpText   String?      @map("help_text")
   type       QuestionType
-  options    Json?        // For SELECT/MULTISELECT: [{ value: string, label: string }]
+  options    Json? // For SELECT/MULTISELECT: [{ value: string, label: string }]
   sortOrder  Int          @default(0) @map("sort_order")
   isRequired Boolean      @default(true) @map("is_required")
   isActive   Boolean      @default(true) @map("is_active")
   category   String?
   phaseTag   PhaseTag     @default(INITIAL) @map("phase_tag")
-  validation Json?        // { min, max, pattern, etc. }
+  validation Json? // { min, max, pattern, etc. }
   createdAt  DateTime     @default(now()) @map("created_at")
   updatedAt  DateTime     @updatedAt @map("updated_at")
 
@@ -276,7 +276,7 @@ model EligibilityCriteria {
   id         String           @id @default(uuid()) @db.Uuid
   questionId String           @map("question_id") @db.Uuid
   operator   CriteriaOperator
-  value      Json             // The value to compare against
+  value      Json // The value to compare against
   weight     Float            @default(1.0) // Weight for team matching scoring
   isActive   Boolean          @default(true) @map("is_active")
   createdAt  DateTime         @default(now()) @map("created_at")
@@ -289,64 +289,66 @@ model EligibilityCriteria {
 }
 
 model Applicant {
-  id             String          @id @default(uuid()) @db.Uuid
-  email          String          @unique
-  firstName      String          @map("first_name")
-  lastName       String          @map("last_name")
-  phone          String?
-  status         ApplicantStatus @default(PENDING)
-  batchId        String?         @map("batch_id") @db.Uuid
-  teamId         String?         @map("team_id") @db.Uuid
-  consentGiven   Boolean         @default(false) @map("consent_given")
-  consentDocUrl  String?         @map("consent_doc_url")
-  accessToken    String          @unique @map("access_token") @db.Uuid
-  appliedAt      DateTime        @default(now()) @map("applied_at")
-  movedAt        DateTime?       @map("moved_at")
-  removedAt      DateTime?       @map("removed_at")
-  role           String?
-  timezone       String?
-  availability   String?
-  isOnline       Boolean         @default(false) @map("is_online")
-  lastActiveAt   DateTime?       @map("last_active_at")
-  avgResponseTimeMs Int?         @map("avg_response_time_ms")
-  avatarUrl      String?         @map("avatar_url")
-  city           String?
-  age            Int?
-  agreementAccepted Boolean      @default(false) @map("agreement_accepted")
-  isTeamLeader   Boolean         @default(false) @map("is_team_leader")
-  vocation       String?         @db.Text
-  obsession      String?         @db.Text
-  heresy         String?         @db.Text
-  scarTissue     String?         @db.Text @map("scar_tissue")
-  whatsappPhone  String?         @map("whatsapp_phone")
-  whatsappVerified Boolean       @default(false) @map("whatsapp_verified")
+  id                      String          @id @default(uuid()) @db.Uuid
+  email                   String          @unique
+  firstName               String          @map("first_name")
+  lastName                String          @map("last_name")
+  phone                   String?
+  status                  ApplicantStatus @default(PENDING)
+  batchId                 String?         @map("batch_id") @db.Uuid
+  teamId                  String?         @map("team_id") @db.Uuid
+  consentGiven            Boolean         @default(false) @map("consent_given")
+  consentDocUrl           String?         @map("consent_doc_url")
+  accessToken             String          @unique @map("access_token") @db.Uuid
+  appliedAt               DateTime        @default(now()) @map("applied_at")
+  movedAt                 DateTime?       @map("moved_at")
+  removedAt               DateTime?       @map("removed_at")
+  role                    String?
+  timezone                String?
+  availability            String?
+  isOnline                Boolean         @default(false) @map("is_online")
+  lastActiveAt            DateTime?       @map("last_active_at")
+  avgResponseTimeMs       Int?            @map("avg_response_time_ms")
+  avatarUrl               String?         @map("avatar_url")
+  city                    String?
+  age                     Int?
+  agreementAccepted       Boolean         @default(false) @map("agreement_accepted")
+  isTeamLeader            Boolean         @default(false) @map("is_team_leader")
+  vocation                String?         @db.Text
+  obsession               String?         @db.Text
+  heresy                  String?         @db.Text
+  scarTissue              String?         @map("scar_tissue") @db.Text
+  whatsappPhone           String?         @map("whatsapp_phone")
+  whatsappVerified        Boolean         @default(false) @map("whatsapp_verified")
   // STOP opt-out is tracked in the dedicated WhatsappOptOut table (keyed by
   // normalized phone) — not a per-applicant flag — so the send-path check is an
   // indexed PK lookup and also covers numbers with no applicant row.
-  whatsappPresenceChecked Boolean @default(false) @map("whatsapp_presence_checked")
-  department     DepartmentRole? @map("department")
-  isAvailable    Boolean         @default(true) @map("is_available")
-  updatedAt      DateTime        @updatedAt @map("updated_at")
+  whatsappPresenceChecked Boolean         @default(false) @map("whatsapp_presence_checked")
+  department              DepartmentRole? @map("department")
+  isAvailable             Boolean         @default(true) @map("is_available")
+  updatedAt               DateTime        @updatedAt @map("updated_at")
 
   // Referral tracking
-  referredById    String?         @map("referred_by_id") @db.Uuid
-  referredBy      Applicant?      @relation("Referrals", fields: [referredById], references: [id])
-  referrals       Applicant[]     @relation("Referrals")
+  referredById    String?          @map("referred_by_id") @db.Uuid
+  referredBy      Applicant?       @relation("Referrals", fields: [referredById], references: [id])
+  referrals       Applicant[]      @relation("Referrals")
   referralProfile ReferralProfile?
 
-  batch           Batch?           @relation(fields: [batchId], references: [id])
-  team            Team?            @relation("TeamMembers", fields: [teamId], references: [id])
-  answers         Answer[]
-  notifications   Notification[]
-  documents       Document[]
-  payments        Payment[]
-  matchingProfile MatchingProfile?
-  ledTeam         Team?            @relation("TeamLeader")
-  equityHoldings  EquityHolder[]
-  badges            ApplicantBadge[]
-  certificates      Certificate[]
-  interviewBooking  InterviewBooking?
-  videoSubmission   VideoSubmission?
+  batch            Batch?            @relation(fields: [batchId], references: [id])
+  team             Team?             @relation("TeamMembers", fields: [teamId], references: [id])
+  answers          Answer[]
+  notifications    Notification[]
+  documents        Document[]
+  payments         Payment[]
+  matchingProfile  MatchingProfile?
+  ledTeam          Team?             @relation("TeamLeader")
+  equityHoldings   EquityHolder[]
+  badges           ApplicantBadge[]
+  certificates     Certificate[]
+  interviewBooking InterviewBooking?
+  videoSubmission  VideoSubmission?
+  // COMMERCE back-relation: 1:1 optional link via Customer.applicantId (see docs/COMMERCE_ARCHITECTURE.md §2.8)
+  storeCustomer    Customer?
 
   @@index([status])
   @@index([batchId])
@@ -360,13 +362,13 @@ model Applicant {
 }
 
 model ReferralProfile {
-  id             String    @id @default(uuid()) @db.Uuid
-  applicantId    String    @unique @map("applicant_id") @db.Uuid
-  referralCode   String    @unique @map("referral_code")
-  isActive       Boolean   @default(true) @map("is_active")
-  totalReferrals Int       @default(0) @map("total_referrals")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
+  id             String   @id @default(uuid()) @db.Uuid
+  applicantId    String   @unique @map("applicant_id") @db.Uuid
+  referralCode   String   @unique @map("referral_code")
+  isActive       Boolean  @default(true) @map("is_active")
+  totalReferrals Int      @default(0) @map("total_referrals")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
   applicant Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
 
@@ -377,7 +379,7 @@ model Answer {
   id          String   @id @default(uuid()) @db.Uuid
   applicantId String   @map("applicant_id") @db.Uuid
   questionId  String   @map("question_id") @db.Uuid
-  value       Json     // Supports any answer type
+  value       Json // Supports any answer type
   phaseTag    PhaseTag @default(INITIAL) @map("phase_tag")
   answeredAt  DateTime @default(now()) @map("answered_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
@@ -394,8 +396,8 @@ model Answer {
 model Batch {
   id                  String      @id @default(uuid()) @db.Uuid
   batchNumber         Int         @unique @map("batch_number")
-  name                String?     // Admin-defined batch name
-  nickname            String?     // Admin-defined short nickname
+  name                String? // Admin-defined batch name
+  nickname            String? // Admin-defined short nickname
   status              BatchStatus @default(FILLING)
   capacity            Int         @default(1000)
   currentCount        Int         @default(0) @map("current_count")
@@ -408,13 +410,13 @@ model Batch {
   productionAt        DateTime?   @map("production_at")
   updatedAt           DateTime    @updatedAt @map("updated_at")
 
-  applicants       Applicant[]
-  teams            Team[]
-  instructions     BatchInstruction[]
-  announcements    Announcement[]
-  interviewSlots      InterviewSlot[]
-  videoSubmissions    VideoSubmission[]
-  mentorAssignments   MentorAssignment[]
+  applicants           Applicant[]
+  teams                Team[]
+  instructions         BatchInstruction[]
+  announcements        Announcement[]
+  interviewSlots       InterviewSlot[]
+  videoSubmissions     VideoSubmission[]
+  mentorAssignments    MentorAssignment[]
   coFounderAssignments CoFounderAssignment[]
 
   @@index([status])
@@ -423,30 +425,30 @@ model Batch {
 }
 
 model Team {
-  id               String    @id @default(uuid()) @db.Uuid
-  batchId          String    @map("batch_id") @db.Uuid
-  name             String
-  teamType         TeamType  @default(BUILDER_POOL) @map("team_type")
-  leaderId         String?   @unique @map("leader_id") @db.Uuid
-  memberCount      Int       @default(0) @map("member_count")
-  matchingCriteria Json?     @map("matching_criteria")
-  matchScore       Float?    @map("match_score")
-  ideaCategory     IdeaCategory? @map("idea_category")
-  isLocked         Boolean       @default(false) @map("is_locked")
+  id                String        @id @default(uuid()) @db.Uuid
+  batchId           String        @map("batch_id") @db.Uuid
+  name              String
+  teamType          TeamType      @default(BUILDER_POOL) @map("team_type")
+  leaderId          String?       @unique @map("leader_id") @db.Uuid
+  memberCount       Int           @default(0) @map("member_count")
+  matchingCriteria  Json?         @map("matching_criteria")
+  matchScore        Float?        @map("match_score")
+  ideaCategory      IdeaCategory? @map("idea_category")
+  isLocked          Boolean       @default(false) @map("is_locked")
   // TRAINING pause (post-90-day remediation): reason note + when it began.
-  trainingReason    String?      @db.Text @map("training_reason")
-  trainingStartedAt DateTime?    @map("training_started_at")
-  createdAt        DateTime  @default(now()) @map("created_at")
-  updatedAt        DateTime  @updatedAt @map("updated_at")
+  trainingReason    String?       @map("training_reason") @db.Text
+  trainingStartedAt DateTime?     @map("training_started_at")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
 
-  batch      Batch            @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  leader     Applicant?       @relation("TeamLeader", fields: [leaderId], references: [id])
-  members    Applicant[]      @relation("TeamMembers")
-  project    Project?
-  companyEntity CompanyEntity?
-  sprints    Sprint[]
-  elections  LeaderElection[]
-  requests   TeamRequest[]
+  batch               Batch                @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  leader              Applicant?           @relation("TeamLeader", fields: [leaderId], references: [id])
+  members             Applicant[]          @relation("TeamMembers")
+  project             Project?
+  companyEntity       CompanyEntity?
+  sprints             Sprint[]
+  elections           LeaderElection[]
+  requests            TeamRequest[]
   mentorAssignments   MentorAssignment[]
   coFounderAssignment CoFounderAssignment?
   blockerLogs         BlockerLog[]
@@ -485,7 +487,7 @@ model Notification {
   subject     String
   body        String             @db.Text
   status      NotificationStatus @default(PENDING)
-  metadata    Json?              // Extra data (templateId, etc.)
+  metadata    Json? // Extra data (templateId, etc.)
   sentAt      DateTime?          @map("sent_at")
   createdAt   DateTime           @default(now()) @map("created_at")
 
@@ -528,37 +530,37 @@ model EmailTemplate {
 }
 
 model Project {
-  id               String        @id @default(uuid()) @db.Uuid
-  teamId           String        @unique @map("team_id") @db.Uuid
-  projectName      String        @map("project_name")
-  targetMarket     String        @map("target_market")
-  description      String        @db.Text
-  estimatedFunds   Int           @map("estimated_funds")            // integer minor units (cents)
-  fundedAmount     Int           @default(0) @map("funded_amount")  // integer minor units (cents)
-  status           ProjectStatus @default(UNDER_DEVELOPMENT)
-  createdAt        DateTime      @default(now()) @map("created_at")
-  updatedAt        DateTime      @updatedAt @map("updated_at")
+  id             String        @id @default(uuid()) @db.Uuid
+  teamId         String        @unique @map("team_id") @db.Uuid
+  projectName    String        @map("project_name")
+  targetMarket   String        @map("target_market")
+  description    String        @db.Text
+  estimatedFunds Int           @map("estimated_funds") // integer minor units (cents)
+  fundedAmount   Int           @default(0) @map("funded_amount") // integer minor units (cents)
+  status         ProjectStatus @default(UNDER_DEVELOPMENT)
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
 
-  team             Team          @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  ledger           LedgerTransaction[]
-  
+  team   Team                @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  ledger LedgerTransaction[]
+
   @@map("projects")
 }
 
 model Sprint {
-  id         String       @id @default(uuid()) @db.Uuid
-  teamId     String       @map("team_id") @db.Uuid
-  status     SprintStatus @default(ON_TRACK)
+  id           String       @id @default(uuid()) @db.Uuid
+  teamId       String       @map("team_id") @db.Uuid
+  status       SprintStatus @default(ON_TRACK)
   // 1 = first 90 days, 2 = second 90 days. The 1000-day equity timer may only
   // start after both sprints are COMPLETED (the first 180 days).
-  sprintNumber Int        @default(1) @map("sprint_number")
-  completedAt DateTime?   @map("completed_at")
-  startDate  DateTime     @map("start_date")
-  endDate    DateTime     @map("end_date")
-  createdAt  DateTime     @default(now()) @map("created_at")
-  updatedAt  DateTime     @updatedAt @map("updated_at")
+  sprintNumber Int          @default(1) @map("sprint_number")
+  completedAt  DateTime?    @map("completed_at")
+  startDate    DateTime     @map("start_date")
+  endDate      DateTime     @map("end_date")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
 
-  team       Team         @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  team       Team        @relation(fields: [teamId], references: [id], onDelete: Cascade)
   milestones Milestone[]
 
   @@index([teamId])
@@ -576,7 +578,7 @@ model Milestone {
   completedAt DateTime?     @map("completed_at")
   createdAt   DateTime      @default(now()) @map("created_at")
 
-  sprint      Sprint        @relation(fields: [sprintId], references: [id], onDelete: Cascade)
+  sprint Sprint @relation(fields: [sprintId], references: [id], onDelete: Cascade)
 
   @@index([sprintId])
   @@map("milestones")
@@ -585,12 +587,12 @@ model Milestone {
 model LedgerTransaction {
   id          String                @id @default(uuid()) @db.Uuid
   projectId   String                @map("project_id") @db.Uuid
-  amount      Int                   // integer minor units (cents)
+  amount      Int // integer minor units (cents)
   type        LedgerTransactionType
   description String
   date        DateTime              @default(now())
-  
-  project     Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
   @@map("ledger_transactions")
@@ -599,16 +601,16 @@ model LedgerTransaction {
 model Payment {
   id                String        @id @default(uuid()) @db.Uuid
   applicantId       String        @map("applicant_id") @db.Uuid
-  razorpayOrderId   String?       @map("razorpay_order_id") @unique
-  razorpayPaymentId String?       @map("razorpay_payment_id") @unique
+  razorpayOrderId   String?       @unique @map("razorpay_order_id")
+  razorpayPaymentId String?       @unique @map("razorpay_payment_id")
   razorpaySignature String?       @map("razorpay_signature")
-  amount            Int           // integer paise
+  amount            Int // integer paise
   currency          String        @default("INR")
   status            PaymentStatus @default(CREATED)
   createdAt         DateTime      @default(now()) @map("created_at")
   updatedAt         DateTime      @updatedAt @map("updated_at")
 
-  applicant         Applicant     @relation(fields: [applicantId], references: [id])
+  applicant Applicant @relation(fields: [applicantId], references: [id])
 
   @@index([applicantId])
   @@map("payments")
@@ -617,18 +619,18 @@ model Payment {
 // ─── MATCHING PROFILE ─────────────────────────────────────
 
 model MatchingProfile {
-  id              String          @id @default(uuid()) @db.Uuid
-  applicantId     String          @unique @map("applicant_id") @db.Uuid
-  ideaCategory    IdeaCategory?   @map("idea_category")
-  hasIdea         Boolean         @default(false) @map("has_idea")
-  ideaSummary     String?         @map("idea_summary") @db.Text
-  skills          Json            @default("[]") // Array of skill tags: ["React", "Python", "Marketing"]
-  commitmentLevel CommitmentLevel @default(FLEXIBLE) @map("commitment_level")
-  hoursPerDay     Int?            @map("hours_per_day")
-  personalityScores Json?         @map("personality_scores") // { leadership, execution, creativity, analytical }
-  experienceYears Int?            @map("experience_years")
-  createdAt       DateTime        @default(now()) @map("created_at")
-  updatedAt       DateTime        @updatedAt @map("updated_at")
+  id                String          @id @default(uuid()) @db.Uuid
+  applicantId       String          @unique @map("applicant_id") @db.Uuid
+  ideaCategory      IdeaCategory?   @map("idea_category")
+  hasIdea           Boolean         @default(false) @map("has_idea")
+  ideaSummary       String?         @map("idea_summary") @db.Text
+  skills            Json            @default("[]") // Array of skill tags: ["React", "Python", "Marketing"]
+  commitmentLevel   CommitmentLevel @default(FLEXIBLE) @map("commitment_level")
+  hoursPerDay       Int?            @map("hours_per_day")
+  personalityScores Json?           @map("personality_scores") // { leadership, execution, creativity, analytical }
+  experienceYears   Int?            @map("experience_years")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
 
   applicant Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
 
@@ -641,19 +643,19 @@ model MatchingProfile {
 // ─── INVESTOR PLATFORM ────────────────────────────────────
 
 model Investor {
-  id            String   @id @default(uuid()) @db.Uuid
-  email         String   @unique
-  firstName     String   @map("first_name")
-  lastName      String   @map("last_name")
-  firm          String?
-  bio           String?  @db.Text
-  linkedIn      String?  @map("linkedin_url")
-  interests     Json?    // Array of IdeaCategory values they're interested in
-  isApproved    Boolean  @default(false) @map("is_approved")
-  avatarUrl     String?  @map("avatar_url")
-  passwordHash  String?  @map("password_hash")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  firstName    String   @map("first_name")
+  lastName     String   @map("last_name")
+  firm         String?
+  bio          String?  @db.Text
+  linkedIn     String?  @map("linkedin_url")
+  interests    Json? // Array of IdeaCategory values they're interested in
+  isApproved   Boolean  @default(false) @map("is_approved")
+  avatarUrl    String?  @map("avatar_url")
+  passwordHash String?  @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   meetingRequests MeetingRequest[]
 
@@ -671,14 +673,14 @@ model WhatsappOptOut {
 }
 
 model StartupShowcase {
-  id            String   @id @default(uuid()) @db.Uuid
-  teamId        String   @unique @map("team_id") @db.Uuid
-  pitchSummary  String   @map("pitch_summary") @db.Text
-  mvpDemoUrl    String?  @map("mvp_demo_url")
-  metrics       Json?    // { users, revenue, growth, etc. }
-  isPublished   Boolean  @default(false) @map("is_published")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id           String   @id @default(uuid()) @db.Uuid
+  teamId       String   @unique @map("team_id") @db.Uuid
+  pitchSummary String   @map("pitch_summary") @db.Text
+  mvpDemoUrl   String?  @map("mvp_demo_url")
+  metrics      Json? // { users, revenue, growth, etc. }
+  isPublished  Boolean  @default(false) @map("is_published")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   meetingRequests MeetingRequest[]
 
@@ -693,15 +695,15 @@ enum MeetingStatus {
 }
 
 model MeetingRequest {
-  id            String        @id @default(uuid()) @db.Uuid
-  investorId    String        @map("investor_id") @db.Uuid
-  showcaseId    String        @map("showcase_id") @db.Uuid
-  status        MeetingStatus @default(REQUESTED)
-  message       String?       @db.Text
-  scheduledAt   DateTime?     @map("scheduled_at")
-  notes         String?       @db.Text
-  createdAt     DateTime      @default(now()) @map("created_at")
-  updatedAt     DateTime      @updatedAt @map("updated_at")
+  id          String        @id @default(uuid()) @db.Uuid
+  investorId  String        @map("investor_id") @db.Uuid
+  showcaseId  String        @map("showcase_id") @db.Uuid
+  status      MeetingStatus @default(REQUESTED)
+  message     String?       @db.Text
+  scheduledAt DateTime?     @map("scheduled_at")
+  notes       String?       @db.Text
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
 
   investor Investor        @relation(fields: [investorId], references: [id], onDelete: Cascade)
   showcase StartupShowcase @relation(fields: [showcaseId], references: [id], onDelete: Cascade)
@@ -722,12 +724,12 @@ model Donation {
   id                String        @id @default(uuid()) @db.Uuid
   donorName         String        @map("donor_name")
   donorEmail        String        @map("donor_email")
-  amount            Int           // integer paise
+  amount            Int // integer paise
   currency          String        @default("INR")
   type              DonationType  @default(ONE_TIME)
   message           String?       @db.Text
-  razorpayOrderId   String?       @map("razorpay_order_id") @unique
-  razorpayPaymentId String?       @map("razorpay_payment_id") @unique
+  razorpayOrderId   String?       @unique @map("razorpay_order_id")
+  razorpayPaymentId String?       @unique @map("razorpay_payment_id")
   status            PaymentStatus @default(CREATED)
   isAnonymous       Boolean       @default(false) @map("is_anonymous")
   createdAt         DateTime      @default(now()) @map("created_at")
@@ -763,7 +765,7 @@ model TrainingAssignment {
   moduleId    String    @map("module_id") @db.Uuid
   assignedAt  DateTime  @default(now()) @map("assigned_at")
   completedAt DateTime? @map("completed_at")
-  score       Float?    // Score from 0-100
+  score       Float? // Score from 0-100
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
@@ -790,13 +792,13 @@ model ChatRoom {
 }
 
 model ChatMessage {
-  id              String   @id @default(uuid()) @db.Uuid
-  roomId          String   @map("room_id") @db.Uuid
-  senderId        String   @map("sender_id") @db.Uuid
-  senderName      String   @map("sender_name")
-  content         String   @db.Text
-  isAnnouncement  Boolean  @default(false) @map("is_announcement")
-  sentAt          DateTime @default(now()) @map("sent_at")
+  id             String   @id @default(uuid()) @db.Uuid
+  roomId         String   @map("room_id") @db.Uuid
+  senderId       String   @map("sender_id") @db.Uuid
+  senderName     String   @map("sender_name")
+  content        String   @db.Text
+  isAnnouncement Boolean  @default(false) @map("is_announcement")
+  sentAt         DateTime @default(now()) @map("sent_at")
 
   room ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
@@ -808,18 +810,18 @@ model ChatMessage {
 // ─── LEADER ELECTION SYSTEM ──────────────────────────────
 
 model LeaderElection {
-  id            String         @id @default(uuid()) @db.Uuid
-  teamId        String         @map("team_id") @db.Uuid
-  status        ElectionStatus @default(NOMINATION)
-  instructions  String?        @db.Text // Instructions from admin about the process
-  deadline      DateTime?      // Deadline for entire election process
-  startedAt     DateTime       @default(now()) @map("started_at")
-  completedAt   DateTime?      @map("completed_at")
-  winnerId      String?        @map("winner_id") @db.Uuid
-  createdAt     DateTime       @default(now()) @map("created_at")
-  updatedAt     DateTime       @updatedAt @map("updated_at")
+  id           String         @id @default(uuid()) @db.Uuid
+  teamId       String         @map("team_id") @db.Uuid
+  status       ElectionStatus @default(NOMINATION)
+  instructions String?        @db.Text // Instructions from admin about the process
+  deadline     DateTime? // Deadline for entire election process
+  startedAt    DateTime       @default(now()) @map("started_at")
+  completedAt  DateTime?      @map("completed_at")
+  winnerId     String?        @map("winner_id") @db.Uuid
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
 
-  team        Team                @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  team        Team               @relation(fields: [teamId], references: [id], onDelete: Cascade)
   nominations Nomination[]
   votes       LeaderVote[]
   questions   ElectionQuestion[]
@@ -830,18 +832,18 @@ model LeaderElection {
 }
 
 model ElectionQuestion {
-  id           String         @id @default(uuid()) @db.Uuid
-  electionId   String?        @map("election_id") @db.Uuid
-  label        String
-  helpText     String?        @map("help_text")
-  type         QuestionType   @default(TEXTAREA)
-  options      Json?          // For SELECT/MULTISELECT
-  isRequired   Boolean        @default(true) @map("is_required")
-  isTemplate   Boolean        @default(false) @map("is_template") // Reusable template questions
-  sortOrder    Int            @default(0) @map("sort_order")
-  createdAt    DateTime       @default(now()) @map("created_at")
+  id         String       @id @default(uuid()) @db.Uuid
+  electionId String?      @map("election_id") @db.Uuid
+  label      String
+  helpText   String?      @map("help_text")
+  type       QuestionType @default(TEXTAREA)
+  options    Json? // For SELECT/MULTISELECT
+  isRequired Boolean      @default(true) @map("is_required")
+  isTemplate Boolean      @default(false) @map("is_template") // Reusable template questions
+  sortOrder  Int          @default(0) @map("sort_order")
+  createdAt  DateTime     @default(now()) @map("created_at")
 
-  election LeaderElection? @relation(fields: [electionId], references: [id], onDelete: Cascade)
+  election LeaderElection?    @relation(fields: [electionId], references: [id], onDelete: Cascade)
   answers  NominationAnswer[]
 
   @@index([electionId])
@@ -850,11 +852,11 @@ model ElectionQuestion {
 }
 
 model NominationAnswer {
-  id            String    @id @default(uuid()) @db.Uuid
-  nominationId  String    @map("nomination_id") @db.Uuid
-  questionId    String    @map("question_id") @db.Uuid
-  value         Json
-  answeredAt    DateTime  @default(now()) @map("answered_at")
+  id           String   @id @default(uuid()) @db.Uuid
+  nominationId String   @map("nomination_id") @db.Uuid
+  questionId   String   @map("question_id") @db.Uuid
+  value        Json
+  answeredAt   DateTime @default(now()) @map("answered_at")
 
   nomination Nomination       @relation(fields: [nominationId], references: [id], onDelete: Cascade)
   question   ElectionQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
@@ -866,15 +868,15 @@ model NominationAnswer {
 }
 
 model Nomination {
-  id            String             @id @default(uuid()) @db.Uuid
-  electionId    String             @map("election_id") @db.Uuid
-  nomineeId     String             @map("nominee_id") @db.Uuid
-  nominatedById String?            @map("nominated_by_id") @db.Uuid
-  isSelfNomination Boolean         @default(false) @map("is_self_nomination")
-  reason        String?            @db.Text
-  pitch         String?            @db.Text
-  skills        Json?
-  createdAt     DateTime           @default(now()) @map("created_at")
+  id               String   @id @default(uuid()) @db.Uuid
+  electionId       String   @map("election_id") @db.Uuid
+  nomineeId        String   @map("nominee_id") @db.Uuid
+  nominatedById    String?  @map("nominated_by_id") @db.Uuid
+  isSelfNomination Boolean  @default(false) @map("is_self_nomination")
+  reason           String?  @db.Text
+  pitch            String?  @db.Text
+  skills           Json?
+  createdAt        DateTime @default(now()) @map("created_at")
 
   election LeaderElection     @relation(fields: [electionId], references: [id], onDelete: Cascade)
   answers  NominationAnswer[]
@@ -886,11 +888,11 @@ model Nomination {
 }
 
 model LeaderVote {
-  id         String         @id @default(uuid()) @db.Uuid
-  electionId String         @map("election_id") @db.Uuid
-  voterId    String         @map("voter_id") @db.Uuid
-  nomineeId  String         @map("nominee_id") @db.Uuid
-  castAt     DateTime       @default(now()) @map("cast_at")
+  id         String   @id @default(uuid()) @db.Uuid
+  electionId String   @map("election_id") @db.Uuid
+  voterId    String   @map("voter_id") @db.Uuid
+  nomineeId  String   @map("nominee_id") @db.Uuid
+  castAt     DateTime @default(now()) @map("cast_at")
 
   election LeaderElection @relation(fields: [electionId], references: [id], onDelete: Cascade)
 
@@ -913,13 +915,13 @@ model TeamRequest {
   resolvedById String?           @map("resolved_by_id") @db.Uuid
   resolvedAt   DateTime?         @map("resolved_at")
   targetTeamId String?           @map("target_team_id") @db.Uuid
-  createdAt          DateTime          @default(now()) @map("created_at")
-  updatedAt          DateTime          @updatedAt @map("updated_at")
+  createdAt    DateTime          @default(now()) @map("created_at")
+  updatedAt    DateTime          @updatedAt @map("updated_at")
 
   // Mentor approval step (only for SEPARATION/JOIN_EXISTING/CREATE_NEW)
   mentorStatus       TeamRequestStatus? @map("mentor_status")
-  mentorReviewedById String?           @map("mentor_reviewed_by_id") @db.Uuid
-  mentorReviewedAt   DateTime?         @map("mentor_reviewed_at")
+  mentorReviewedById String?            @map("mentor_reviewed_by_id") @db.Uuid
+  mentorReviewedAt   DateTime?          @map("mentor_reviewed_at")
 
   team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
@@ -1114,29 +1116,29 @@ model SiteSetting {
 // ─── VISITOR ANALYTICS ────────────────────────────────────
 
 model Visitor {
-  id             String   @id @default(uuid()) @db.Uuid
-  sessionId      String   @unique @map("session_id")
-  ip             String
-  history        Json     @default("[]") // Array of { path, timestamp, duration }
-  totalDuration  Int      @default(0)    @map("total_duration")
-  country        String?
-  city           String?
-  region         String?
-  userAgent      String?  @map("user_agent") @db.Text
-  browser        String?
-  os             String?
-  device         String?           // desktop | mobile | tablet
-  screenWidth    Int?     @map("screen_width")
-  screenHeight   Int?     @map("screen_height")
-  language       String?
-  
+  id            String  @id @default(uuid()) @db.Uuid
+  sessionId     String  @unique @map("session_id")
+  ip            String
+  history       Json    @default("[]") // Array of { path, timestamp, duration }
+  totalDuration Int     @default(0) @map("total_duration")
+  country       String?
+  city          String?
+  region        String?
+  userAgent     String? @map("user_agent") @db.Text
+  browser       String?
+  os            String?
+  device        String? // desktop | mobile | tablet
+  screenWidth   Int?    @map("screen_width")
+  screenHeight  Int?    @map("screen_height")
+  language      String?
+
   // Logged-in user info (if they log in during this session/IP)
-  applicantId    String?  @map("applicant_id") @db.Uuid
-  applicantEmail String?  @map("applicant_email")
-  applicantName  String?  @map("applicant_name")
-  
-  firstVisitAt   DateTime @default(now()) @map("first_visit_at")
-  lastVisitAt    DateTime @default(now()) @map("last_visit_at")
+  applicantId    String? @map("applicant_id") @db.Uuid
+  applicantEmail String? @map("applicant_email")
+  applicantName  String? @map("applicant_name")
+
+  firstVisitAt DateTime @default(now()) @map("first_visit_at")
+  lastVisitAt  DateTime @default(now()) @map("last_visit_at")
 
   @@index([ip])
   @@index([lastVisitAt])
@@ -1158,11 +1160,11 @@ model DailyPageStat {
 }
 
 model RefreshToken {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
-  token     String   @unique
-  expiresAt DateTime @map("expires_at")
-  createdAt DateTime @default(now()) @map("created_at")
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  token     String    @unique
+  expiresAt DateTime  @map("expires_at")
+  createdAt DateTime  @default(now()) @map("created_at")
   revokedAt DateTime? @map("revoked_at")
 
   @@index([userId])
@@ -1173,30 +1175,30 @@ model RefreshToken {
 // ─── EQUITY & COMPANY SYSTEM ─────────────────────────────
 
 enum CompanyStatus {
-  FORMATION        // Team formed, company being set up
-  INCORPORATED     // Legally incorporated
-  ACTIVE           // Operating with platform equity stake
-  SUSPENDED        // Temporarily suspended
-  HANDED_OVER      // 1000-day period complete, equity transferred
-  DISSOLVED        // Company dissolved
+  FORMATION // Team formed, company being set up
+  INCORPORATED // Legally incorporated
+  ACTIVE // Operating with platform equity stake
+  SUSPENDED // Temporarily suspended
+  HANDED_OVER // 1000-day period complete, equity transferred
+  DISSOLVED // Company dissolved
 }
 
 enum EquityEventType {
-  GRANT            // Initial equity allocation
-  VEST             // Equity vesting milestone
-  DILUTE           // Dilution event (funding round)
-  TRANSFER         // Transfer between holders
-  HANDOVER         // 1000-day handover from platform to founders
-  BUYOUT           // Early buyout of platform stake
+  GRANT // Initial equity allocation
+  VEST // Equity vesting milestone
+  DILUTE // Dilution event (funding round)
+  TRANSFER // Transfer between holders
+  HANDOVER // 1000-day handover from platform to founders
+  BUYOUT // Early buyout of platform stake
 }
 
 enum AgreementStatus {
-  DRAFT            // Agreement being prepared
+  DRAFT // Agreement being prepared
   PENDING_SIGNATURE // Sent for signatures
-  ACTIVE           // Fully executed and active
-  AMENDED          // Original amended with new terms
-  EXPIRED          // Agreement term ended
-  TERMINATED       // Prematurely terminated
+  ACTIVE // Fully executed and active
+  AMENDED // Original amended with new terms
+  EXPIRED // Agreement term ended
+  TERMINATED // Prematurely terminated
 }
 
 model CompanyEntity {
@@ -1208,31 +1210,31 @@ model CompanyEntity {
   status             CompanyStatus @default(FORMATION)
 
   // 1000-day timer
-  timerStartDate     DateTime?     @map("timer_start_date")
-  timerEndDate       DateTime?     @map("timer_end_date")   // Computed: timerStartDate + 1000 days
-  daysElapsed        Int           @default(0) @map("days_elapsed") // Cached, updated by cron
-  handoverDate       DateTime?     @map("handover_date")    // Actual date when handover occurred
+  timerStartDate DateTime? @map("timer_start_date")
+  timerEndDate   DateTime? @map("timer_end_date") // Computed: timerStartDate + 1000 days
+  daysElapsed    Int       @default(0) @map("days_elapsed") // Cached, updated by cron
+  handoverDate   DateTime? @map("handover_date") // Actual date when handover occurred
 
   // Platform's equity stake
-  platformEquityPct  Float         @default(51.0) @map("platform_equity_pct")  // Current platform %
-  foundersEquityPct  Float         @default(49.0) @map("founders_equity_pct")  // Current founders %
+  platformEquityPct Float @default(51.0) @map("platform_equity_pct") // Current platform %
+  foundersEquityPct Float @default(49.0) @map("founders_equity_pct") // Current founders %
 
   // Company details
-  sector             String?
-  description        String?       @db.Text
-  registeredAddress  String?       @map("registered_address") @db.Text
-  gstin              String?       // GST Identification Number
-  panNumber          String?       @map("pan_number") // Company PAN
+  sector            String?
+  description       String? @db.Text
+  registeredAddress String? @map("registered_address") @db.Text
+  gstin             String? // GST Identification Number
+  panNumber         String? @map("pan_number") // Company PAN
 
   // Metadata
-  notes              String?       @db.Text // Admin notes
-  createdAt          DateTime      @default(now()) @map("created_at")
-  updatedAt          DateTime      @updatedAt @map("updated_at")
+  notes     String?  @db.Text // Admin notes
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  team               Team          @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  equityHolders      EquityHolder[]
-  equityAgreements   EquityAgreement[]
-  equityEvents       EquityEvent[]
+  team             Team              @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  equityHolders    EquityHolder[]
+  equityAgreements EquityAgreement[]
+  equityEvents     EquityEvent[]
 
   @@index([status])
   @@index([timerEndDate])
@@ -1240,20 +1242,20 @@ model CompanyEntity {
 }
 
 model EquityHolder {
-  id              String        @id @default(uuid()) @db.Uuid
-  companyId       String        @map("company_id") @db.Uuid
-  applicantId     String?       @map("applicant_id") @db.Uuid    // null = platform itself
-  holderName      String        @map("holder_name")               // "Aryavartham Platform" or person name
-  holderType      String        @map("holder_type")               // "PLATFORM" | "FOUNDER" | "INVESTOR"
-  equityPct       Float         @map("equity_pct")                // Current equity percentage
-  vestedPct       Float         @default(0) @map("vested_pct")    // How much has vested
-  vestingSchedule Json?         @map("vesting_schedule")          // { cliff, duration, intervals }
-  isActive        Boolean       @default(true) @map("is_active")
-  grantedAt       DateTime      @default(now()) @map("granted_at")
-  updatedAt       DateTime      @updatedAt @map("updated_at")
+  id              String   @id @default(uuid()) @db.Uuid
+  companyId       String   @map("company_id") @db.Uuid
+  applicantId     String?  @map("applicant_id") @db.Uuid // null = platform itself
+  holderName      String   @map("holder_name") // "Aryavartham Platform" or person name
+  holderType      String   @map("holder_type") // "PLATFORM" | "FOUNDER" | "INVESTOR"
+  equityPct       Float    @map("equity_pct") // Current equity percentage
+  vestedPct       Float    @default(0) @map("vested_pct") // How much has vested
+  vestingSchedule Json?    @map("vesting_schedule") // { cliff, duration, intervals }
+  isActive        Boolean  @default(true) @map("is_active")
+  grantedAt       DateTime @default(now()) @map("granted_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
-  company         CompanyEntity @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  applicant       Applicant?    @relation(fields: [applicantId], references: [id])
+  company   CompanyEntity @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  applicant Applicant?    @relation(fields: [applicantId], references: [id])
 
   @@unique([companyId, applicantId])
   @@index([companyId])
@@ -1262,33 +1264,33 @@ model EquityHolder {
 }
 
 model EquityAgreement {
-  id              String          @id @default(uuid()) @db.Uuid
-  companyId       String          @map("company_id") @db.Uuid
-  agreementType   String          @map("agreement_type")          // "FOUNDING" | "VESTING" | "HANDOVER" | "BUYOUT"
-  title           String
-  status          AgreementStatus @default(DRAFT)
+  id            String          @id @default(uuid()) @db.Uuid
+  companyId     String          @map("company_id") @db.Uuid
+  agreementType String          @map("agreement_type") // "FOUNDING" | "VESTING" | "HANDOVER" | "BUYOUT"
+  title         String
+  status        AgreementStatus @default(DRAFT)
 
   // Agreement terms
-  terms           Json?           // Flexible JSON for specific terms
-  equityPct       Float?          @map("equity_pct")              // Equity percentage this agreement covers
-  duration        Int?            // Duration in days (e.g., 1000)
-  startDate       DateTime?       @map("start_date")
-  endDate         DateTime?       @map("end_date")
+  terms     Json? // Flexible JSON for specific terms
+  equityPct Float?    @map("equity_pct") // Equity percentage this agreement covers
+  duration  Int? // Duration in days (e.g., 1000)
+  startDate DateTime? @map("start_date")
+  endDate   DateTime? @map("end_date")
 
   // Signatures
-  platformSignedAt   DateTime?    @map("platform_signed_at")
-  platformSignedBy   String?      @map("platform_signed_by")      // Admin who signed
-  founderSignedAt    DateTime?    @map("founder_signed_at")
-  founderSignedBy    String?      @map("founder_signed_by") @db.Uuid // Applicant ID
-  
-  // Document
-  documentUrl     String?         @map("document_url")            // Link to agreement PDF
-  
-  notes           String?         @db.Text
-  createdAt       DateTime        @default(now()) @map("created_at")
-  updatedAt       DateTime        @updatedAt @map("updated_at")
+  platformSignedAt DateTime? @map("platform_signed_at")
+  platformSignedBy String?   @map("platform_signed_by") // Admin who signed
+  founderSignedAt  DateTime? @map("founder_signed_at")
+  founderSignedBy  String?   @map("founder_signed_by") @db.Uuid // Applicant ID
 
-  company         CompanyEntity   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  // Document
+  documentUrl String? @map("document_url") // Link to agreement PDF
+
+  notes     String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  company CompanyEntity @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId])
   @@index([status])
@@ -1296,28 +1298,28 @@ model EquityAgreement {
 }
 
 model EquityEvent {
-  id              String          @id @default(uuid()) @db.Uuid
-  companyId       String          @map("company_id") @db.Uuid
-  eventType       EquityEventType @map("event_type")
-  
-  // Transfer details
-  fromHolder      String?         @map("from_holder")             // Holder name (for audit trail)
-  toHolder        String?         @map("to_holder")               // Holder name (for audit trail)
-  percentageAmount Float          @map("percentage_amount")       // % transferred or changed
-  
-  // Resulting state
-  platformEquityAfter Float?      @map("platform_equity_after")   // Platform % after event
-  foundersEquityAfter Float?      @map("founders_equity_after")   // Founders % after event
-  
-  // Context
-  description     String          @db.Text
-  metadata        Json?           // Additional event-specific data
-  triggeredBy     String?         @map("triggered_by")            // Admin ID or "SYSTEM"
-  dayNumber       Int?            @map("day_number")              // Day of the 1000-day timer
-  
-  createdAt       DateTime        @default(now()) @map("created_at")
+  id        String          @id @default(uuid()) @db.Uuid
+  companyId String          @map("company_id") @db.Uuid
+  eventType EquityEventType @map("event_type")
 
-  company         CompanyEntity   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  // Transfer details
+  fromHolder       String? @map("from_holder") // Holder name (for audit trail)
+  toHolder         String? @map("to_holder") // Holder name (for audit trail)
+  percentageAmount Float   @map("percentage_amount") // % transferred or changed
+
+  // Resulting state
+  platformEquityAfter Float? @map("platform_equity_after") // Platform % after event
+  foundersEquityAfter Float? @map("founders_equity_after") // Founders % after event
+
+  // Context
+  description String  @db.Text
+  metadata    Json? // Additional event-specific data
+  triggeredBy String? @map("triggered_by") // Admin ID or "SYSTEM"
+  dayNumber   Int?    @map("day_number") // Day of the 1000-day timer
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  company CompanyEntity @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId])
   @@index([eventType])
@@ -1329,12 +1331,12 @@ model Badge {
   id          String   @id @default(uuid()) @db.Uuid
   name        String   @unique
   description String?  @db.Text
-  icon        String?  // SVG path or emoji
-  criteria    Json?    // e.g., { "referrals": 5 }
+  icon        String? // SVG path or emoji
+  criteria    Json? // e.g., { "referrals": 5 }
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  applicants  ApplicantBadge[]
+  applicants ApplicantBadge[]
 
   @@map("badges")
 }
@@ -1345,26 +1347,26 @@ model ApplicantBadge {
   badgeId     String   @map("badge_id") @db.Uuid
   issuedAt    DateTime @default(now()) @map("issued_at")
 
-  applicant   Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
-  badge       Badge     @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+  applicant Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  badge     Badge     @relation(fields: [badgeId], references: [id], onDelete: Cascade)
 
   @@unique([applicantId, badgeId])
   @@map("applicant_badges")
 }
 
 model Certificate {
-  id             String   @id @default(uuid()) @db.Uuid
-  applicantId    String   @map("applicant_id") @db.Uuid
-  title          String
-  credentialId   String   @unique @map("credential_id") // For LinkedIn external ID
-  issueDate      DateTime @default(now()) @map("issue_date")
-  expiryDate     DateTime? @map("expiry_date")
-  url            String?  // Link to certificate PDF/Image
-  linkedinUrl    String?  @map("linkedin_url") // The Add-to-Profile URL
-  metadata       Json?    
-  createdAt      DateTime @default(now()) @map("created_at")
+  id           String    @id @default(uuid()) @db.Uuid
+  applicantId  String    @map("applicant_id") @db.Uuid
+  title        String
+  credentialId String    @unique @map("credential_id") // For LinkedIn external ID
+  issueDate    DateTime  @default(now()) @map("issue_date")
+  expiryDate   DateTime? @map("expiry_date")
+  url          String? // Link to certificate PDF/Image
+  linkedinUrl  String?   @map("linkedin_url") // The Add-to-Profile URL
+  metadata     Json?
+  createdAt    DateTime  @default(now()) @map("created_at")
 
-  applicant      Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  applicant Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
 
   @@index([applicantId])
   @@map("certificates")
@@ -1468,7 +1470,7 @@ model PitchEvent {
   createdAt   DateTime         @default(now()) @map("created_at")
   updatedAt   DateTime         @updatedAt @map("updated_at")
 
-  team              Team              @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  team              Team               @relation(fields: [teamId], references: [id], onDelete: Cascade)
   investorInterests InvestorInterest[]
   fundingDecisions  FundingDecision[]
 
@@ -1511,4 +1513,1260 @@ model FundingDecision {
   @@index([pitchEventId])
   @@index([investorId])
   @@map("funding_decisions")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// ===== COMMERCE + ARTICLES (see docs/COMMERCE_ARCHITECTURE.md) =====
+// Single platform-owned storefront + user-submitted articles vertical.
+// Money is integer paise everywhere. GST rates are integer basis points (1800 = 18%).
+// All UUIDs app-side (@default(uuid())). No pgcrypto. snake_case @map / lowercase-plural @@map.
+// ═════════════════════════════════════════════════════════════════════════════
+
+// ─── COMMERCE ENUMS ──────────────────────────────────────
+
+// public read only ACTIVE
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+// BUNDLE=DIY full set; DIGITAL skips stock/shipment AND is 422-blocked at checkout in v1
+enum ProductType {
+  STANDARD
+  BUNDLE
+  DIGITAL
+}
+
+// product cap: 10 IMAGE + 1 VIDEO (service-enforced, row-reserved)
+enum ProductMediaType {
+  IMAGE
+  VIDEO
+}
+
+// PENDING reserves the cap slot at presign; CONFIRMED after HeadObject
+enum ProductMediaStatus {
+  PENDING
+  CONFIRMED
+}
+
+enum ProductTabSectionType {
+  RICH_TEXT
+  SPEC_TABLE
+  MEDIA
+  CODE
+  CALLOUT
+}
+
+enum PriceTierKind {
+  QUANTITY
+}
+
+enum TaxRateType {
+  GST
+}
+
+enum StockMovementType {
+  IN
+  OUT
+  ADJUST
+  RESERVE
+  RELEASE
+  TRANSFER
+  RETURN
+}
+
+enum StockMovementReason {
+  PURCHASE
+  SALE
+  RETURN
+  MANUAL_ADJUST
+  TRANSFER
+  RESERVATION
+  RELEASE
+  DAMAGE
+  CYCLE_COUNT
+}
+
+enum ReservationStatus {
+  ACTIVE
+  CONSUMED
+  RELEASED
+  EXPIRED
+}
+
+enum SupplierStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  SUBMITTED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
+enum CustomerType {
+  GUEST
+  REGISTERED
+}
+
+enum AddressType {
+  BILLING
+  SHIPPING
+}
+
+enum CartStatus {
+  ACTIVE
+  CONVERTED
+  ABANDONED
+  EXPIRED
+}
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAID
+  CONFIRMED
+  PROCESSING
+  PACKED
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum OrderPaymentStatus {
+  UNPAID
+  PAID
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum OrderEventType {
+  CREATED
+  PAYMENT_AUTHORIZED
+  PAYMENT_CAPTURED
+  PAYMENT_FAILED
+  CONFIRMED
+  PACKED
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUND_INITIATED
+  REFUNDED
+  NOTE
+}
+
+// PERCENT=basis points; FIXED=paise
+enum CouponType {
+  PERCENT
+  FIXED
+}
+
+enum CouponStatus {
+  ACTIVE
+  DISABLED
+  EXPIRED
+}
+
+enum Courier {
+  DELHIVERY
+  BLUEDART
+  SHIPROCKET
+  DTDC
+  INDIA_POST
+  OTHER
+}
+
+enum ShipmentStatus {
+  PENDING
+  LABEL_CREATED
+  PICKED_UP
+  IN_TRANSIT
+  OUT_FOR_DELIVERY
+  DELIVERED
+  FAILED
+  RETURNED
+}
+
+enum ReturnStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  IN_TRANSIT
+  RECEIVED
+  REFUNDED
+  CANCELLED
+}
+
+enum ReturnReason {
+  DEFECTIVE
+  WRONG_ITEM
+  NOT_AS_DESCRIBED
+  DAMAGED_IN_TRANSIT
+  NO_LONGER_NEEDED
+  OTHER
+}
+
+enum RefundStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  CANCELLED
+}
+
+enum InvoiceType {
+  TAX_INVOICE
+  CREDIT_NOTE
+}
+
+// ─── ARTICLES ENUMS ──────────────────────────────────────
+
+// PUBLISHED is publicly listable. DRAFT = author work-in-progress (never
+// submitted, not in the moderation queue). ARCHIVED = a once-PUBLISHED article
+// pulled off the public listing into a distinct terminal state (NOT requeued).
+enum ArticleStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  PUBLISHED
+  ARCHIVED
+}
+
+// article cap: 15 IMAGE + 3 VIDEO
+enum ArticleMediaType {
+  IMAGE
+  VIDEO
+}
+
+// same row-reserved cap pattern as product media
+enum ArticleMediaStatus {
+  PENDING
+  CONFIRMED
+}
+
+// dual-issuer authorship
+enum ArticleAuthorType {
+  CUSTOMER
+  APPLICANT
+}
+
+// NOTE: CustomerRole is NOT added to AdminRole. Customer JWTs carry role="CUSTOMER"
+// minted by a dedicated customer-auth surface, validated by a DEDICATED Passport strategy
+// 'jwt-customer' so they never reach the platform validateUser() / refreshToken() admin
+// else-branch. GstTaxType (CGST/SGST/IGST) is computed, never persisted as an enum on a row.
+
+// ─── CATALOG ─────────────────────────────────────────────
+
+model Product {
+  id               String        @id @default(uuid()) @db.Uuid
+  slug             String        @unique
+  name             String
+  subtitle         String?
+  brand            String?
+  shortDescription String?       @map("short_description") @db.Text
+  status           ProductStatus @default(DRAFT)
+  type             ProductType   @default(STANDARD)
+  categoryId       String?       @map("category_id") @db.Uuid
+  category         String? // denormalized filter cache; re-synced on category ancestry change
+  tags             String[]      @default([]) // never null
+  isFeatured       Boolean       @default(false) @map("is_featured")
+  sortOrder        Int           @default(0) @map("sort_order")
+  seoTitle         String?       @map("seo_title")
+  seoDescription   String?       @map("seo_description") @db.Text
+  viewCount        Int           @default(0) @map("view_count") // updated via batched queue job, NOT inline
+  publishedAt      DateTime?     @map("published_at")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  categoryRef   Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  media         ProductMedia[]
+  tabs          ProductTab[]
+  skus          Sku[]
+  diyGuide      DiyGuide?
+  bundle        ComponentBundle?
+  bomReferences DiyBomItem[]     @relation("BomProductRef")
+
+  @@index([status])
+  @@index([categoryId])
+  @@index([isFeatured])
+  @@index([sortOrder])
+  // (no @@index([slug]) — the @unique on slug already provides the single-column index)
+  @@map("products")
+}
+
+model Category {
+  id        String   @id @default(uuid()) @db.Uuid
+  slug      String   @unique
+  name      String
+  parentId  String?  @map("parent_id") @db.Uuid
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // onDelete: SetNull → deleting a parent orphans its children to root level (NOT cascade-delete).
+  // The catalog service MUST, on category delete or re-parent, re-sync the denormalized
+  // Product.category string for all affected products.
+  parent   Category?  @relation("CatTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children Category[] @relation("CatTree")
+  products Product[]
+
+  @@index([parentId])
+  @@map("categories")
+}
+
+model ProductMedia {
+  id        String             @id @default(uuid()) @db.Uuid
+  productId String             @map("product_id") @db.Uuid
+  type      ProductMediaType   @default(IMAGE)
+  status    ProductMediaStatus @default(PENDING) @map("status") // PENDING reserves cap slot at presign
+  s3Key     String             @map("s3_key")
+  url       String? // optional CDN/public URL if mirrored
+  caption   String?
+  altText   String?            @map("alt_text")
+  sortOrder Int                @default(0) @map("sort_order")
+  createdAt DateTime           @default(now()) @map("created_at")
+  updatedAt DateTime           @updatedAt @map("updated_at")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  // Cap is enforced by counting rows of (productId, type) where status='PENDING' OR 'CONFIRMED'.
+  // PENDING rows older than the presign-URL TTL are swept by store-media-gc cron.
+  @@index([productId, type, status])
+  @@index([productId, sortOrder])
+  @@map("product_media")
+}
+
+model ProductTab {
+  id        String   @id @default(uuid()) @db.Uuid
+  productId String   @map("product_id") @db.Uuid
+  title     String
+  sortOrder Int      @default(0) @map("sort_order")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  product  Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sections ProductTabSection[]
+
+  @@index([productId, sortOrder])
+  @@map("product_tabs")
+}
+
+model ProductTabSection {
+  id        String                @id @default(uuid()) @db.Uuid
+  tabId     String                @map("tab_id") @db.Uuid
+  type      ProductTabSectionType @default(RICH_TEXT)
+  title     String?
+  content   Json                  @default("{}") // RICH_TEXT{html}; SPEC_TABLE{rows:[{k,v}]}; MEDIA{items:[{url,type,caption}]}; CODE{language,code}; CALLOUT{variant,body}
+  sortOrder Int                   @default(0) @map("sort_order")
+  createdAt DateTime              @default(now()) @map("created_at")
+  updatedAt DateTime              @updatedAt @map("updated_at")
+
+  tab ProductTab @relation(fields: [tabId], references: [id], onDelete: Cascade)
+
+  @@index([tabId, sortOrder])
+  @@map("product_tab_sections")
+}
+
+model Sku {
+  id                String    @id @default(uuid()) @db.Uuid
+  productId         String    @map("product_id") @db.Uuid
+  skuCode           String    @unique @map("sku_code")
+  barcode           String?   @unique
+  name              String? // variant label e.g. 'ESP32-WROOM-32 / 4MB'
+  variantAttributes Json      @default("{}") @map("variant_attributes")
+  hsnCode           String?   @map("hsn_code")
+  taxClassId        String?   @map("tax_class_id") @db.Uuid
+  basePrice         Int       @map("base_price") // integer paise (MRP/list)
+  salePrice         Int?      @map("sale_price") // integer paise; null = no sale
+  saleStartsAt      DateTime? @map("sale_starts_at")
+  saleEndsAt        DateTime? @map("sale_ends_at")
+  currency          String    @default("INR")
+  weightGrams       Int?      @map("weight_grams")
+  lengthMm          Int?      @map("length_mm")
+  widthMm           Int?      @map("width_mm")
+  heightMm          Int?      @map("height_mm")
+  reorderPoint      Int       @default(0) @map("reorder_point")
+  reorderQty        Int       @default(0) @map("reorder_qty")
+  isActive          Boolean   @default(true) @map("is_active")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  product        Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  taxClass       TaxClass?           @relation(fields: [taxClassId], references: [id], onDelete: SetNull)
+  priceTiers     PriceTier[]
+  stockLevels    StockLevel[]
+  stockMovements StockMovement[]
+  reservations   StockReservation[]
+  cartItems      CartItem[]
+  orderItems     OrderItem[]
+  poLines        PurchaseOrderLine[]
+  returnItems    ReturnItem[]
+  bundleMembers  BundleItem[]        @relation("BundleMemberSku")
+  bundleAsSku    ComponentBundle?    @relation("BundleSellableSku")
+  bomItems       DiyBomItem[]        @relation("BomSkuRef")
+
+  @@index([productId])
+  @@index([taxClassId])
+  @@index([isActive])
+  @@map("skus")
+}
+
+model PriceTier {
+  id        String        @id @default(uuid()) @db.Uuid
+  skuId     String        @map("sku_id") @db.Uuid
+  kind      PriceTierKind @default(QUANTITY)
+  minQty    Int           @map("min_qty")
+  unitPrice Int           @map("unit_price") // integer paise
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  sku Sku @relation(fields: [skuId], references: [id], onDelete: Cascade)
+
+  @@unique([skuId, minQty])
+  @@index([skuId])
+  @@map("price_tiers")
+}
+
+model TaxClass {
+  id        String      @id @default(uuid()) @db.Uuid
+  name      String      @unique // 'GST 18%'
+  type      TaxRateType @default(GST)
+  hsnCode   String?     @map("hsn_code")
+  cgstBps   Int         @default(0) @map("cgst_bps")
+  sgstBps   Int         @default(0) @map("sgst_bps")
+  igstBps   Int         @default(0) @map("igst_bps")
+  isActive  Boolean     @default(true) @map("is_active")
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @updatedAt @map("updated_at")
+
+  skus Sku[]
+
+  @@index([hsnCode])
+  @@index([isActive])
+  @@map("tax_classes")
+}
+
+model TaxRate {
+  id            String      @id @default(uuid()) @db.Uuid
+  hsnCode       String      @unique @map("hsn_code")
+  type          TaxRateType @default(GST)
+  totalGstBps   Int         @map("total_gst_bps") // 1800 = 18%
+  description   String?
+  effectiveFrom DateTime    @default(now()) @map("effective_from")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  @@index([hsnCode])
+  @@map("tax_rates")
+}
+
+// ─── INVENTORY & PROCUREMENT ─────────────────────────────
+
+model Warehouse {
+  id           String   @id @default(uuid()) @db.Uuid
+  code         String   @unique
+  name         String
+  addressLine1 String?  @map("address_line1")
+  addressLine2 String?  @map("address_line2")
+  city         String?
+  stateCode    String?  @map("state_code") // GST place-of-supply (seller side)
+  postalCode   String?  @map("postal_code")
+  country      String   @default("IN")
+  gstin        String? // per-warehouse GSTIN; invoice seller GSTIN resolves from the fulfilling warehouse
+  priority     Int      @default(0) // fulfillment preference
+  isActive     Boolean  @default(true) @map("is_active")
+  isDefault    Boolean  @default(false) @map("is_default")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  stockLevels     StockLevel[]
+  stockMovements  StockMovement[]
+  reservations    StockReservation[]
+  purchaseOrders  PurchaseOrder[]
+  shipments       Shipment[]
+  fulfilledOrders Order[]            @relation("OrderFulfilledFromWarehouse")
+
+  @@index([isActive])
+  @@map("warehouses")
+}
+
+model StockLevel {
+  id           String   @id @default(uuid()) @db.Uuid
+  skuId        String   @map("sku_id") @db.Uuid
+  warehouseId  String   @map("warehouse_id") @db.Uuid
+  onHand       Int      @default(0) @map("on_hand")
+  reserved     Int      @default(0)
+  reorderPoint Int      @default(0) @map("reorder_point")
+  reorderQty   Int      @default(0) @map("reorder_qty")
+  safetyStock  Int      @default(0) @map("safety_stock")
+  version      Int      @default(0) // optimistic-lock counter, bumped on every CAS
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  sku       Sku       @relation(fields: [skuId], references: [id], onDelete: Cascade)
+  // Restrict (NOT Cascade): a warehouse holding stock cannot be deleted. Warehouses are
+  // deactivated (isActive=false), never hard-deleted — this protects the oversell-guard rows
+  // and the StockMovement audit trail that cascades off them. See migration 20260610000003.
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+
+  @@unique([skuId, warehouseId]) // THE oversell guard
+  @@index([warehouseId])
+  @@index([skuId])
+  @@map("stock_levels")
+}
+
+model StockMovement {
+  id            String              @id @default(uuid()) @db.Uuid
+  skuId         String              @map("sku_id") @db.Uuid
+  warehouseId   String              @map("warehouse_id") @db.Uuid
+  type          StockMovementType
+  reason        StockMovementReason @default(MANUAL_ADJUST)
+  quantity      Int // signed onHand delta (+in / -out)
+  reservedDelta Int                 @default(0) @map("reserved_delta")
+  balanceAfter  Int?                @map("balance_after") // onHand snapshot post-apply
+  referenceType String?             @map("reference_type") // ORDER|PO|RETURN|TRANSFER|ADJUSTMENT
+  referenceId   String?             @map("reference_id") @db.Uuid
+  triggeredBy   String              @map("triggered_by") // JWT sub or SYSTEM
+  actorRole     String?             @map("actor_role")
+  note          String?             @db.Text
+  createdAt     DateTime            @default(now()) @map("created_at")
+
+  sku       Sku       @relation(fields: [skuId], references: [id], onDelete: Cascade)
+  // Restrict (NOT Cascade): StockMovement rows are immutable financial/audit records.
+  // A warehouse with movement history can never be deleted — deactivate it instead.
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+
+  @@index([skuId, warehouseId])
+  @@index([referenceType, referenceId])
+  @@index([createdAt])
+  @@map("stock_movements")
+}
+
+model StockReservation {
+  id          String            @id @default(uuid()) @db.Uuid
+  orderId     String?           @map("order_id") @db.Uuid
+  cartId      String?           @map("cart_id") @db.Uuid
+  skuId       String            @map("sku_id") @db.Uuid
+  warehouseId String            @map("warehouse_id") @db.Uuid
+  quantity    Int
+  status      ReservationStatus @default(ACTIVE)
+  expiresAt   DateTime          @map("expires_at")
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+
+  order     Order?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  sku       Sku       @relation(fields: [skuId], references: [id], onDelete: Restrict)
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+
+  @@index([status, expiresAt]) // cron sweep
+  @@index([orderId])
+  @@index([cartId])
+  @@index([skuId, warehouseId])
+  @@map("stock_reservations")
+}
+
+model Supplier {
+  id           String         @id @default(uuid()) @db.Uuid
+  name         String
+  code         String?        @unique
+  contactName  String?        @map("contact_name")
+  email        String?
+  phone        String?
+  gstin        String?
+  addressLine1 String?        @map("address_line1")
+  city         String?
+  stateCode    String?        @map("state_code")
+  status       SupplierStatus @default(ACTIVE)
+  leadTimeDays Int?           @map("lead_time_days")
+  notes        String?        @db.Text
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+
+  purchaseOrders PurchaseOrder[]
+
+  @@index([status])
+  @@map("suppliers")
+}
+
+model PurchaseOrder {
+  id            String              @id @default(uuid()) @db.Uuid
+  poNumber      String              @unique @map("po_number")
+  supplierId    String              @map("supplier_id") @db.Uuid
+  warehouseId   String              @map("warehouse_id") @db.Uuid
+  status        PurchaseOrderStatus @default(DRAFT)
+  subtotal      Int                 @default(0) // paise
+  taxTotal      Int                 @default(0) @map("tax_total")
+  grandTotal    Int                 @default(0) @map("grand_total")
+  currency      String              @default("INR")
+  expectedAt    DateTime?           @map("expected_at")
+  submittedAt   DateTime?           @map("submitted_at")
+  receivedAt    DateTime?           @map("received_at")
+  autoGenerated Boolean             @default(false) @map("auto_generated")
+  createdById   String?             @map("created_by_id")
+  notes         String?             @db.Text
+  createdAt     DateTime            @default(now()) @map("created_at")
+  updatedAt     DateTime            @updatedAt @map("updated_at")
+
+  supplier  Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  warehouse Warehouse           @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  lines     PurchaseOrderLine[]
+
+  @@index([supplierId])
+  @@index([warehouseId])
+  @@index([status])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderLine {
+  id              String   @id @default(uuid()) @db.Uuid
+  purchaseOrderId String   @map("purchase_order_id") @db.Uuid
+  skuId           String   @map("sku_id") @db.Uuid
+  lotNo           Int      @default(1) @map("lot_no") // distinguishes multiple lots of the same SKU at different unit costs
+  orderedQty      Int      @map("ordered_qty")
+  receivedQty     Int      @default(0) @map("received_qty")
+  unitCost        Int      @map("unit_cost") // paise
+  taxBps          Int      @default(0) @map("tax_bps")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  sku           Sku           @relation(fields: [skuId], references: [id], onDelete: Restrict)
+
+  // Unique on (po, sku, lotNo) — NOT (po, sku). Same SKU may appear on multiple lines as separate
+  // lots/price points. The receive flow targets a specific line id, so per-line received_qty CAS
+  // remains correct. Service-layer may aggregate display by SKU.
+  @@unique([purchaseOrderId, skuId, lotNo])
+  @@index([purchaseOrderId])
+  @@index([skuId])
+  @@map("purchase_order_lines")
+}
+
+// ─── CUSTOMERS, CART, ORDERS ─────────────────────────────
+
+model Customer {
+  id            String       @id @default(uuid()) @db.Uuid
+  type          CustomerType @default(GUEST)
+  email         String?
+  phone         String?
+  firstName     String?      @map("first_name")
+  lastName      String?      @map("last_name")
+  passwordHash  String?      @map("password_hash") // null for GUEST; bcrypt for REGISTERED (passwords are bcrypt; refresh TOKENS are SHA-256)
+  emailVerified Boolean      @default(false) @map("email_verified")
+  applicantId   String?      @unique @map("applicant_id") @db.Uuid
+  isActive      Boolean      @default(true) @map("is_active")
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
+
+  applicant         Applicant?         @relation(fields: [applicantId], references: [id], onDelete: SetNull)
+  addresses         Address[]
+  carts             Cart[]
+  orders            Order[]
+  returns           Return[]
+  couponRedemptions CouponRedemption[]
+
+  // Partial-unique on email for REGISTERED only is enforced in the migration (SQL-only);
+  // guests may share NULL email. Coupon per-customer-limit dedupes on REGISTERED identity
+  // (email/phone), NOT on Customer.id, to defeat guest-account farming.
+  @@index([email])
+  @@index([phone])
+  @@index([applicantId])
+  @@map("customers")
+}
+
+model Address {
+  id         String      @id @default(uuid()) @db.Uuid
+  customerId String      @map("customer_id") @db.Uuid
+  type       AddressType @default(SHIPPING)
+  fullName   String      @map("full_name")
+  phone      String?
+  line1      String
+  line2      String?
+  city       String
+  stateCode  String      @map("state_code") // GST place-of-supply
+  postalCode String      @map("postal_code")
+  country    String      @default("IN")
+  isDefault  Boolean     @default(false) @map("is_default")
+  createdAt  DateTime    @default(now()) @map("created_at")
+  updatedAt  DateTime    @updatedAt @map("updated_at")
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, type])
+  @@map("addresses")
+}
+
+model Cart {
+  id               String     @id @default(uuid()) @db.Uuid
+  customerId       String?    @map("customer_id") @db.Uuid
+  sessionTokenHash String?    @unique @map("session_token_hash") // SHA-256 of the signed guest token; raw token never stored
+  status           CartStatus @default(ACTIVE)
+  couponId         String?    @map("coupon_id") @db.Uuid
+  expiresAt        DateTime?  @map("expires_at")
+  createdAt        DateTime   @default(now()) @map("created_at")
+  updatedAt        DateTime   @updatedAt @map("updated_at")
+
+  customer Customer?  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  coupon   Coupon?    @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  items    CartItem[]
+
+  // Guest cart access is guarded by GuestCartGuard: the raw signed token from the X-Cart-Token
+  // header is hashed and matched against sessionTokenHash. Knowing the Cart.id (a UUID that leaks
+  // via URLs/receipts) is NOT sufficient to read/mutate a cart (IDOR fix).
+  @@index([customerId, status])
+  @@index([status, expiresAt])
+  @@map("carts")
+}
+
+model CartItem {
+  id                String   @id @default(uuid()) @db.Uuid
+  cartId            String   @map("cart_id") @db.Uuid
+  skuId             String   @map("sku_id") @db.Uuid
+  quantity          Int      @default(1)
+  unitPriceSnapshot Int      @map("unit_price_snapshot") // paise at add time (display only; re-priced at checkout)
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  cart Cart @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  sku  Sku  @relation(fields: [skuId], references: [id], onDelete: Restrict)
+
+  @@unique([cartId, skuId]) // merge same-sku adds
+  @@index([cartId])
+  @@index([skuId])
+  @@map("cart_items")
+}
+
+model Order {
+  id                       String             @id @default(uuid()) @db.Uuid
+  orderNumber              String             @unique @map("order_number")
+  customerId               String             @map("customer_id") @db.Uuid
+  guestEmail               String?            @map("guest_email")
+  guestPhone               String?            @map("guest_phone")
+  guestAccessTokenHash     String?            @unique @map("guest_access_token_hash") // SHA-256 of a signed guest order-access token; lets guests view order/tracking/invoice without an account
+  status                   OrderStatus        @default(PENDING_PAYMENT)
+  paymentStatus            OrderPaymentStatus @default(UNPAID) @map("payment_status")
+  currency                 String             @default("INR")
+  itemsSubtotal            Int                @default(0) @map("items_subtotal") // pre-tax pre-discount
+  discountTotal            Int                @default(0) @map("discount_total")
+  cgstTotal                Int                @default(0) @map("cgst_total")
+  sgstTotal                Int                @default(0) @map("sgst_total")
+  igstTotal                Int                @default(0) @map("igst_total")
+  taxTotal                 Int                @default(0) @map("tax_total")
+  shippingTotal            Int                @default(0) @map("shipping_total")
+  grandTotal               Int                @default(0) @map("grand_total")
+  refundedTotal            Int                @default(0) @map("refunded_total")
+  couponId                 String?            @map("coupon_id") @db.Uuid
+  couponCodeSnapshot       String?            @map("coupon_code_snapshot")
+  billingAddress           Json               @map("billing_address")
+  shippingAddress          Json               @map("shipping_address")
+  placeOfSupplyState       String?            @map("place_of_supply_state") // buyer state code
+  sellerStateCode          String?            @map("seller_state_code")
+  sellerGstinSnapshot      String?            @map("seller_gstin_snapshot") // GSTIN of fulfilling warehouse, frozen at order time
+  isInterState             Boolean            @default(false) @map("is_inter_state")
+  fulfilledFromWarehouseId String?            @map("fulfilled_from_warehouse_id") @db.Uuid
+  // The cart this order was minted from. Bare indexed column (no FK relation): the cart row
+  // is marked CONVERTED on checkout, never deleted, so referential integrity is not needed
+  // here. Used by the checkout reuse query to converge two rapid concurrent checkouts of the
+  // SAME cart onto ONE order — keying on cartId (not just customerId+grandTotal) so two
+  // distinct carts with an identical total within the reuse window can never collapse together.
+  cartId                   String?            @map("cart_id") @db.Uuid
+  razorpayOrderId          String?            @unique @map("razorpay_order_id")
+  razorpayPaymentId        String?            @unique @map("razorpay_payment_id")
+  placedAt                 DateTime?          @map("placed_at")
+  paidAt                   DateTime?          @map("paid_at")
+  deliveredAt              DateTime?          @map("delivered_at") // stamped by the courier-delivery webhook; anchors the 7-day returns window
+  createdAt                DateTime           @default(now()) @map("created_at")
+  updatedAt                DateTime           @updatedAt @map("updated_at")
+
+  customer               Customer           @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  coupon                 Coupon?            @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  // Real FK to the fulfilling warehouse. SetNull (NOT Cascade): if a warehouse is ever
+  // hard-deleted the order survives with a null fulfilling-warehouse reference; the
+  // sellerGstinSnapshot/sellerStateCode columns retain the frozen-at-order-time invoice
+  // identity, so GST history is never lost. Filter column for fulfillment + analytics views.
+  fulfilledFromWarehouse Warehouse?         @relation("OrderFulfilledFromWarehouse", fields: [fulfilledFromWarehouseId], references: [id], onDelete: SetNull)
+  items                  OrderItem[]
+  events                 OrderEvent[]
+  reservations           StockReservation[]
+  shipments              Shipment[]
+  returns                Return[]
+  invoices               Invoice[]
+  couponRedemption       CouponRedemption?
+
+  @@index([customerId])
+  @@index([status])
+  @@index([paymentStatus])
+  @@index([createdAt])
+  @@index([fulfilledFromWarehouseId])
+  @@index([cartId])
+  @@map("orders")
+}
+
+model OrderItem {
+  id              String   @id @default(uuid()) @db.Uuid
+  orderId         String   @map("order_id") @db.Uuid
+  skuId           String?  @map("sku_id") @db.Uuid // SetNull for historical integrity
+  skuCodeSnapshot String   @map("sku_code_snapshot")
+  nameSnapshot    String   @map("name_snapshot")
+  variantSnapshot Json?    @map("variant_snapshot")
+  hsnCodeSnapshot String?  @map("hsn_code_snapshot")
+  gstBpsSnapshot  Int      @default(0) @map("gst_bps_snapshot")
+  cgstBpsSnapshot Int      @default(0) @map("cgst_bps_snapshot")
+  sgstBpsSnapshot Int      @default(0) @map("sgst_bps_snapshot")
+  igstBpsSnapshot Int      @default(0) @map("igst_bps_snapshot")
+  quantity        Int
+  unitPrice       Int      @map("unit_price") // paise, after tier/sale, pre-tax
+  lineSubtotal    Int      @map("line_subtotal") // unitPrice*qty
+  lineDiscount    Int      @default(0) @map("line_discount")
+  taxableValue    Int      @map("taxable_value") // lineSubtotal - lineDiscount
+  cgstAmount      Int      @default(0) @map("cgst_amount")
+  sgstAmount      Int      @default(0) @map("sgst_amount")
+  igstAmount      Int      @default(0) @map("igst_amount")
+  lineTotal       Int      @map("line_total") // taxableValue + taxes
+  warehouseId     String?  @map("warehouse_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  // These per-line amounts are the SINGLE SOURCE OF TRUTH for the invoice. The invoicing module
+  // copies them verbatim into InvoiceLine — it never re-computes tax.
+  order       Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  sku         Sku?         @relation(fields: [skuId], references: [id], onDelete: SetNull)
+  returnItems ReturnItem[]
+
+  @@index([orderId])
+  @@index([skuId])
+  @@map("order_items")
+}
+
+model OrderEvent {
+  id          String         @id @default(uuid()) @db.Uuid
+  orderId     String         @map("order_id") @db.Uuid
+  type        OrderEventType
+  fromStatus  String?        @map("from_status")
+  toStatus    String?        @map("to_status")
+  note        String?        @db.Text
+  triggeredBy String?        @map("triggered_by") // from JWT
+  actorRole   String?        @map("actor_role")
+  metadata    Json?
+  createdAt   DateTime       @default(now()) @map("created_at")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([type])
+  @@index([createdAt])
+  @@map("order_events")
+}
+
+// ─── COUPONS, SHIPPING, RETURNS, INVOICING ───────────────
+
+model Coupon {
+  id               String       @id @default(uuid()) @db.Uuid
+  code             String       @unique
+  description      String?
+  type             CouponType   @default(PERCENT)
+  value            Int // PERCENT: basis points; FIXED: paise
+  maxDiscount      Int?         @map("max_discount") // cap for PERCENT, paise
+  minOrderValue    Int          @default(0) @map("min_order_value") // paise
+  status           CouponStatus @default(ACTIVE)
+  usageLimit       Int?         @map("usage_limit") // null = unlimited
+  usedCount        Int          @default(0) @map("used_count")
+  perCustomerLimit Int          @default(1) @map("per_customer_limit")
+  allowGuest       Boolean      @default(false) @map("allow_guest") // if false, coupon requires REGISTERED customer (anti-farming default)
+  startsAt         DateTime?    @map("starts_at")
+  expiresAt        DateTime?    @map("expires_at")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+
+  redemptions CouponRedemption[]
+  carts       Cart[]
+  orders      Order[]
+
+  @@index([status])
+  @@index([expiresAt])
+  @@map("coupons")
+}
+
+model CouponRedemption {
+  id              String   @id @default(uuid()) @db.Uuid
+  couponId        String   @map("coupon_id") @db.Uuid
+  customerId      String   @map("customer_id") @db.Uuid
+  redeemerEmail   String?  @map("redeemer_email") // normalized lowercase; the per-customer dedup key
+  redeemerPhone   String?  @map("redeemer_phone")
+  orderId         String   @unique @map("order_id") @db.Uuid
+  discountApplied Int      @map("discount_applied") // paise
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  coupon   Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  // Restrict (NOT Cascade): redemption rows are financial audit data — they close the
+  // anti-farming loop and are required for tax reconciliation, so a Customer with
+  // redemption history cannot be hard-deleted.
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  // per-customer usage is counted by (couponId, redeemerEmail) — NOT (couponId, customerId) —
+  // so a single human cannot farm the limit by spawning guest Customer rows.
+  @@unique([couponId, orderId]) // double-redeem guard per order
+  @@index([couponId, redeemerEmail]) // per-customer usage count (anti-farming)
+  @@index([couponId, customerId])
+  @@index([customerId])
+  @@map("coupon_redemptions")
+}
+
+model Shipment {
+  id             String         @id @default(uuid()) @db.Uuid
+  orderId        String         @map("order_id") @db.Uuid
+  warehouseId    String?        @map("warehouse_id") @db.Uuid
+  shipmentNumber String?        @unique @map("shipment_number") // gapless human ref (AS-000001), nullable for legacy rows
+  courier        Courier        @default(OTHER)
+  awb            String?        @unique
+  trackingUrl    String?        @map("tracking_url")
+  status         ShipmentStatus @default(PENDING)
+  shippingCost   Int            @default(0) @map("shipping_cost") // paise
+  weightGrams    Int?           @map("weight_grams")
+  labelS3Key     String?        @map("label_s3_key")
+  shippedAt      DateTime?      @map("shipped_at")
+  deliveredAt    DateTime?      @map("delivered_at")
+  lastSyncedAt   DateTime?      @map("last_synced_at")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  order     Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  warehouse Warehouse?      @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  events    ShipmentEvent[]
+
+  @@index([orderId])
+  @@index([status])
+  @@index([awb])
+  @@index([lastSyncedAt])
+  @@map("shipments")
+}
+
+model ShipmentEvent {
+  id             String         @id @default(uuid()) @db.Uuid
+  shipmentId     String         @map("shipment_id") @db.Uuid
+  status         ShipmentStatus
+  courierEventId String?        @map("courier_event_id") // courier-side id for dedupe
+  description    String?
+  location       String?
+  occurredAt     DateTime       @map("occurred_at")
+  rawPayload     Json?          @map("raw_payload")
+  createdAt      DateTime       @default(now()) @map("created_at")
+
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  // idempotent tracking ingest. CAVEAT: Postgres treats NULLs in a composite UNIQUE as
+  // distinct (NULL != NULL), so two rows with the SAME shipmentId and courierEventId=NULL
+  // both insert without conflict. The idempotency guarantee therefore holds ONLY when
+  // courierEventId is non-null. The tracking-ingest service MUST NOT insert with a null
+  // courierEventId — for providers that don't return an event id, synthesize a stable
+  // dedupe key (e.g. hash of shipmentId+status+occurredAt) before insert.
+  @@unique([shipmentId, courierEventId]) // idempotent tracking ingest (see caveat above)
+  @@index([shipmentId])
+  @@index([occurredAt])
+  @@map("shipment_events")
+}
+
+model Return {
+  id                 String       @id @default(uuid()) @db.Uuid
+  rmaNumber          String       @unique @map("rma_number")
+  orderId            String       @map("order_id") @db.Uuid
+  customerId         String       @map("customer_id") @db.Uuid
+  status             ReturnStatus @default(REQUESTED)
+  reason             ReturnReason @default(OTHER)
+  comment            String?      @db.Text
+  refundAmount       Int          @default(0) @map("refund_amount") // paise
+  refundStatus       RefundStatus @default(PENDING) @map("refund_status")
+  razorpayRefundId   String?      @unique @map("razorpay_refund_id")
+  restockWarehouseId String?      @map("restock_warehouse_id") @db.Uuid
+  approvedById       String?      @map("approved_by_id")
+  approvedAt         DateTime?    @map("approved_at")
+  receivedAt         DateTime?    @map("received_at")
+  refundedAt         DateTime?    @map("refunded_at")
+  createdAt          DateTime     @default(now()) @map("created_at")
+  updatedAt          DateTime     @updatedAt @map("updated_at")
+
+  order    Order        @relation(fields: [orderId], references: [id], onDelete: Restrict) // legal record
+  customer Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  items    ReturnItem[]
+
+  @@index([orderId])
+  @@index([customerId])
+  @@index([status])
+  @@map("returns")
+}
+
+model ReturnItem {
+  id           String   @id @default(uuid()) @db.Uuid
+  returnId     String   @map("return_id") @db.Uuid
+  orderItemId  String   @map("order_item_id") @db.Uuid
+  skuId        String?  @map("sku_id") @db.Uuid
+  quantity     Int
+  refundAmount Int      @default(0) @map("refund_amount") // paise incl. proportional tax
+  restocked    Boolean  @default(false)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  return    Return    @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  sku       Sku?      @relation(fields: [skuId], references: [id], onDelete: SetNull)
+
+  @@unique([returnId, orderItemId])
+  @@index([returnId])
+  @@index([orderItemId])
+  @@map("return_items")
+}
+
+model Invoice {
+  id                 String        @id @default(uuid()) @db.Uuid
+  invoiceNumber      String        @unique @map("invoice_number") // ARYA/2026-27/000123
+  type               InvoiceType   @default(TAX_INVOICE)
+  status             InvoiceStatus @default(DRAFT)
+  orderId            String        @map("order_id") @db.Uuid
+  financialYear      String        @map("financial_year") // '2026-27'
+  sequenceNo         Int           @map("sequence_no")
+  sellerName         String        @map("seller_name")
+  sellerGstin        String?       @map("seller_gstin") // from fulfilling warehouse
+  sellerStateCode    String?       @map("seller_state_code")
+  buyerName          String        @map("buyer_name")
+  buyerGstin         String?       @map("buyer_gstin")
+  placeOfSupplyState String?       @map("place_of_supply_state")
+  isInterState       Boolean       @default(false) @map("is_inter_state")
+  taxableValue       Int           @default(0) @map("taxable_value") // paise
+  cgstTotal          Int           @default(0) @map("cgst_total")
+  sgstTotal          Int           @default(0) @map("sgst_total")
+  igstTotal          Int           @default(0) @map("igst_total")
+  grandTotal         Int           @default(0) @map("grand_total")
+  pdfS3Key           String?       @map("pdf_s3_key")
+  issuedAt           DateTime?     @map("issued_at")
+  createdAt          DateTime      @default(now()) @map("created_at")
+  updatedAt          DateTime      @updatedAt @map("updated_at")
+
+  order Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  lines InvoiceLine[]
+
+  @@unique([financialYear, sequenceNo]) // gapless integrity per FY (backstop to FOR-UPDATE counter)
+  @@index([orderId])
+  @@index([status])
+  @@map("invoices")
+}
+
+model InvoiceLine {
+  id           String   @id @default(uuid()) @db.Uuid
+  invoiceId    String   @map("invoice_id") @db.Uuid
+  description  String
+  hsnCode      String?  @map("hsn_code")
+  quantity     Int
+  unitPrice    Int      @map("unit_price") // paise — copied verbatim from OrderItem
+  taxableValue Int      @map("taxable_value")
+  cgstBps      Int      @default(0) @map("cgst_bps")
+  sgstBps      Int      @default(0) @map("sgst_bps")
+  igstBps      Int      @default(0) @map("igst_bps")
+  cgstAmount   Int      @default(0) @map("cgst_amount")
+  sgstAmount   Int      @default(0) @map("sgst_amount")
+  igstAmount   Int      @default(0) @map("igst_amount")
+  lineTotal    Int      @map("line_total")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("invoice_lines")
+}
+
+model InvoiceSequence {
+  financialYear String   @id @map("financial_year") // '2026-27'
+  lastValue     Int      @default(0) @map("last_value")
+  prefix        String   @default("ARYA")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("invoice_sequences")
+}
+
+// Generic gapless counter for ORDER / PO / RMA human refs (per-entity rows keyed by `scope`).
+model NumberSequence {
+  scope     String   @id // 'ORDER' | 'PO' | 'RMA'
+  lastValue Int      @default(0) @map("last_value")
+  prefix    String
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("number_sequences")
+}
+
+// ─── DIY & BUNDLES ───────────────────────────────────────
+
+model DiyGuide {
+  id               String   @id @default(uuid()) @db.Uuid
+  productId        String   @unique @map("product_id") @db.Uuid
+  title            String
+  summary          String?  @db.Text
+  difficulty       String? // BEGINNER|INTERMEDIATE|ADVANCED (free-form)
+  estimatedMinutes Int?     @map("estimated_minutes")
+  bundleId         String?  @unique @map("bundle_id") @db.Uuid // buy-the-full-set bundle
+  isPublished      Boolean  @default(false) @map("is_published")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  product  Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
+  bundle   ComponentBundle? @relation(fields: [bundleId], references: [id], onDelete: SetNull)
+  steps    DiyStep[]
+  bomItems DiyBomItem[]
+
+  @@index([isPublished])
+  @@map("diy_guides")
+}
+
+model DiyStep {
+  id           String   @id @default(uuid()) @db.Uuid
+  guideId      String   @map("guide_id") @db.Uuid
+  sortOrder    Int      @default(0) @map("sort_order")
+  title        String
+  body         String   @db.Text
+  codeLanguage String?  @map("code_language")
+  code         String?  @db.Text
+  media        Json?    @default("[]") // [{url,type,caption}]
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  guide DiyGuide @relation(fields: [guideId], references: [id], onDelete: Cascade)
+
+  @@index([guideId, sortOrder])
+  @@map("diy_steps")
+}
+
+model DiyBomItem {
+  id           String   @id @default(uuid()) @db.Uuid
+  guideId      String   @map("guide_id") @db.Uuid
+  skuId        String?  @map("sku_id") @db.Uuid // purchasable component
+  productId    String?  @map("product_id") @db.Uuid // optional cross-link
+  freeTextName String?  @map("free_text_name") // tool the user supplies
+  quantity     Int      @default(1)
+  note         String?
+  sortOrder    Int      @default(0) @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  guide   DiyGuide @relation(fields: [guideId], references: [id], onDelete: Cascade)
+  sku     Sku?     @relation("BomSkuRef", fields: [skuId], references: [id], onDelete: SetNull)
+  product Product? @relation("BomProductRef", fields: [productId], references: [id], onDelete: SetNull)
+
+  // Migration adds a CHECK constraint guaranteeing at least one identity column is present:
+  //   CHECK (sku_id IS NOT NULL OR product_id IS NOT NULL OR free_text_name IS NOT NULL)
+  @@index([guideId, sortOrder])
+  @@index([skuId])
+  @@index([productId])
+  @@map("diy_bom_items")
+}
+
+model ComponentBundle {
+  id          String   @id @default(uuid()) @db.Uuid
+  productId   String?  @unique @map("product_id") @db.Uuid // BUNDLE Product wrapper
+  bundleSkuId String?  @unique @map("bundle_sku_id") @db.Uuid // sellable Sku for the set
+  name        String
+  description String?  @db.Text
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  product   Product?     @relation(fields: [productId], references: [id], onDelete: SetNull)
+  bundleSku Sku?         @relation("BundleSellableSku", fields: [bundleSkuId], references: [id], onDelete: SetNull)
+  items     BundleItem[]
+  diyGuide  DiyGuide?
+
+  @@index([isActive])
+  @@map("component_bundles")
+}
+
+model BundleItem {
+  id        String   @id @default(uuid()) @db.Uuid
+  bundleId  String   @map("bundle_id") @db.Uuid
+  skuId     String   @map("sku_id") @db.Uuid
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  bundle ComponentBundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  sku    Sku             @relation("BundleMemberSku", fields: [skuId], references: [id], onDelete: Restrict)
+
+  @@unique([bundleId, skuId])
+  @@index([bundleId])
+  @@index([skuId])
+  @@map("bundle_items")
+}
+
+// ─── ARTICLES ────────────────────────────────────────────
+
+model Article {
+  id              String            @id @default(uuid()) @db.Uuid
+  slug            String            @unique
+  title           String
+  body            Json // rich text blocks
+  excerpt         String?           @db.Text
+  coverS3Key      String?           @map("cover_s3_key")
+  authorType      ArticleAuthorType @map("author_type") // CUSTOMER | APPLICANT — must match the JWT issuer
+  authorId        String            @map("author_id") @db.Uuid
+  authorName      String?           @map("author_name") // denormalized display
+  status          ArticleStatus     @default(SUBMITTED)
+  tags            String[]          @default([]) // never null — GIN array-overlap (&&) skips null rows
+  viewCount       Int               @default(0) @map("view_count") // batched-queue increment, not inline
+  reviewedById    String?           @map("reviewed_by_id") @db.Uuid // admin UUID — matches the project UUID-FK convention
+  rejectionReason String?           @map("rejection_reason") @db.Text
+  publishedAt     DateTime?         @map("published_at")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  media ArticleMedia[]
+
+  // Migration adds a GIN index on tags for the related-articles array-overlap (&&) query:
+  //   CREATE INDEX IF NOT EXISTS "articles_tags_gin" ON "articles" USING GIN ("tags");
+  // (no @@index([slug]) — the @unique on slug already provides the single-column index)
+  @@index([status])
+  @@index([authorType, authorId])
+  @@index([publishedAt])
+  @@map("articles")
+}
+
+model ArticleMedia {
+  id        String             @id @default(uuid()) @db.Uuid
+  articleId String             @map("article_id") @db.Uuid
+  type      ArticleMediaType   @default(IMAGE)
+  status    ArticleMediaStatus @default(PENDING) @map("status") // PENDING reserves cap slot at presign
+  s3Key     String             @map("s3_key")
+  caption   String?
+  sortOrder Int                @default(0) @map("sort_order")
+  createdAt DateTime           @default(now()) @map("created_at")
+
+  article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@index([articleId, type, status])
+  @@map("article_media")
+}
+
+// ─── STORE ANALYTICS ROLLUP ──────────────────────────────
+
+model StoreDailyStat {
+  id            String   @id @default(uuid()) @db.Uuid
+  statDate      DateTime @map("stat_date") @db.Date // IST day boundary
+  ordersCount   Int      @default(0) @map("orders_count")
+  paidOrders    Int      @default(0) @map("paid_orders")
+  grossRevenue  Int      @default(0) @map("gross_revenue") // paise, paid orders
+  netRevenue    Int      @default(0) @map("net_revenue") // paise, minus refunds
+  unitsSold     Int      @default(0) @map("units_sold")
+  refundsTotal  Int      @default(0) @map("refunds_total") // paise
+  discountTotal Int      @default(0) @map("discount_total") // paise
+  newCustomers  Int      @default(0) @map("new_customers")
+  visitors      Int      @default(0) // rolled from Visitor/DailyPageStat
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@unique([statDate]) // idempotent upsert per day
+  @@map("store_daily_stats")
 }

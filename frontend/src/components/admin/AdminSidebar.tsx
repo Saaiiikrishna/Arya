@@ -18,6 +18,16 @@ const navItems = [
   { href: '/admin/investors', label: 'Investors', icon: '💼' },
   { href: '/admin/donations', label: 'Donations', icon: '❤️' },
   { href: '/admin/settings', label: 'Settings', icon: '⚙️' },
+  // ─── Store / commerce ───
+  { href: '/admin/store/products', label: 'Products', icon: '🛍️' },
+  { href: '/admin/store/inventory', label: 'Inventory', icon: '🏷️' },
+  { href: '/admin/store/purchasing', label: 'Purchasing', icon: '🧾' },
+  { href: '/admin/store/orders', label: 'Orders', icon: '🧺' },
+  { href: '/admin/store/returns', label: 'Returns', icon: '↩️' },
+  { href: '/admin/store/coupons', label: 'Coupons', icon: '🎟️' },
+  { href: '/admin/store/analytics', label: 'Store Analytics', icon: '📈' },
+  { href: '/admin/store/articles', label: 'Articles', icon: '✍️' },
+  { href: '/admin/store/settings', label: 'Store Settings', icon: '🏬' },
 ];
 
 export default function AdminSidebar() {
