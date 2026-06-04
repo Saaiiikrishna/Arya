@@ -20,11 +20,7 @@ function getSessionId(): string {
   return sid;
 }
 
-function getApplicantInfo(): {
-  applicantId?: string;
-  applicantEmail?: string;
-  applicantName?: string;
-} {
+function getApplicantInfo(): { applicantId?: string } {
   if (typeof window === 'undefined') return {};
   try {
     // Auth state lives in sessionStorage (per-tab), not localStorage — reading
@@ -32,11 +28,11 @@ function getApplicantInfo(): {
     const raw = sessionStorage.getItem('arya_profile');
     if (raw) {
       const profile = JSON.parse(raw);
-      return {
-        applicantId: profile.id,
-        applicantEmail: profile.email,
-        applicantName: `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || undefined,
-      };
+      // DPDP Act 2023 (data minimisation): send ONLY the opaque applicantId. The
+      // applicant's email + name are intentionally NOT included — the server joins
+      // attribution from applicantId, so transmitting PII on every page view would
+      // exceed the minimum necessary data.
+      return { applicantId: profile.id };
     }
   } catch {
     // ignore

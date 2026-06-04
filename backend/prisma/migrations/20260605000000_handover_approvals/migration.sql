@@ -16,7 +16,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS "handover_approvals_company_id_role_key"
 CREATE INDEX IF NOT EXISTS "handover_approvals_company_id_idx"
   ON "handover_approvals" ("company_id");
 
-ALTER TABLE "handover_approvals"
-  ADD CONSTRAINT "handover_approvals_company_id_fkey"
-  FOREIGN KEY ("company_id") REFERENCES "company_entities"("id")
-  ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'handover_approvals_company_id_fkey'
+  ) THEN
+    ALTER TABLE "handover_approvals"
+      ADD CONSTRAINT "handover_approvals_company_id_fkey"
+      FOREIGN KEY ("company_id") REFERENCES "company_entities"("id")
+      ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+END $$;

@@ -9,6 +9,15 @@ export class PrismaService
   extends PrismaClient
   implements OnModuleInit, OnModuleDestroy
 {
+  /**
+   * Stable, explicit marker that this object is the full PrismaService (not an
+   * interactive `Prisma.TransactionClient`). Consumers (e.g. InventoryService)
+   * use this to decide whether to reuse an open transaction or open a new one,
+   * instead of duck-typing on the presence of `$transaction` — which is a
+   * Prisma internal that could change between versions.
+   */
+  readonly IS_PRISMA_SERVICE = true as const;
+
   constructor(configService: ConfigService) {
     const connectionString = configService.get<string>('DATABASE_URL');
     

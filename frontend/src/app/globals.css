@@ -43,6 +43,14 @@
 
   /* === Editorial motion ========================================= */
   --ease-editorial: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* === Breakpoints =============================================
+     Tailwind's defaults stop at 2xl (96rem / 1536px). The primary
+     display target is 1920x1080, with support up to 4K (3840px), so
+     we register a 3xl token. This enables `3xl:` variants for ≥1920px
+     and pairs with a centered max-width inner container so text lines
+     don't stretch unreadably on ultra-wide / 4K screens. */
+  --breakpoint-3xl: 120rem; /* 1920px */
 }
 
 @layer base {
@@ -133,12 +141,19 @@
   cursor: pointer;
   transition: background-color 180ms var(--ease-editorial), color 180ms var(--ease-editorial), border-color 180ms var(--ease-editorial);
 }
-.btn-primary {
+/* SINGLE SOURCE OF TRUTH for the matte primary CTA colour contract.
+   .btn-primary (core/admin) and .mkt-btn (marketing) share this exact
+   visual language so they cannot drift apart: solid saffron, parchment
+   text, hover/active = background shift to saffron-deep (NEVER a shadow).
+   .mkt-btn declares ONLY its size/layout below; colour lives here. */
+.btn-primary,
+.mkt-btn {
   background: var(--color-saffron);
   color: var(--color-parchment);
 }
 /* "pop" on hover = background color shift (saffron -> saffron-deep), never a shadow */
-.btn-primary:hover { background: var(--color-saffron-deep); }
+.btn-primary:hover,
+.mkt-btn:hover { background: var(--color-saffron-deep); }
 .btn-primary:active { background: var(--color-saffron-deep); }
 .btn-secondary {
   background: transparent;
@@ -180,4 +195,198 @@
 @keyframes arya-fade-in {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================================
+   PUBLIC MARKETING LAYER  (DESIGN.md §7)
+   These `mkt-*` utilities style the public marketing surfaces
+   (/, /startup, /store, /articles) inside a `.mkt` wrapper.
+   PER OWNER DECISION the glossy/gradient/glow look has been
+   REMOVED: action buttons are now MATTE and CONSISTENT with the
+   core system (.btn-primary) — solid saffron, parchment text,
+   0px corners, NO box-shadow, NO gradient, NO glow, NO sheen.
+   Rounded geometry is now limited to small eyebrow PILLS and
+   true circles. Cards/glass are clean matte surfaces with 1px
+   hairlines at 0px radius per DESIGN.md §1–6.
+   ============================================================ */
+
+/* Matte primary CTA — IDENTICAL colour language to the core .btn-primary
+   (solid saffron, parchment text, hover = saffron-deep) inherited from the
+   shared `.btn-primary, .mkt-btn` block in the legacy layer above. This
+   block declares ONLY the size/layout that legitimately differs on
+   marketing surfaces (slightly larger footprint) plus the active translate.
+   NO shadow / NO gradient / NO glow. */
+.mkt-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 0.95rem 2rem;
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+  border-radius: 0;
+  cursor: pointer;
+  transition: background-color 180ms var(--ease-editorial), transform 180ms var(--ease-editorial);
+}
+.mkt-btn:active { transform: translateY(1px); }
+
+/* Compact CTA variant — same matte language as .mkt-btn / .mkt-btn-ghost but a
+   tighter footprint for inline placements (search-submit, coupon apply, inline
+   error/empty-state actions) so they line up with adjacent inputs instead of
+   towering over them. Replaces scattered `!px`/`!py` overrides. Apply ALONGSIDE
+   .mkt-btn or .mkt-btn-ghost: it only overrides padding + font-size. */
+.mkt-btn-sm {
+  padding: 0.625rem 1.25rem;
+  font-size: 0.7rem;
+}
+
+/* Matte secondary CTA — transparent + 1px forest border, 0px corners. */
+.mkt-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 0.95rem 2rem;
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-forest);
+  background: transparent;
+  border: 1px solid var(--color-forest);
+  border-radius: 0;
+  cursor: pointer;
+  transition: background-color 180ms var(--ease-editorial), transform 180ms var(--ease-editorial);
+}
+.mkt-btn-ghost:hover { background: rgba(19, 48, 34, 0.05); }
+.mkt-btn-ghost:active { transform: translateY(1px); }
+
+/* Eyebrow pill — keeps rounded-full (small badge) but matte:
+   solid surface + 1px hairline, NO backdrop-blur, NO inset glow. */
+.mkt-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 1rem;
+  border-radius: 9999px;
+  background: var(--color-alabaster);
+  border: 1px solid var(--color-hairline);
+}
+
+/* Matte frame card — DESIGN.md "frame" rule: alabaster surface,
+   1px hairline, 0px radius. Subtle hover = border shifts to saffron
+   (NO shadow, NO translate). */
+.mkt-card {
+  border-radius: 0;
+  border: 1px solid var(--color-hairline);
+  background: var(--color-alabaster);
+  transition: border-color 0.3s var(--ease-editorial);
+}
+.mkt-card:hover {
+  border-color: var(--color-saffron);
+}
+
+/* Matte form input for public marketing surfaces (checkout / account).
+   Now consistent with the unified system: 0px radius + 1px hairline +
+   clean surface, matching mkt-card/mkt-btn. Focus shifts the border to
+   saffron (no glow). */
+.mkt-input {
+  border-radius: 0;
+  border: 1px solid var(--color-hairline);
+  background: var(--color-alabaster);
+  padding: 0.625rem 1rem;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  color: var(--color-ink);
+  outline: none;
+  transition: border-color 0.2s var(--ease-editorial);
+}
+.mkt-input::placeholder { color: rgba(28, 28, 28, 0.35); }
+.mkt-input:focus { border-color: var(--color-saffron); }
+
+/* Matte surface for dark forest bands — low-opacity white + 1px
+   subtle border, 0px radius. NO backdrop-blur (matte, not glass). */
+.mkt-glass {
+  border-radius: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* Subtle floating ambient accent (gradient orbs etc.). */
+.mkt-float { animation: mkt-float 7s ease-in-out infinite; }
+@keyframes mkt-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-14px); }
+}
+
+/* Slow ambient opacity pulse for orbs — kept subtle (low opacity). */
+.mkt-glow-pulse { animation: mkt-glow-pulse 6s ease-in-out infinite; }
+@keyframes mkt-glow-pulse {
+  0%, 100% { opacity: 0.18; transform: scale(1); }
+  50% { opacity: 0.32; transform: scale(1.06); }
+}
+
+/* Sanitised rich-text body (RICH_TEXT blocks rendered by BlockRenderer). Scoped
+   to the marketing layer; gives author HTML editorial defaults without pulling in
+   a Tailwind typography plugin. Links use forest/terracotta per DESIGN.md (never
+   standard blue). */
+.mkt-prose > * + * { margin-top: 0.85em; }
+.mkt-prose h1,
+.mkt-prose h2,
+.mkt-prose h3,
+.mkt-prose h4 {
+  font-family: var(--font-serif);
+  color: var(--color-forest);
+  line-height: 1.25;
+  font-weight: 600;
+}
+.mkt-prose h2 { font-size: 1.4rem; }
+.mkt-prose h3 { font-size: 1.15rem; }
+.mkt-prose h4 { font-size: 1rem; }
+.mkt-prose p { line-height: 1.7; }
+.mkt-prose ul,
+.mkt-prose ol { padding-left: 1.4em; }
+.mkt-prose ul { list-style: disc; }
+.mkt-prose ol { list-style: decimal; }
+.mkt-prose li { margin-top: 0.35em; }
+.mkt-prose a {
+  color: var(--color-terracotta);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.mkt-prose a:hover { color: var(--color-forest); }
+.mkt-prose strong { font-weight: 700; color: var(--color-forest); }
+.mkt-prose em { font-style: italic; }
+.mkt-prose blockquote {
+  border-left: 2px solid var(--color-saffron, #f4a300);
+  padding-left: 1em;
+  color: rgba(0, 0, 0, 0.6);
+  font-style: italic;
+}
+/* Code spans and rendered author images stay 0px — DESIGN.md §6:
+   "Don't round any corners: not for buttons, not for inputs, not for
+   images. 0px is the law." Author-rendered prose is no exception. */
+.mkt-prose code {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.875em;
+  background: rgba(19, 48, 34, 0.06);
+  padding: 0.1em 0.35em;
+  border-radius: 0;
+}
+.mkt-prose img { max-width: 100%; height: auto; border-radius: 0; }
+
+/* Accessibility: respect reduced-motion for all marketing motion. */
+@media (prefers-reduced-motion: reduce) {
+  .mkt-float,
+  .mkt-glow-pulse { animation: none; }
+  .mkt-btn,
+  .mkt-btn-ghost,
+  .mkt-card { transition: none; }
+  .mkt-btn:active,
+  .mkt-btn-ghost:active { transform: none; }
 }

@@ -102,7 +102,9 @@ export class ApplicantController {
   }
 
   // ─── WhatsApp verification ───────────────────────────────
-  @UseGuards(JwtAuthGuard)
+  // ThrottlerGuard is paired with @Throttle explicitly (file convention) so the
+  // per-route limit is enforced regardless of global guard wiring.
+  @UseGuards(JwtAuthGuard, ThrottlerGuard)
   @Throttle({ short: { limit: 5, ttl: 60000 } })
   @Post('applicants/me/whatsapp/send-otp')
   async sendWhatsappVerifyOtp(@Req() req: any) {
@@ -110,7 +112,10 @@ export class ApplicantController {
     return this.applicantService.sendWhatsappVerifyOtp(applicantId);
   }
 
-  @UseGuards(JwtAuthGuard)
+  // Strict limit: verifying an OTP without a rate cap is a brute-force target
+  // (a 6-digit code is guessable within a window otherwise).
+  @UseGuards(JwtAuthGuard, ThrottlerGuard)
+  @Throttle({ short: { limit: 5, ttl: 60000 } })
   @Post('applicants/me/whatsapp/verify')
   async verifyWhatsappOtp(@Req() req: any, @Body('otp') otp: string) {
     const applicantId = req.user.id || req.user.sub;

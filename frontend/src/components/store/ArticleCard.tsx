@@ -1,0 +1,145 @@
+'use client';
+
+import { useState } from 'react';
+import Link from 'next/link';
+import Image from 'next/image';
+import { Newspaper } from 'lucide-react';
+import { cn } from '@/lib/cn';
+
+/**
+ * Public articles card — matte `mkt-card` (alabaster surface, 1px hairline, 0px
+ * radius; border shifts to saffron on hover — no shadow/glass per DESIGN.md §7).
+ * Shows a cover image, title, excerpt, optional author + publish date.
+ * Presentational + prop-driven; the parent maps an article list item onto these
+ * props.
+ */
+export interface ArticleCardProps {
+  title: string;
+  /** Link target, e.g. `/articles/${slug}`. */
+  href: string;
+  excerpt?: string | null;
+  /** Resolved cover image URL (CDN or presigned). */
+  coverUrl?: string | null;
+  /** ISO date string or Date — rendered as a readable date. */
+  date?: string | Date | null;
+  author?: string | null;
+  tags?: string[];
+  /**
+   * Eager-load the cover (sets next/image `priority`, disabling lazy-load). Set
+   * this on the first above-the-fold card in a list/grid — it is frequently the
+   * Largest Contentful Paint element, so prioritising it improves LCP. Leave
+   * `false` (the default) for all other cards so they lazy-load as usual.
+   */
+  priority?: boolean;
+  className?: string;
+}
+
+/** Returns both the human label and a machine-readable ISO string for <time>. */
+function formatDate(
+  date: string | Date | null | undefined,
+): { label: string; iso: string } | null {
+  if (!date) return null;
+  const d = typeof date === 'string' ? new Date(date) : date;
+  if (Number.isNaN(d.getTime())) return null;
+  return {
+    label: d.toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    }),
+    iso: d.toISOString(),
+  };
+}
+
+export default function ArticleCard({
+  title,
+  href,
+  excerpt,
+  coverUrl,
+  date,
+  author,
+  tags,
+  priority = false,
+  className,
+}: ArticleCardProps) {
+  const dateInfo = formatDate(date);
+
+  // next/image optimizes the remote cover (a known CDN/S3 URL). On an un-listed
+  // host or load error we fall back to the same placeholder shown when there is
+  // no cover, so a bad/un-listed URL degrades gracefully.
+  const [imgFailed, setImgFailed] = useState(false);
+  // Reset the failure flag when the cover prop changes, WITHOUT an effect. React
+  // recycles a card's component instance when a list re-renders with new data
+  // (same key/position, new article); without this reset a card whose previous
+  // cover failed would stay stuck on the placeholder even though the new article
+  // has a valid cover. This is the React-recommended "adjust state during render"
+  // pattern (track the prev prop, reset synchronously) rather than a useEffect —
+  // the latter trips `react-hooks/set-state-in-effect` and renders the stale
+  // placeholder for one frame before correcting.
+  const [prevCoverUrl, setPrevCoverUrl] = useState(coverUrl);
+  if (coverUrl !== prevCoverUrl) {
+    setPrevCoverUrl(coverUrl);
+    setImgFailed(false);
+  }
+  const showCover = !!coverUrl && !imgFailed;
+
+  return (
+    <Link
+      href={href}
+      className={cn('mkt-card group flex flex-col overflow-hidden', className)}
+    >
+      <div className="relative aspect-[16/9] w-full overflow-hidden bg-parchment-dark">
+        {showCover ? (
+          <Image
+            src={coverUrl as string}
+            alt={title}
+            fill
+            // 4-up at ≥1920, 3-up desktop, 2-up tablet, 1-up mobile (matches the
+            // journal / related / search grids, which step to 4 cols at 3xl).
+            sizes="(min-width: 1920px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+            priority={priority}
+            onError={() => setImgFailed(true)}
+            className="object-cover transition-transform duration-500 group-hover:scale-[1.04]"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-ink/25">
+            <Newspaper className="h-8 w-8" aria-hidden />
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-1 flex-col gap-2 p-5">
+        {tags && tags.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {tags.slice(0, 3).map((tag) => (
+              <span
+                key={tag}
+                className="rounded-full bg-saffron-glow/30 px-2 py-0.5 font-sans text-[10px] font-semibold uppercase tracking-[0.06em] text-saffron-deep"
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
+        )}
+
+        <h3 className="font-serif text-lg leading-snug text-forest line-clamp-2">
+          {title}
+        </h3>
+
+        {excerpt && (
+          <p className="font-sans text-sm leading-relaxed text-ink/60 line-clamp-3">
+            {excerpt}
+          </p>
+        )}
+
+        {(author || dateInfo) && (
+          <div className="mt-auto flex items-center gap-2 pt-3 font-sans text-[11px] uppercase tracking-[0.06em] text-ink/45">
+            {author && <span>{author}</span>}
+            {author && dateInfo && <span aria-hidden>·</span>}
+            {dateInfo && <time dateTime={dateInfo.iso}>{dateInfo.label}</time>}
+          </div>
+        )}
+      </div>
+    </Link>
+  );
+}
