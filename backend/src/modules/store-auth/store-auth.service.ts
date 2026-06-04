@@ -17,7 +17,10 @@ import { PrismaService } from '@/prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 import { NotificationService } from '../notifications/notification.service';
 import { RegisterCustomerDto, CustomerLoginDto } from './dto';
-import { CustomerJwtPayload } from './customer.strategy';
+import {
+  CustomerJwtPayload,
+  resolveCustomerSecret,
+} from './customer.strategy';
 
 const BCRYPT_ROUNDS = 12;
 const OTP_TTL_SECONDS = 300; // 5 minutes, matching platform auth
@@ -55,8 +58,19 @@ export class StoreAuthService {
   }
 
   private signAccessToken(payload: CustomerJwtPayload): string {
-    // Default JwtModule signing (JWT_SECRET, JWT_EXPIRATION=15m).
-    return this.jwtService.sign(payload);
+    // Sign with the DEDICATED customer secret (JWT_CUSTOMER_SECRET, JWT_SECRET
+    // fallback) — the SAME secret CustomerStrategy + the inline dual-auth
+    // verifiers use to verify, and the same one the module's JwtModule is
+    // configured with. Passed explicitly (not relying on the JwtModule default)
+    // so this stays correct even if the module wiring changes. A platform token
+    // signed with JWT_SECRET is rejected on every customer verify path.
+    return this.jwtService.sign(payload, {
+      secret: resolveCustomerSecret(this.configService),
+      expiresIn: this.configService.get<string>(
+        'JWT_EXPIRATION',
+        '15m',
+      ) as any,
+    });
   }
 
   private signRefreshToken(payload: CustomerJwtPayload): string {

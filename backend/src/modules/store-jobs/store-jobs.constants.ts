@@ -53,3 +53,20 @@ export const STALE_UNPAID_ORDER_MS = 45 * 60 * 1000; // 30-min TTL + 15-min grac
 export const RESERVATION_EXPIRY_BATCH_LIMIT = 500;
 /** Hard cap on stale unpaid orders cancelled per cron pass. */
 export const STALE_ORDER_CANCEL_BATCH_LIMIT = 500;
+
+/**
+ * Redis key for the reservation-expiry distributed lock. The @Cron fires on every
+ * replica; a single-holder SET NX lock on this key elects one runner per tick so
+ * the release/cancel sweep never double-writes audit/movement rows under 1–10
+ * replicas.
+ */
+export const RESERVATION_EXPIRY_LOCK_KEY = 'lock:store:reservation-expiry';
+
+/**
+ * TTL (ms) for the reservation-expiry lock — MUST stay strictly LESS THAN the
+ * 5-min ('0 *​/5 * * * *') cron interval (300_000 ms) so a holder that crashes
+ * mid-sweep auto-releases before the next tick, never wedging the cron; and large
+ * enough to outlast a normal sweep so the winner is never lapped by a peer
+ * mid-run. 280_000 ms (4 min 40 s) leaves a 20 s margin under the interval.
+ */
+export const RESERVATION_EXPIRY_LOCK_TTL_MS = 280_000;

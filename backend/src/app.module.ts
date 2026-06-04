@@ -79,6 +79,17 @@ function validateEnv(config: Record<string, unknown>): Record<string, unknown> {
   requireStrong('JWT_SECRET');
   requireStrong('JWT_REFRESH_SECRET');
   if (isProd) {
+    // Dedicated customer-token secret: must be strong AND distinct from
+    // JWT_SECRET so a platform token is cryptographically rejected on the
+    // customer ('jwt-customer') path. A shared secret would defeat the isolation.
+    requireStrong('JWT_CUSTOMER_SECRET');
+    if (
+      String(config.JWT_CUSTOMER_SECRET ?? '') === String(config.JWT_SECRET ?? '')
+    ) {
+      problems.push(
+        'JWT_CUSTOMER_SECRET must differ from JWT_SECRET (customer/platform token isolation)',
+      );
+    }
     requirePresent('DATABASE_URL');
     requirePresent('RAZORPAY_KEY_SECRET');
     requirePresent('RAZORPAY_WEBHOOK_SECRET');
@@ -90,6 +101,20 @@ function validateEnv(config: Record<string, unknown>): Record<string, unknown> {
     // it, so enforce at boot rather than rejecting every courier callback at runtime.
     requirePresent('COURIER_WEBHOOK_SECRET');
     requirePresent('WHATSAPP_APP_SECRET');
+  } else {
+    // Non-prod: don't block local dev, but warn loudly if customer tokens are
+    // NOT isolated from platform tokens — i.e. JWT_CUSTOMER_SECRET is unset
+    // (falls back to JWT_SECRET) or explicitly equals JWT_SECRET. This is the
+    // exact misconfiguration that the isProd block above hard-rejects.
+    const customerSecret = String(config.JWT_CUSTOMER_SECRET ?? '');
+    if (!customerSecret || customerSecret === String(config.JWT_SECRET ?? '')) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `\x1b[33m[config] JWT_CUSTOMER_SECRET is ${
+          customerSecret ? 'equal to JWT_SECRET' : 'unset (falling back to JWT_SECRET)'
+        }; customer and platform tokens are NOT cryptographically isolated. Set a DISTINCT JWT_CUSTOMER_SECRET before deploying.\x1b[0m`,
+      );
+    }
   }
 
   if (problems.length) {

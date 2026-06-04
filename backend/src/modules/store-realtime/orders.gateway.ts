@@ -14,6 +14,7 @@ import { OnEvent } from '@nestjs/event-emitter';
 import { Server, Socket } from 'socket.io';
 import { PrismaService } from '@/prisma/prisma.service';
 import { GuestTokenService } from '@/modules/store-auth/guest-token.service';
+import { resolveCustomerSecret } from '@/modules/store-auth/customer.strategy';
 import {
   buildSocketCorsOrigins,
   normalizeOrigin,
@@ -22,7 +23,10 @@ import {
   REALTIME_ADMIN_ROLES,
   socketCorsOrigin,
 } from './realtime.constants';
-import type { OrderUpdatedPayload } from './realtime.constants';
+import type {
+  OrderUpdatedPayload,
+  OrderUpdatedPublicPayload,
+} from './realtime.constants';
 
 /** What a guest order-access token carries (mirrors GuestTokenService.mintOrderToken). */
 interface GuestOrderTokenClaims {
@@ -82,14 +86,39 @@ interface JoinRoomBody {
  * this gateway relays to the admin room and to the owning customer/order rooms.
  * The gateway never touches the business path and never writes to the DB on emit.
  */
+/**
+ * Per-IP connection rate-limit window. Unauthenticated handshakes run
+ * `jwtService.verify` and (for guests/customers) an indexed DB read, so an
+ * un-throttled connect storm from one peer is a CPU/DB DoS vector. We cap NEW
+ * connections per source IP to {@link CONN_LIMIT_MAX} per
+ * {@link CONN_LIMIT_WINDOW_MS} and refuse the rest BEFORE any verify/DB work.
+ */
+const CONN_LIMIT_WINDOW_MS = 10_000;
+const CONN_LIMIT_MAX = 30;
+/** Max upgrade-request payload (bytes) — caps oversized handshake frames. */
+const MAX_HTTP_BUFFER_SIZE = 1e6;
+/** Drop a half-open handshake that never completes within this window (ms). */
+const CONNECT_TIMEOUT_MS = 10_000;
+
 @WebSocketGateway({
   namespace: '/store/orders',
   cors: { credentials: true, origin: socketCorsOrigin },
+  connectTimeout: CONNECT_TIMEOUT_MS,
+  maxHttpBufferSize: MAX_HTTP_BUFFER_SIZE,
 })
 export class OrdersGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server!: Server;
   private readonly logger = new Logger(OrdersGateway.name);
   private readonly corsOrigins: string[];
+  /**
+   * In-memory per-IP connection counters for the rate limiter. Keyed by source
+   * IP → { count, resetAt }. Stale windows are pruned lazily on access, so the
+   * map never grows unbounded for IPs that stop connecting.
+   */
+  private readonly connRates = new Map<
+    string,
+    { count: number; resetAt: number }
+  >();
 
   constructor(
     private readonly jwtService: JwtService,
@@ -100,8 +129,44 @@ export class OrdersGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.corsOrigins = buildSocketCorsOrigins(this.configService);
   }
 
+  /**
+   * Lightweight in-memory per-IP connection rate limiter. Returns `true` when
+   * the connection is WITHIN budget (and records it), `false` when the IP has
+   * exceeded {@link CONN_LIMIT_MAX} connects in the current
+   * {@link CONN_LIMIT_WINDOW_MS} window. Called at the TOP of `handleConnection`,
+   * before any `jwtService.verify` or DB lookup, so a connect storm is shed
+   * cheaply.
+   */
+  private allowConnection(ip: string): boolean {
+    const now = Date.now();
+    const entry = this.connRates.get(ip);
+    if (!entry || now >= entry.resetAt) {
+      this.connRates.set(ip, { count: 1, resetAt: now + CONN_LIMIT_WINDOW_MS });
+      return true;
+    }
+    if (entry.count >= CONN_LIMIT_MAX) {
+      return false;
+    }
+    entry.count += 1;
+    return true;
+  }
+
+  /** Resolve the source IP of a handshake for rate-limit keying. */
+  private clientIp(client: Socket): string {
+    return client.handshake.address || 'unknown';
+  }
+
   async handleConnection(client: OrdersSocket): Promise<void> {
     try {
+      // Connection-flood guard FIRST: shed an over-budget IP before any
+      // signature verification or DB read, so an unauthenticated connect storm
+      // cannot burn CPU/DB. Checked at the very top of the handshake.
+      if (!this.allowConnection(this.clientIp(client))) {
+        client.emit('error', { message: 'Too many connections' });
+        client.disconnect(true);
+        return;
+      }
+
       // Defense-in-depth CORS (the decorator rejected disallowed origins at the
       // upgrade). Origins are normalised so a trailing slash / case difference
       // does not falsely reject.
@@ -235,9 +300,18 @@ export class OrdersGateway implements OnGatewayConnection, OnGatewayDisconnect {
    * Relay a committed order mutation. Driven by `OrdersService` emitting
    * `order.updated` AFTER its transaction commits (checkout / capture /
    * transition). Routed to:
-   *   - the `store-admin-orders` room (all admins),
-   *   - `order:{orderId}` (the guest/customer watching that specific order),
-   *   - `customer:{customerId}` when the order has an owning customer.
+   *   - the `store-admin-orders` room (all admins) → FULL payload;
+   *   - `customer:{customerId}` (the owning customer) → FULL payload;
+   *   - `order:{orderId}` (the shared per-order room a GUEST may join) →
+   *     guest-safe projection WITHOUT `customerId`.
+   *
+   * SECURITY (DPDP Act 2023): the `order:{orderId}` room is the only room a guest
+   * order-access token can join, and a guest must never learn the owning
+   * customer's UUID. So the full payload (which carries `customerId`) is emitted
+   * ONLY to the admin and owning-customer rooms; the per-order room receives a
+   * `customerId`-stripped projection. (A logged-in customer that also joined its
+   * own `order:{id}` room still gets the full payload via `customer:{customerId}`.)
+   *
    * Routing uses the values ON THE EMITTED PAYLOAD (server-pinned by the service
    * after commit), never client-supplied data. Best-effort: a missing server is a
    * silent no-op (never affects the business path).
@@ -245,16 +319,24 @@ export class OrdersGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @OnEvent(ORDER_UPDATED_EVENT)
   handleOrderUpdated(payload: OrderUpdatedPayload): void {
     if (!this.server) return;
+    // Full payload (incl. customerId) → admins and the owning customer only.
     this.server.to(ORDERS_ADMIN_ROOM).emit(ORDER_UPDATED_EVENT, payload);
-    if (payload.orderId) {
-      this.server
-        .to(`order:${payload.orderId}`)
-        .emit(ORDER_UPDATED_EVENT, payload);
-    }
     if (payload.customerId) {
       this.server
         .to(`customer:${payload.customerId}`)
         .emit(ORDER_UPDATED_EVENT, payload);
+    }
+    // Guest-safe projection (NO customerId) → the shared per-order room.
+    if (payload.orderId) {
+      const publicPayload: OrderUpdatedPublicPayload = {
+        orderId: payload.orderId,
+        orderNumber: payload.orderNumber,
+        status: payload.status,
+        paymentStatus: payload.paymentStatus,
+      };
+      this.server
+        .to(`order:${payload.orderId}`)
+        .emit(ORDER_UPDATED_EVENT, publicPayload);
     }
   }
 
@@ -269,13 +351,24 @@ export class OrdersGateway implements OnGatewayConnection, OnGatewayDisconnect {
     client: OrdersSocket,
     token: string,
   ): 'joined' | 'wrong-role' | 'invalid' {
+    // The handshake token may be a PLATFORM token (admin, signed with JWT_SECRET)
+    // or a CUSTOMER token (signed with the isolated JWT_CUSTOMER_SECRET). Try the
+    // platform secret first, then the customer secret, so a distinct customer
+    // secret never rejects a legitimate customer socket. Each token only verifies
+    // under its own secret; the role claim below decides the room.
     let payload: OrdersJwtPayload;
     try {
       payload = this.jwtService.verify<OrdersJwtPayload>(token, {
         secret: this.configService.get<string>('JWT_SECRET'),
       });
     } catch {
-      return 'invalid'; // invalid/expired — maybe a guest token follows
+      try {
+        payload = this.jwtService.verify<OrdersJwtPayload>(token, {
+          secret: resolveCustomerSecret(this.configService),
+        });
+      } catch {
+        return 'invalid'; // invalid/expired — maybe a guest token follows
+      }
     }
 
     if (payload?.role && REALTIME_ADMIN_ROLES.has(payload.role)) {

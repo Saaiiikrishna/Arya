@@ -21,6 +21,7 @@ import type { Request } from 'express';
 import { createHash } from 'crypto';
 import { PrismaService } from '@/prisma/prisma.service';
 import { CustomerJwtGuard } from '@/modules/store-auth/guards';
+import { resolveCustomerSecret } from '@/modules/store-auth/customer.strategy';
 import { OrdersService, CheckoutActor } from './orders.service';
 import { CheckoutDto, OrderQueryDto } from './dto';
 
@@ -44,9 +45,11 @@ interface CustomerJwtPayload {
  *
  * checkout + get-order/:id are genuinely DUAL-AUTH (customer OR guest), which a
  * single Passport guard cannot express, so they verify the presented credential
- * inline: a CUSTOMER bearer is verified with the same JWT_SECRET + role assertion
- * the 'jwt-customer' strategy uses, and the guest token is hashed + matched
- * against the stored hash (identical scheme to GuestCart/GuestOrder guards).
+ * inline: a CUSTOMER bearer is verified with the same DEDICATED customer secret
+ * (JWT_CUSTOMER_SECRET, JWT_SECRET fallback) + role assertion the 'jwt-customer'
+ * strategy uses — so a platform token is cryptographically rejected here — and
+ * the guest token is hashed + matched against the stored hash (identical scheme
+ * to GuestCart/GuestOrder guards).
  */
 @Controller('api')
 @UseGuards(ThrottlerGuard)
@@ -198,10 +201,12 @@ export class OrdersController {
   }
 
   /**
-   * Verify a CUSTOMER bearer token (same JWT_SECRET + role assertion as the
+   * Verify a CUSTOMER bearer token (same DEDICATED customer secret —
+   * JWT_CUSTOMER_SECRET with JWT_SECRET fallback — + role assertion as the
    * dedicated 'jwt-customer' strategy) and resolve the active REGISTERED customer.
    * Used by the dual-auth checkout + order-view routes where a single Passport
-   * guard cannot express "customer OR guest".
+   * guard cannot express "customer OR guest". A platform token fails the
+   * signature check here once a distinct JWT_CUSTOMER_SECRET is configured.
    *
    * KNOWN PERFORMANCE DEBT: this performs a Customer DB lookup on every dual-auth
    * request because `isActive` + the buyer `phone` (needed for coupon anti-farming
@@ -224,7 +229,7 @@ export class OrdersController {
     let payload: CustomerJwtPayload;
     try {
       payload = await this.jwt.verifyAsync<CustomerJwtPayload>(token, {
-        secret: this.config.get<string>('JWT_SECRET'),
+        secret: resolveCustomerSecret(this.config),
       });
     } catch {
       throw new UnauthorizedException('Customer authentication required');

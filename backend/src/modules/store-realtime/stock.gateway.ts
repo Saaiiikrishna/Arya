@@ -60,14 +60,38 @@ interface AdminJwtPayload {
  * commits; this gateway relays that payload to the `store-admin` room. The
  * gateway never reaches into the DB or the business path.
  */
+/**
+ * Per-IP connection rate-limit window. An unauthenticated handshake runs
+ * `jwtService.verify`, so an un-throttled connect storm from one peer is a CPU
+ * DoS vector. We cap NEW connections per source IP to {@link CONN_LIMIT_MAX} per
+ * {@link CONN_LIMIT_WINDOW_MS} and refuse the rest BEFORE any verify work.
+ */
+const CONN_LIMIT_WINDOW_MS = 10_000;
+const CONN_LIMIT_MAX = 30;
+/** Max upgrade-request payload (bytes) — caps oversized handshake frames. */
+const MAX_HTTP_BUFFER_SIZE = 1e6;
+/** Drop a half-open handshake that never completes within this window (ms). */
+const CONNECT_TIMEOUT_MS = 10_000;
+
 @WebSocketGateway({
   namespace: '/store/stock',
   cors: { credentials: true, origin: socketCorsOrigin },
+  connectTimeout: CONNECT_TIMEOUT_MS,
+  maxHttpBufferSize: MAX_HTTP_BUFFER_SIZE,
 })
 export class StockGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server!: Server;
   private readonly logger = new Logger(StockGateway.name);
   private readonly corsOrigins: string[];
+  /**
+   * In-memory per-IP connection counters for the rate limiter. Keyed by source
+   * IP → { count, resetAt }. Stale windows are reset lazily on access, so the
+   * map never grows unbounded for IPs that stop connecting.
+   */
+  private readonly connRates = new Map<
+    string,
+    { count: number; resetAt: number }
+  >();
 
   constructor(
     private readonly jwtService: JwtService,
@@ -79,8 +103,43 @@ export class StockGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.corsOrigins = buildSocketCorsOrigins(this.configService);
   }
 
+  /**
+   * Lightweight in-memory per-IP connection rate limiter. Returns `true` when
+   * the connection is WITHIN budget (and records it), `false` when the IP has
+   * exceeded {@link CONN_LIMIT_MAX} connects in the current
+   * {@link CONN_LIMIT_WINDOW_MS} window. Called at the TOP of `handleConnection`,
+   * before any `jwtService.verify`, so a connect storm is shed cheaply.
+   */
+  private allowConnection(ip: string): boolean {
+    const now = Date.now();
+    const entry = this.connRates.get(ip);
+    if (!entry || now >= entry.resetAt) {
+      this.connRates.set(ip, { count: 1, resetAt: now + CONN_LIMIT_WINDOW_MS });
+      return true;
+    }
+    if (entry.count >= CONN_LIMIT_MAX) {
+      return false;
+    }
+    entry.count += 1;
+    return true;
+  }
+
+  /** Resolve the source IP of a handshake for rate-limit keying. */
+  private clientIp(client: Socket): string {
+    return client.handshake.address || 'unknown';
+  }
+
   handleConnection(client: AdminSocket): void {
     try {
+      // Connection-flood guard FIRST: shed an over-budget IP before the JWT
+      // verify below, so an unauthenticated connect storm cannot burn CPU.
+      // Checked at the very top of the handshake.
+      if (!this.allowConnection(this.clientIp(client))) {
+        client.emit('error', { message: 'Too many connections' });
+        client.disconnect(true);
+        return;
+      }
+
       // Defense-in-depth CORS allow-list at the handshake (the decorator's
       // cors.origin already rejected disallowed origins at the upgrade). A
       // connection whose Origin header is present but not allow-listed is

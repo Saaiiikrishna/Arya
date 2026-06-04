@@ -1,7 +1,9 @@
 import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
+import { ConfigService } from '@nestjs/config';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import Redis from 'ioredis';
 import {
   OrderStatus,
   PurchaseOrderStatus,
@@ -15,6 +17,8 @@ import { PurchasingService } from '../purchasing/purchasing.service';
 import { EmailService } from '../email/email.service';
 import {
   RESERVATION_EXPIRY_BATCH_LIMIT,
+  RESERVATION_EXPIRY_LOCK_KEY,
+  RESERVATION_EXPIRY_LOCK_TTL_MS,
   STALE_ORDER_CANCEL_BATCH_LIMIT,
   STALE_UNPAID_ORDER_MS,
   STORE_CRON_TZ,
@@ -53,6 +57,17 @@ const STORE_JOB_OPTS = {
 export class StoreJobsScheduler {
   private readonly logger = new Logger(StoreJobsScheduler.name);
 
+  /**
+   * Dedicated ioredis connection used only for the cron leader-election locks
+   * (currently the reservation-expiry sweep). Built from the same
+   * REDIS_HOST/PORT/PASSWORD config + TLS-on-6380 convention as the rest of the
+   * app (mirrors store-auth.service / the BullMQ root in app.module). Kept
+   * separate from the BullMQ queue connection: the SET NX/PX lock primitive is
+   * unrelated to job enqueue and must not share BullMQ's `maxRetriesPerRequest:
+   * null` / offline-queue tuning.
+   */
+  private readonly redis: Redis;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly inventory: InventoryService,
@@ -60,8 +75,19 @@ export class StoreJobsScheduler {
     private readonly shipping: ShippingService,
     private readonly purchasing: PurchasingService,
     private readonly email: EmailService,
+    private readonly configService: ConfigService,
     @InjectQueue(STORE_QUEUE) private readonly storeQueue: Queue,
-  ) {}
+  ) {
+    const port = this.configService.get<number>('REDIS_PORT', 6379);
+    const password = this.configService.get<string>('REDIS_PASSWORD');
+    const useTls = String(port) === '6380';
+    this.redis = new Redis({
+      host: this.configService.get<string>('REDIS_HOST', 'localhost'),
+      port,
+      ...(password ? { password } : {}),
+      ...(useTls ? { tls: {} } : {}),
+    });
+  }
 
   // ──────────────────────────────────────────────────────────────────────────
   //  reservationExpiry (every 5 min) — release expired holds + cancel stale orders
@@ -87,6 +113,38 @@ export class StoreJobsScheduler {
    */
   @Cron('0 */5 * * * *', { name: 'store-reservation-expiry' })
   async reservationExpiry(): Promise<void> {
+    // ── distributed leader election: this @Cron fires on EVERY replica (1–10
+    // under autoscaling), but the sweep must run once per tick or duplicate
+    // replicas race the same rows and double-write audit/movement rows. Gate
+    // with a single-holder Redis lock: SET NX (only one replica wins) + PX TTL
+    // (auto-released; TTL < the 5-min cron interval so a crashed holder never
+    // wedges the next tick). Non-winners log + return; the inner CAS-guarded
+    // service logic below is unchanged.
+    let lockAcquired = false;
+    try {
+      const res = await this.redis.set(
+        RESERVATION_EXPIRY_LOCK_KEY,
+        SYSTEM_ACTOR.id,
+        'PX',
+        RESERVATION_EXPIRY_LOCK_TTL_MS,
+        'NX',
+      );
+      lockAcquired = res === 'OK';
+    } catch (e) {
+      // Redis hiccup: do NOT run unguarded (that reintroduces the duplicate-row
+      // race). Skip this tick; the next 5-min fire retries.
+      this.logger.error(
+        `reservationExpiry: lock acquisition failed, skipping this tick: ${(e as Error)?.message}`,
+      );
+      return;
+    }
+    if (!lockAcquired) {
+      this.logger.debug(
+        'reservationExpiry: lock held by another replica, skipping this tick',
+      );
+      return;
+    }
+
     const now = new Date();
 
     // ── (1) release expired ACTIVE reservations.
@@ -349,17 +407,28 @@ export class StoreJobsScheduler {
    * FROM grouped subqueries — Section 8.12). Best-effort; idempotent (absolute SET
    * from the authoritative aggregate).
    *
-   * A CONSTANT jobId coalesces duplicate hourly fires (clock skew / overlapping
-   * replicas) to a single queued job — the parameterless absolute-SET semantics
-   * make a single run sufficient (mirrors the per-day jobId on analyticsRollup).
+   * A TIME-WINDOWED jobId (base id + the current epoch-hour bucket) coalesces
+   * duplicate fires WITHIN the same hour (clock skew / overlapping replicas) to a
+   * single queued job, while still allowing the next hour's run to enqueue. A
+   * constant jobId would have let a removed/completed prior job's id be reused yet
+   * risked collapsing distinct hourly runs; bucketing by hour keeps one job per
+   * hour. The parameterless absolute-SET semantics make a single run per hour
+   * sufficient (mirrors the per-day jobId on analyticsRollup).
    */
   @Cron('0 0 * * * *', { name: 'store-viewcount-sync' })
   async viewCountSync(): Promise<void> {
     try {
+      // epoch-hour bucket from a timestamp captured at call time: ms → hours via
+      // integer division. Two replicas firing the same hourly tick compute the
+      // same bucket and so the same jobId, coalescing to one queued job.
+      const hourBucket = Math.floor(Date.now() / (60 * 60 * 1000));
       await this.storeQueue.add(
         STORE_JOB_VIEWCOUNT_SYNC,
         {},
-        { ...STORE_JOB_OPTS, jobId: STORE_JOB_VIEWCOUNT_SYNC_ID },
+        {
+          ...STORE_JOB_OPTS,
+          jobId: `${STORE_JOB_VIEWCOUNT_SYNC_ID}:${hourBucket}`,
+        },
       );
     } catch (e) {
       this.logger.error(

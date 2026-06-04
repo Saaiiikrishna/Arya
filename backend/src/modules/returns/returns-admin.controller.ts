@@ -15,7 +15,7 @@ import {
 } from '@nestjs/common';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import type { Request } from 'express';
-import { AdminGuard } from '@/modules/auth/guards';
+import { AdminGuard, FinanceGuard } from '@/modules/auth/guards';
 import { ReturnsService, ReturnAdminActor } from './returns.service';
 import {
   ApproveReturnDto,
@@ -38,8 +38,12 @@ import {
  * spec + the orders status route). `receive` performs side effects (refund, stock,
  * credit note) and is the money step → POST.
  *
- * All routes are AdminGuard-protected. The actor for every audited action is
- * sourced from the JWT (req.user), NEVER the request body (security rule 4ebf502).
+ * Triage routes (list/detail/reject/in-transit) are AdminGuard-protected so a
+ * MODERATOR can work the queue. The money/stock routes (approve authorizes the RMA,
+ * receive performs refund + restock + credit note) are FinanceGuard-protected
+ * (ADMIN / SUPER_ADMIN only — MODERATOR rejected fail-closed). The actor for every
+ * audited action is sourced from the JWT (req.user), NEVER the request body
+ * (security rule 4ebf502).
  *
  * NOTE: the credit-note issue route (POST .../:id/credit-note) is owned by the
  * invoicing module's controller and is NOT duplicated here; receive() calls
@@ -69,6 +73,7 @@ export class ReturnsAdminController {
    * financial + inventory settlement happens on `receive`. Idempotent (CAS).
    */
   @Patch('returns/:id/approve')
+  @UseGuards(FinanceGuard, ThrottlerGuard)
   @Throttle({ medium: { limit: 100, ttl: 60000 } })
   approve(
     @Req() req: Request,
@@ -110,6 +115,7 @@ export class ReturnsAdminController {
    * double-restock. APPROVED|IN_TRANSIT → RECEIVED → REFUNDED.
    */
   @Post('returns/:id/receive')
+  @UseGuards(FinanceGuard, ThrottlerGuard)
   @HttpCode(HttpStatus.OK)
   @Throttle({ medium: { limit: 100, ttl: 60000 } })
   receive(

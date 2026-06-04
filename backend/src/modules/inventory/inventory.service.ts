@@ -541,12 +541,15 @@ export class InventoryService {
         },
       ]);
 
-      const flipped = await tx.stockReservation.updateMany({
-        where: { id: reservationId, status: 'ACTIVE' },
-        data: { status: 'CONSUMED' },
-      });
-      if (flipped.count !== 1) return false;
-
+      // Section 5.2 — "ONE coupled CAS pair", mirroring releaseReservation. The
+      // level decrement is performed and asserted BEFORE the reservation status
+      // flip so that any StockLevel CAS failure rolls the whole tx back cleanly
+      // WITHOUT ever having touched the reservation row. This eliminates the
+      // window (a crash/rollback between flip and decrement, or a flip-without-
+      // decrement) where the reservation looked CONSUMED to a concurrent reader
+      // while onHand/reserved had not yet been decremented — a silent oversell.
+      // Order: find level → (lock already held) → CAS decrement level → flip
+      // reservation, all in one tx.
       const level = await tx.stockLevel.findUnique({
         where: {
           skuId_warehouseId: {
@@ -578,6 +581,22 @@ export class InventoryService {
       if (dec.count !== 1) {
         throw new ConflictException(
           `Failed to commit stock for SKU ${reservation.skuId} (onHand/reserved invariant guard)`,
+        );
+      }
+
+      // Only after the counters are safely decremented do we flip the status. The
+      // flip is still guarded by status='ACTIVE' so only the first of two
+      // concurrent runs reaches this point; the loser's earlier ACTIVE read +
+      // this CAS makes its run a no-op via rollback of its own decrement.
+      const flipped = await tx.stockReservation.updateMany({
+        where: { id: reservationId, status: 'ACTIVE' },
+        data: { status: 'CONSUMED' },
+      });
+      if (flipped.count !== 1) {
+        // Another worker won the race between our read and write — roll back the
+        // decrement we just applied so onHand/reserved are not double-decremented.
+        throw new ConflictException(
+          `Reservation ${reservationId} was concurrently finalized during commit`,
         );
       }
 

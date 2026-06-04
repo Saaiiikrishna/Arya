@@ -372,15 +372,20 @@ export class ShippingService {
     // COURIER_WEBHOOK_SECRET when its provider-specific value is absent.
     const secret = this.resolveWebhookSecret(safeProviderKey);
     if (!secret) {
-      const nodeEnv = this.config.get<string>('NODE_ENV');
-      if (nodeEnv === 'production') {
-        // Fail closed: never accept an unsigned courier webhook in production.
+      // Fail CLOSED by default: only skip signature verification on an explicit
+      // dev/test allowlist. An exact `=== 'production'` check fails OPEN whenever
+      // NODE_ENV is 'prod', absent, or empty — so invert it to a known-dev list
+      // and reject the unsigned webhook in every other case.
+      const isDev = ['development', 'test'].includes(
+        this.config.get<string>('NODE_ENV') ?? '',
+      );
+      if (!isDev) {
         throw new UnauthorizedException(
           'COURIER_WEBHOOK_SECRET is not configured; refusing unsigned courier webhook in production',
         );
       }
       this.logger.warn(
-        `COURIER_WEBHOOK_SECRET not configured (provider="${safeProviderKey ?? 'default'}"); accepting courier webhook without signature verification (DEV ONLY — this is rejected in production)`,
+        `COURIER_WEBHOOK_SECRET not configured (provider="${safeProviderKey ?? 'default'}"); accepting courier webhook without signature verification (DEV ONLY — this is rejected outside development/test)`,
       );
     } else {
       const ok = ShippingService.verifyHmac(

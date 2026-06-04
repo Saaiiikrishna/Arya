@@ -22,6 +22,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '@/prisma/prisma.service';
 import { OrdersService } from '@/modules/orders/orders.service';
+import { resolveCustomerSecret } from '@/modules/store-auth/customer.strategy';
 import { InventoryService } from '@/modules/inventory/inventory.service';
 import { InvoicingService } from '@/modules/invoicing/invoicing.service';
 import { NotificationService } from '@/modules/notifications/notification.service';
@@ -141,16 +142,17 @@ export class ReturnsService {
   }
 
   /**
-   * Verify a CUSTOMER bearer token (same JWT_SECRET + role assertion as the
+   * Verify a CUSTOMER bearer token (same DEDICATED customer secret —
+   * JWT_CUSTOMER_SECRET with JWT_SECRET fallback — + role assertion as the
    * dedicated 'jwt-customer' strategy) and resolve the active REGISTERED customer
    * id. Mirrors OrdersController.verifyCustomerToken so the dual-auth scheme stays
    * consistent across the store surface.
    *
-   * NOTE (drift risk, sec finding): this uses JWT_SECRET — the same secret the
-   * customer strategy uses today. If customer tokens are ever migrated to a
-   * separate signing key, this inline verifier must move with them (or be
-   * replaced by a shared CustomerAuthService.verifyToken). The OrdersController /
-   * ShippingController siblings carry the identical inline verifier.
+   * The shared resolveCustomerSecret() is the SINGLE source of truth for the
+   * customer signing/verification key, so this verifier, the strategy, the
+   * OrdersController sibling, and StoreAuthService can never drift apart: once a
+   * distinct JWT_CUSTOMER_SECRET is set, a platform token fails the signature
+   * check here. The role assertion below remains as defense-in-depth.
    */
   private async verifyCustomerToken(authHeader: string): Promise<string> {
     const [scheme, token] = authHeader.split(' ');
@@ -161,7 +163,7 @@ export class ReturnsService {
     let payload: CustomerJwtPayload;
     try {
       payload = await this.jwt.verifyAsync<CustomerJwtPayload>(token, {
-        secret: this.config.get<string>('JWT_SECRET'),
+        secret: resolveCustomerSecret(this.config),
       });
     } catch {
       throw new UnauthorizedException('Customer authentication required');

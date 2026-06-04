@@ -210,3 +210,18 @@ export interface OrderUpdatedPayload {
   paymentStatus: string;
   customerId: string | null;
 }
+
+/**
+ * Guest-safe projection of {@link OrderUpdatedPayload} broadcast to the SHARED
+ * `order:{orderId}` room — which a GUEST (signed order-access token, no account)
+ * may join. It deliberately OMITS `customerId`: that UUID is PII tied to a real
+ * person (DPDP Act 2023) and a guest watching an order must never learn the
+ * owning customer's id. The full payload (including `customerId`) is emitted only
+ * to the admin room and the owning `customer:{customerId}` room — never to
+ * `order:{orderId}`. Keep the shared fields in lock-step with
+ * `OrderUpdatedPayload`.
+ */
+export type OrderUpdatedPublicPayload = Pick<
+  OrderUpdatedPayload,
+  'orderId' | 'orderNumber' | 'status' | 'paymentStatus'
+>;

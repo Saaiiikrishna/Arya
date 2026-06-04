@@ -5,7 +5,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { StoreAuthController } from './store-auth.controller';
 import { StoreAuthService } from './store-auth.service';
 import { GuestTokenService } from './guest-token.service';
-import { CustomerStrategy } from './customer.strategy';
+import { CustomerStrategy, resolveCustomerSecret } from './customer.strategy';
 import {
   CustomerJwtGuard,
   GuestCartGuard,
@@ -19,8 +19,10 @@ import {
  *
  * PrismaService is provided globally by the @Global() PrismaModule, so it is
  * injectable here without importing PrismaModule. JwtModule is registered with
- * JWT_SECRET + 15m default expiry (access tokens); refresh tokens are signed
- * explicitly with JWT_REFRESH_SECRET in the service.
+ * the DEDICATED customer secret (JWT_CUSTOMER_SECRET, JWT_SECRET fallback) +
+ * 15m default expiry, so the default sign()/verify() used by StoreAuthService
+ * for ACCESS tokens isolates customer tokens from platform tokens. Refresh
+ * tokens are signed explicitly with JWT_REFRESH_SECRET in the service.
  */
 @Module({
   imports: [
@@ -28,7 +30,7 @@ import {
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET'),
+        secret: resolveCustomerSecret(configService),
         signOptions: {
           expiresIn: configService.get<string>('JWT_EXPIRATION', '15m') as any,
         },

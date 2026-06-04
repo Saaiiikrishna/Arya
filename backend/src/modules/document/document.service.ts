@@ -99,19 +99,54 @@ export class DocumentService {
     if (!doc) throw new NotFoundException('Document not found');
     if (doc.applicantId !== applicantId) throw new NotFoundException('Document not found');
 
-    // Authoritative size: read the actually-stored object size from S3. The
-    // client-supplied fileSize is spoofable, so it's only a fallback when the
-    // HeadObject can't be performed (e.g. no real S3 in local dev).
-    let actualSize: number | undefined = fileSize;
+    // Authoritative size is read from S3 below. Do NOT seed actualSize from the
+    // spoofable client value before HeadObject runs — otherwise a HeadObject
+    // failure would leave the client-controlled size as the only size gate,
+    // letting a transient S3 error + fileSize:0 bypass MAX_UPLOAD_BYTES.
+    let actualSize: number | undefined;
+    let objectExists = false;
     try {
       const head = await this.s3.send(
         new HeadObjectCommand({ Bucket: this.bucket, Key: doc.fileUrl }),
       );
+      objectExists = true;
       if (typeof head.ContentLength === 'number') actualSize = head.ContentLength;
     } catch (e) {
-      this.logger.warn(
-        `HeadObject failed for ${doc.fileUrl}; using client-reported size: ${(e as any)?.message}`,
-      );
+      const status = (e as { $metadata?: { httpStatusCode?: number } })
+        ?.$metadata?.httpStatusCode;
+      if (status === 404) {
+        // Definitive 'object absent' — the client never completed the PUT.
+        objectExists = false;
+      } else {
+        // 403/503/timeout/network — the object may exist but is unverifiable.
+        // Refuse to confirm: silently falling back to the spoofable client size
+        // is a size-enforcement bypass. Surface a retryable error instead.
+        this.logger.warn(
+          `HeadObject failed for ${doc.fileUrl} (status=${
+            status ?? 'unknown'
+          }): ${(e as Error)?.message}`,
+        );
+        throw new BadRequestException(
+          'Upload verification failed; please retry',
+        );
+      }
+    }
+
+    // Advisory-size fallback is permitted ONLY when the object was confirmed to
+    // be definitively absent (a 404) in a non-production environment (local dev
+    // without a real S3 backing). In production a 404 means the upload never
+    // landed, so we never trust the client-reported size.
+    const allowAdvisoryFallback =
+      this.configService.get<string>('NODE_ENV') !== 'production';
+
+    if (!objectExists) {
+      if (allowAdvisoryFallback && typeof fileSize === 'number') {
+        actualSize = fileSize;
+      } else {
+        throw new BadRequestException(
+          'Uploaded object not found; complete the upload before confirming',
+        );
+      }
     }
 
     if (typeof actualSize === 'number' && actualSize > MAX_UPLOAD_BYTES) {

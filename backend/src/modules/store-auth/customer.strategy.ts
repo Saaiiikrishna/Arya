@@ -6,16 +6,33 @@ import { PrismaService } from '@/prisma/prisma.service';
 
 /**
  * JWT payload minted for store customers. role is ALWAYS "CUSTOMER" and
- * sub is ALWAYS the Customer.id. These tokens are signed with the same
- * JWT_SECRET as the platform but are validated by THIS dedicated strategy,
- * so a CUSTOMER token can never resolve against the admin/applicant tables
- * (the platform validateUser() else-branch) and vice-versa.
+ * sub is ALWAYS the Customer.id. These tokens are signed with a DEDICATED
+ * customer secret (JWT_CUSTOMER_SECRET, falling back to JWT_SECRET only when
+ * unset) and validated by THIS dedicated strategy, so a platform token —
+ * signed with JWT_SECRET — is cryptographically rejected here (signature
+ * mismatch) before any role/table check even runs. The role assertion below
+ * is retained purely as defense-in-depth.
  */
 export interface CustomerJwtPayload {
   sub: string;
   email?: string | null;
   role: 'CUSTOMER';
   tokenId?: string;
+}
+
+/**
+ * Single shared resolution of the customer signing/verification secret. ALL
+ * customer token sign + verify paths (this strategy, StoreAuthService, the
+ * inline dual-auth verifiers in OrdersController / ReturnsService) MUST use this
+ * so a token signed for customers always verifies on the customer path and a
+ * platform token never does. Falls back to JWT_SECRET only when the dedicated
+ * key is unset (keeps existing deployments working until the key is provisioned).
+ */
+export function resolveCustomerSecret(config: ConfigService): string {
+  return (
+    config.get<string>('JWT_CUSTOMER_SECRET') ||
+    config.get<string>('JWT_SECRET')!
+  );
 }
 
 /**
@@ -39,13 +56,16 @@ export class CustomerStrategy extends PassportStrategy(
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>('JWT_SECRET')!,
+      // Dedicated customer secret (JWT_CUSTOMER_SECRET, JWT_SECRET fallback). A
+      // platform token signed with JWT_SECRET fails the signature check here.
+      secretOrKey: resolveCustomerSecret(configService),
     });
   }
 
   async validate(payload: CustomerJwtPayload) {
-    // Hard role assertion: an admin/applicant/investor token (same JWT_SECRET,
-    // valid signature) carries a different role and is rejected here.
+    // Defense-in-depth role assertion. With a distinct JWT_CUSTOMER_SECRET a
+    // platform token never reaches here (signature mismatch); this still guards
+    // the fallback case where the customer secret equals JWT_SECRET.
     if (!payload || payload.role !== 'CUSTOMER') {
       throw new UnauthorizedException('Customer access required');
     }

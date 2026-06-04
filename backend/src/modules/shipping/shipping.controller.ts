@@ -18,6 +18,7 @@ import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { createHash } from 'crypto';
 import { PrismaService } from '@/prisma/prisma.service';
+import { resolveCustomerSecret } from '@/modules/store-auth/customer.strategy';
 import { ShippingService } from './shipping.service';
 
 /** The minimal verified CUSTOMER JWT payload this controller relies on. */
@@ -150,7 +151,7 @@ export class ShippingController {
     let payload: CustomerJwtPayload;
     try {
       payload = await this.jwt.verifyAsync<CustomerJwtPayload>(token, {
-        secret: this.config.get<string>('JWT_SECRET'),
+        secret: resolveCustomerSecret(this.config),
       });
     } catch {
       throw new UnauthorizedException('Customer authentication required');

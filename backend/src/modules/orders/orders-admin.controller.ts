@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import type { Request } from 'express';
-import { AdminGuard } from '@/modules/auth/guards';
+import { AdminGuard, FinanceGuard } from '@/modules/auth/guards';
 import { OrdersService, OrderActor } from './orders.service';
 import { OrderQueryDto, OrderStatusTransitionDto } from './dto';
 
@@ -22,8 +22,12 @@ import { OrderQueryDto, OrderStatusTransitionDto } from './dto';
  *  - GET  /api/admin/store/orders/:id             detail
  *  - POST /api/admin/store/orders/:id/transition  validated state machine
  *
- * All routes are AdminGuard-protected. The actor for every audited transition is
- * sourced from the JWT (req.user), NEVER the request body (security rule 4ebf502).
+ * list/detail are AdminGuard-protected so a MODERATOR can triage the board. The
+ * transition route is FinanceGuard-protected (ADMIN / SUPER_ADMIN only — MODERATOR
+ * rejected fail-closed) because it moves stock and money: CANCELLED from a
+ * pre-shipped state releases/restocks inventory and triggers refunds. The actor for
+ * every audited transition is sourced from the JWT (req.user), NEVER the request
+ * body (security rule 4ebf502).
  */
 @Controller('api/admin/store')
 @UseGuards(AdminGuard, ThrottlerGuard)
@@ -48,6 +52,7 @@ export class OrdersAdminController {
    * releases/restocks stock). An illegal hop is a 409, audited via OrderEvent.
    */
   @Post('orders/:id/transition')
+  @UseGuards(FinanceGuard, ThrottlerGuard)
   @Throttle({ medium: { limit: 100, ttl: 60000 } })
   transition(
     @Req() req: Request,
