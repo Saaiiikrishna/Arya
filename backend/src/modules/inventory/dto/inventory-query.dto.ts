@@ -36,6 +36,19 @@ function toBool({ value }: { value: unknown }): boolean | undefined {
   return undefined;
 }
 
+/**
+ * Filter for the warehouse list (`GET /api/admin/store/warehouses`). The
+ * `includeInactive` flag is coerced via the same strict `toBool` transform used
+ * by every other inventory query DTO — no raw string comparison in the controller.
+ */
+export class ListWarehousesQueryDto {
+  /** Opt in to include deactivated warehouses (default: active only). */
+  @IsOptional()
+  @Transform(toBool)
+  @IsBoolean()
+  includeInactive?: boolean;
+}
+
 /** Shared page/limit pagination contract (DRY across inventory query DTOs). */
 export class BasePaginationDto {
   @IsOptional()

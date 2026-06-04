@@ -5,31 +5,57 @@ import {
   NotFoundException,
   BadRequestException,
   Logger,
+  OnModuleDestroy,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { CartStatus, CustomerType, Prisma } from '@prisma/client';
 import Redis from 'ioredis';
+import axios from 'axios';
 import * as bcrypt from 'bcrypt';
-import { createHash, randomInt, timingSafeEqual } from 'crypto';
+import { createHash, randomBytes, randomInt, timingSafeEqual } from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
 import { PrismaService } from '@/prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 import { NotificationService } from '../notifications/notification.service';
 import { RegisterCustomerDto, CustomerLoginDto } from './dto';
-import {
-  CustomerJwtPayload,
-  resolveCustomerSecret,
-} from './customer.strategy';
+import { CustomerJwtPayload, resolveCustomerSecret } from './customer.strategy';
 
 const BCRYPT_ROUNDS = 12;
 const OTP_TTL_SECONDS = 300; // 5 minutes, matching platform auth
 const OTP_MAX_ATTEMPTS = 5;
 
+// OAuth2 anti-CSRF `state` (RFC 6749 §10.12): an opaque, single-use nonce minted
+// when the authorize URL is built, round-tripped through Discord, and required +
+// consumed on the code-exchange call. Short-lived — the user completes the hop in
+// seconds; 10 minutes covers a slow consent screen without a long replay window.
+const DISCORD_STATE_TTL_SECONDS = 600;
+const DISCORD_STATE_PREFIX = 'store_discord_state:';
+
+// Discord OAuth2 endpoints (https://discord.com/developers/docs/topics/oauth2).
+const DISCORD_AUTHORIZE_URL = 'https://discord.com/oauth2/authorize';
+const DISCORD_TOKEN_URL = 'https://discord.com/api/oauth2/token';
+const DISCORD_USER_URL = 'https://discord.com/api/users/@me';
+const DISCORD_SCOPE = 'identify email';
+// SiteSettings key holding the channel webhook URL that newly-PUBLISHED articles
+// are announced to. Absent/blank ⇒ Discord announcements are disabled (no-op).
+const DISCORD_ARTICLE_WEBHOOK_SETTING_KEY = 'discordArticleWebhookUrl';
+// In-process TTL for the cached webhook URL. A 5-minute window bounds staleness
+// after an admin updates the setting while eliminating a per-publish DB round-trip.
+const DISCORD_WEBHOOK_CACHE_TTL_MS = 5 * 60_000;
+
 @Injectable()
-export class StoreAuthService {
+export class StoreAuthService implements OnModuleDestroy {
   private readonly logger = new Logger(StoreAuthService.name);
   private readonly redis: Redis;
+  // In-process TTL cache for the Discord article webhook URL so a high-volume
+  // publish stream does not hit the SiteSettings table on every announcement.
+  // Holds the resolved value (string) OR an explicit null (disabled) so a
+  // "feature is off" result is cached too, not re-queried each call.
+  private discordWebhookCache: {
+    value: string | null;
+    expiresAt: number;
+  } | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -49,6 +75,19 @@ export class StoreAuthService {
     });
   }
 
+  /**
+   * Close the dedicated Redis connection on graceful shutdown so we do not leak a
+   * socket on test teardown / rolling deploys. `quit()` drains in-flight commands;
+   * swallow any error — we are shutting down regardless.
+   */
+  async onModuleDestroy(): Promise<void> {
+    try {
+      await this.redis.quit();
+    } catch {
+      /* already closing / closed — nothing to do on shutdown */
+    }
+  }
+
   // ─── Token helpers (SHA-256 — same scheme as platform auth.service.ts) ───
 
   /** SHA-256 hex digest. Refresh TOKENS are SHA-256 (NOT bcrypt) to match the
@@ -66,10 +105,7 @@ export class StoreAuthService {
     // signed with JWT_SECRET is rejected on every customer verify path.
     return this.jwtService.sign(payload, {
       secret: resolveCustomerSecret(this.configService),
-      expiresIn: this.configService.get<string>(
-        'JWT_EXPIRATION',
-        '15m',
-      ) as any,
+      expiresIn: this.configService.get<string>('JWT_EXPIRATION', '15m') as any,
     });
   }
 
@@ -400,6 +436,291 @@ export class StoreAuthService {
 
     const tokens = await this.issueTokens(customer);
     return { ...tokens, customer: this.publicCustomer(customer) };
+  }
+
+  // ─── Discord login (gated behind config) ─────────────────
+
+  /** True only when the full Discord OAuth2 credential set is configured. */
+  private discordConfigured(): boolean {
+    return Boolean(
+      this.configService.get<string>('DISCORD_CLIENT_ID') &&
+      this.configService.get<string>('DISCORD_CLIENT_SECRET') &&
+      this.configService.get<string>('DISCORD_REDIRECT_URI'),
+    );
+  }
+
+  /**
+   * Build the Discord OAuth2 authorize URL the storefront redirects to. Returns
+   * null when Discord is not configured so the caller (controller) can fail-clean
+   * (404) and the frontend can hide the "Continue with Discord" button — mirroring
+   * the existing config-gating pattern. Requests the minimal `identify email`
+   * scope: we only need a verified email to find-or-create the Customer.
+   *
+   * CSRF (RFC 6749 §10.12): a cryptographically-random `state` nonce is minted and
+   * persisted in Redis (short TTL, single-use) and embedded in the URL. Discord
+   * round-trips it back to the callback; the frontend echoes it on the exchange,
+   * where discordLogin() requires + consumes it. An attacker cannot forge a value
+   * present in our Redis, so a victim cannot be lured into completing an
+   * attacker-chosen code exchange. Async because it writes the nonce to Redis.
+   */
+  async getDiscordAuthUrl(): Promise<string | null> {
+    if (!this.discordConfigured()) return null;
+    // 16 random bytes (128 bits) hex-encoded — unguessable and never reused.
+    const state = randomBytes(16).toString('hex');
+    await this.redis.set(
+      `${DISCORD_STATE_PREFIX}${state}`,
+      '1',
+      'EX',
+      DISCORD_STATE_TTL_SECONDS,
+    );
+    const params = new URLSearchParams({
+      client_id: this.configService.get<string>('DISCORD_CLIENT_ID')!,
+      redirect_uri: this.configService.get<string>('DISCORD_REDIRECT_URI')!,
+      response_type: 'code',
+      scope: DISCORD_SCOPE,
+      state,
+    });
+    return `${DISCORD_AUTHORIZE_URL}?${params.toString()}`;
+  }
+
+  /**
+   * Exchange a Discord OAuth2 authorization code for a CUSTOMER token pair.
+   *
+   * Flow: POST the code to Discord's token endpoint (client secret), then GET the
+   * user with the returned access token. We require a VERIFIED email — an
+   * unverified Discord address could belong to someone else, so we must never
+   * auto-provision or log in against it (same rule as googleLogin). The Customer
+   * is found-or-created BY EMAIL (no discordId column — NO migration in this
+   * batch): an existing REGISTERED customer with that email is reused, otherwise a
+   * new REGISTERED customer is created with an unusable password sentinel (so the
+   * account can never be password-logged-in but works for OTP/Google/Discord).
+   * Then the normal issue/sign path mints the pair.
+   *
+   * CSRF: `state` must match a nonce minted by getDiscordAuthUrl() and still live
+   * in Redis. It is consumed (deleted) atomically here BEFORE the code exchange so
+   * it is strictly single-use and a stolen/observed value cannot be replayed.
+   */
+  async discordLogin(code: string, state: string) {
+    if (!this.discordConfigured()) {
+      // Fail clean: Discord is not enabled on this deployment.
+      throw new BadRequestException('Discord login is not configured');
+    }
+    const trimmed = (code || '').trim();
+    if (!trimmed) {
+      throw new BadRequestException('Authorization code is required');
+    }
+
+    // 0. Verify + consume the anti-CSRF state nonce BEFORE touching Discord.
+    //    GETDEL is atomic (read-and-delete in one round-trip), so two concurrent
+    //    exchanges presenting the same state cannot both pass — exactly one
+    //    removes it, the other sees null and is rejected. A missing/expired/forged
+    //    value yields null ⇒ reject.
+    const trimmedState = (state || '').trim();
+    if (!trimmedState) {
+      throw new BadRequestException('Missing OAuth state parameter');
+    }
+    const consumed = await this.redis.getdel(
+      `${DISCORD_STATE_PREFIX}${trimmedState}`,
+    );
+    if (!consumed) {
+      throw new BadRequestException('Invalid or expired OAuth state');
+    }
+
+    // 1. Exchange the code for a Discord access token.
+    let accessToken: string;
+    try {
+      const tokenRes = await axios.post(
+        DISCORD_TOKEN_URL,
+        new URLSearchParams({
+          client_id: this.configService.get<string>('DISCORD_CLIENT_ID')!,
+          client_secret: this.configService.get<string>(
+            'DISCORD_CLIENT_SECRET',
+          )!,
+          grant_type: 'authorization_code',
+          code: trimmed,
+          redirect_uri: this.configService.get<string>('DISCORD_REDIRECT_URI')!,
+        }).toString(),
+        {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          timeout: 10_000,
+        },
+      );
+      accessToken = tokenRes.data?.access_token;
+    } catch (e: any) {
+      this.logger.warn(
+        `Discord token exchange failed: ${e?.response?.status ?? ''} ${e?.message}`,
+      );
+      throw new BadRequestException('Discord authentication failed');
+    }
+    if (!accessToken) {
+      throw new BadRequestException('Discord authentication failed');
+    }
+
+    // 2. Fetch the Discord user (email + verified flag + name).
+    let profile: {
+      email?: string | null;
+      verified?: boolean;
+      username?: string | null;
+      global_name?: string | null;
+    };
+    try {
+      const userRes = await axios.get(DISCORD_USER_URL, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        timeout: 10_000,
+      });
+      profile = userRes.data ?? {};
+    } catch (e: any) {
+      this.logger.warn(
+        `Discord user fetch failed: ${e?.response?.status ?? ''} ${e?.message}`,
+      );
+      throw new BadRequestException('Discord authentication failed');
+    }
+
+    if (!profile.email) {
+      throw new BadRequestException('Discord account has no email');
+    }
+    if (profile.verified !== true) {
+      throw new BadRequestException('Discord email is not verified');
+    }
+
+    const email = profile.email.trim().toLowerCase();
+
+    // 3. Find-or-create the Customer by email (NO discordId column).
+    let customer = await this.prisma.customer.findFirst({
+      where: { email, type: CustomerType.REGISTERED },
+    });
+
+    if (customer && !customer.isActive) {
+      throw new UnauthorizedException('Account is disabled');
+    }
+
+    if (!customer) {
+      // Unusable password sentinel (Unix shadow convention): a value that is not a
+      // valid bcrypt hash can never be a bcrypt.compare() match, so the row works
+      // for federated/OTP login but never for `login()` (email + password). The
+      // random suffix keeps every row distinct without spending 12 bcrypt rounds
+      // on entropy that is never compared against user input. firstName is
+      // best-effort from the Discord display name.
+      const unusablePasswordHash = `!discord:${randomBytes(16).toString('hex')}`;
+      customer = await this.prisma.customer.create({
+        data: {
+          type: CustomerType.REGISTERED,
+          email,
+          emailVerified: true,
+          passwordHash: unusablePasswordHash,
+          firstName: profile.global_name ?? profile.username ?? null,
+        },
+      });
+    } else if (!customer.emailVerified) {
+      customer = await this.prisma.customer.update({
+        where: { id: customer.id },
+        data: { emailVerified: true },
+      });
+    }
+
+    const tokens = await this.issueTokens(customer);
+    return { ...tokens, customer: this.publicCustomer(customer) };
+  }
+
+  // ─── Discord article announcement (webhook POSTER — gated) ─
+
+  /**
+   * Announce a newly-PUBLISHED article to a Discord channel via an incoming
+   * webhook. The webhook URL is read at call time from the SiteSettings key
+   * `discordArticleWebhookUrl` (runtime-configurable, no redeploy). Absent/blank
+   * ⇒ this is a silent no-op (returns false), so the feature is fully gated by
+   * config. Best-effort and NON-throwing: a webhook failure must never roll back
+   * an article publish.
+   *
+   * WIRED: ArticlesService.approve() calls this fire-and-forget (void, never
+   * awaited inside the publish CAS) immediately after an article transitions to
+   * PUBLISHED — see backend/src/modules/articles/articles.service.ts. A webhook
+   * failure can therefore never roll back or block a publish.
+   *
+   * @returns true if a webhook was posted, false if disabled/unconfigured or it failed.
+   */
+  async postDiscordArticle(article: {
+    title: string;
+    url?: string | null;
+    excerpt?: string | null;
+    coverUrl?: string | null;
+  }): Promise<boolean> {
+    let webhookUrl: string | null = null;
+    // Read through a 5-minute in-process cache. The cached entry stores the
+    // resolved value OR null (disabled), so a high-volume publish stream costs at
+    // most one SiteSettings round-trip per TTL window instead of one per call.
+    const now = Date.now();
+    if (this.discordWebhookCache && this.discordWebhookCache.expiresAt > now) {
+      webhookUrl = this.discordWebhookCache.value;
+    } else {
+      try {
+        const setting = await this.prisma.siteSetting.findUnique({
+          where: { key: DISCORD_ARTICLE_WEBHOOK_SETTING_KEY },
+        });
+        webhookUrl = setting?.value?.trim() || null;
+        this.discordWebhookCache = {
+          value: webhookUrl,
+          expiresAt: now + DISCORD_WEBHOOK_CACHE_TTL_MS,
+        };
+      } catch (e: any) {
+        this.logger.warn(
+          `Discord webhook setting lookup failed: ${e?.message}`,
+        );
+        return false;
+      }
+    }
+
+    // Disabled unless a valid http(s) webhook URL is configured.
+    if (!webhookUrl) return false;
+    let parsed: URL;
+    try {
+      parsed = new URL(webhookUrl);
+    } catch {
+      this.logger.warn(
+        'Discord article webhook URL is not a valid URL — skipping',
+      );
+      return false;
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      this.logger.warn(
+        'Discord article webhook URL must be http(s) — skipping',
+      );
+      return false;
+    }
+
+    const title = (article.title || 'New article').slice(0, 256);
+    const description = (article.excerpt || '').slice(0, 2048) || undefined;
+    const articleUrl = article.url?.trim() || undefined;
+
+    // Discord embeds render a clean card. `username` overrides the webhook's
+    // default name; `embeds[0].url` makes the title a link.
+    const payload: Record<string, unknown> = {
+      username: 'Aryavartham',
+      embeds: [
+        {
+          title,
+          ...(articleUrl ? { url: articleUrl } : {}),
+          ...(description ? { description } : {}),
+          color: 0x133022, // Forest Green (DESIGN.md primary)
+          ...(article.coverUrl?.trim()
+            ? { image: { url: article.coverUrl.trim() } }
+            : {}),
+        },
+      ],
+    };
+
+    try {
+      await axios.post(webhookUrl, payload, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10_000,
+      });
+      return true;
+    } catch (e: any) {
+      this.logger.warn(
+        `Discord article webhook POST failed: ${e?.response?.status ?? ''} ${e?.message}`,
+      );
+      return false;
+    }
   }
 
   // ─── Refresh (OWN customer path — validates Customer, rotates) ────

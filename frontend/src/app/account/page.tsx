@@ -21,6 +21,7 @@ import {
   CheckCircle2,
   Clock,
   XCircle,
+  MessageCircle,
 } from 'lucide-react';
 import Layout from '@/components/Layout';
 import { Money, Pagination } from '@/components/store';
@@ -61,6 +62,28 @@ function AuthCard() {
   const [phone, setPhone] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Discord OAuth is config-gated: the button is rendered ONLY when the backend
+  // returns an authorize URL (it replies 404 / null when Discord is unconfigured),
+  // mirroring the existing disabled-CTA / Google-OAuth gating pattern.
+  const [discordUrl, setDiscordUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void storeApi.getDiscordAuthUrl().then((url) => {
+      // Defense-in-depth (server config-gating is the primary control): only
+      // render the CTA if the URL is genuinely Discord's authorize endpoint, so a
+      // mis-set DISCORD_REDIRECT_URI / tampered resolver can never turn this into
+      // an open redirect to an attacker-controlled origin.
+      const safe =
+        url && url.startsWith('https://discord.com/oauth2/authorize')
+          ? url
+          : null;
+      if (active) setDiscordUrl(safe);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,8 +120,8 @@ function AuthCard() {
 
   return (
     <div className="mkt-card mx-auto max-w-md px-7 py-9 sm:px-9">
-      {/* Mode toggle */}
-      <div className="mb-7 flex rounded-full border border-hairline bg-white/50 p-1">
+      {/* Mode toggle — 0px corners per DESIGN.md (no rounded carve-out here). */}
+      <div className="mb-7 flex rounded-none border border-hairline bg-white/50 p-1">
         {(['login', 'register'] as const).map((m) => (
           <button
             key={m}
@@ -108,7 +131,7 @@ function AuthCard() {
               setError(null);
             }}
             className={cn(
-              'flex-1 rounded-full py-2 font-sans text-[11px] font-semibold uppercase tracking-[0.08em] transition-colors',
+              'flex-1 rounded-none py-2 font-sans text-[11px] font-semibold uppercase tracking-[0.08em] transition-colors',
               mode === m ? 'bg-forest text-parchment' : 'text-ink/55 hover:text-forest',
             )}
           >
@@ -202,6 +225,23 @@ function AuthCard() {
           )}
         </button>
       </form>
+
+      {/* Discord OAuth — rendered only when the backend has it configured. */}
+      {discordUrl && (
+        <>
+          <div className="my-6 flex items-center gap-3">
+            <span className="h-px flex-1 bg-hairline" aria-hidden />
+            <span className="font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-ink/40">
+              or
+            </span>
+            <span className="h-px flex-1 bg-hairline" aria-hidden />
+          </div>
+          <a href={discordUrl} className="mkt-btn-ghost w-full justify-center">
+            <MessageCircle className="h-4 w-4" aria-hidden />
+            <span>Continue with Discord</span>
+          </a>
+        </>
+      )}
     </div>
   );
 }
@@ -300,7 +340,7 @@ function OrderHistory() {
         </div>
       ) : orders.length === 0 ? (
         <div className="mkt-card px-8 py-14 text-center">
-          <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-saffron-glow/25 text-saffron-deep">
+          <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-none bg-saffron-glow/25 text-saffron-deep">
             <Package className="h-6 w-6" aria-hidden />
           </div>
           <h3 className="font-serif text-xl text-forest">No orders yet</h3>

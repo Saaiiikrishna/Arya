@@ -17,6 +17,7 @@ import { InventoryService, StockActor } from './inventory.service';
 import {
   CreateWarehouseDto,
   InventoryMatrixQueryDto,
+  ListWarehousesQueryDto,
   MovementQueryDto,
   StockAdjustDto,
   StockTransferDto,
@@ -30,6 +31,10 @@ import {
  */
 const STOCK_MUTATOR_ROLES = ['ADMIN', 'SUPER_ADMIN'];
 
+// AdminGuard is applied at the CLASS level (CLAUDE.md convention) so a new method
+// added without its own decorator is secure by default — never silently public.
+// Mutation routes narrow further to ADMIN/SUPER_ADMIN via this.mutator(req).
+@UseGuards(AdminGuard)
 @Controller('api')
 export class InventoryController {
   constructor(private readonly inventory: InventoryService) {}
@@ -62,27 +67,23 @@ export class InventoryController {
 
   // ─── Warehouse CRUD (deactivate, never hard-delete) ───────────
 
-  @UseGuards(AdminGuard)
   @Get('admin/store/warehouses')
-  listWarehouses(@Query('includeInactive') includeInactive?: string) {
+  listWarehouses(@Query() query: ListWarehousesQueryDto) {
     // Least-privilege default: only active warehouses unless explicitly opted in.
-    return this.inventory.listWarehouses(includeInactive === 'true');
+    return this.inventory.listWarehouses(query.includeInactive ?? false);
   }
 
-  @UseGuards(AdminGuard)
   @Get('admin/store/warehouses/:id')
   getWarehouse(@Param('id', ParseUUIDPipe) id: string) {
     return this.inventory.getWarehouse(id);
   }
 
-  @UseGuards(AdminGuard)
   @Post('admin/store/warehouses')
   createWarehouse(@Body() dto: CreateWarehouseDto, @Req() req: any) {
     this.mutator(req);
     return this.inventory.createWarehouse(dto);
   }
 
-  @UseGuards(AdminGuard)
   @Patch('admin/store/warehouses/:id')
   updateWarehouse(
     @Param('id', ParseUUIDPipe) id: string,
@@ -94,7 +95,6 @@ export class InventoryController {
   }
 
   /** Soft-delete: deactivate (isActive=false). FKs are RESTRICT — no hard delete. */
-  @UseGuards(AdminGuard)
   @Patch('admin/store/warehouses/:id/deactivate')
   deactivateWarehouse(@Param('id', ParseUUIDPipe) id: string, @Req() req: any) {
     this.mutator(req);
@@ -103,25 +103,21 @@ export class InventoryController {
 
   // ─── Stock views ──────────────────────────────────────────────
 
-  @UseGuards(AdminGuard)
   @Get('admin/store/inventory')
   getStockMatrix(@Query() query: InventoryMatrixQueryDto) {
     return this.inventory.getStockMatrix(query);
   }
 
-  @UseGuards(AdminGuard)
   @Get('admin/store/inventory/:skuId')
   getSkuInventory(@Param('skuId', ParseUUIDPipe) skuId: string) {
     return this.inventory.getSkuInventory(skuId);
   }
 
-  @UseGuards(AdminGuard)
   @Get('admin/store/stock/movements')
   listMovements(@Query() query: MovementQueryDto) {
     return this.inventory.listMovements(query);
   }
 
-  @UseGuards(AdminGuard)
   @Get('admin/store/stock/reorder')
   getReorderReport(@Query('warehouseId') warehouseId?: string) {
     return this.inventory.getReorderReport(warehouseId);
@@ -129,13 +125,11 @@ export class InventoryController {
 
   // ─── Mutations ────────────────────────────────────────────────
 
-  @UseGuards(AdminGuard)
   @Post('admin/store/inventory/adjust')
   adjust(@Body() dto: StockAdjustDto, @Req() req: any) {
     return this.inventory.adjust(dto, this.mutator(req));
   }
 
-  @UseGuards(AdminGuard)
   @Post('admin/store/inventory/transfer')
   transfer(@Body() dto: StockTransferDto, @Req() req: any) {
     return this.inventory.transfer(dto, this.mutator(req));

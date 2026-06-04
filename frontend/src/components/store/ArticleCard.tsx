@@ -1,6 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Newspaper } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
@@ -20,6 +22,13 @@ export interface ArticleCardProps {
   date?: string | Date | null;
   author?: string | null;
   tags?: string[];
+  /**
+   * Eager-load the cover (sets next/image `priority`, disabling lazy-load). Set
+   * this on the first above-the-fold card in a list/grid — it is frequently the
+   * Largest Contentful Paint element, so prioritising it improves LCP. Leave
+   * `false` (the default) for all other cards so they lazy-load as usual.
+   */
+  priority?: boolean;
   className?: string;
 }
 
@@ -48,9 +57,16 @@ export default function ArticleCard({
   date,
   author,
   tags,
+  priority = false,
   className,
 }: ArticleCardProps) {
   const dateInfo = formatDate(date);
+
+  // next/image optimizes the remote cover (a known CDN/S3 URL). On an un-listed
+  // host or load error we fall back to the same placeholder shown when there is
+  // no cover, so a bad/un-listed URL degrades gracefully.
+  const [imgFailed, setImgFailed] = useState(false);
+  const showCover = !!coverUrl && !imgFailed;
 
   return (
     <Link
@@ -58,13 +74,16 @@ export default function ArticleCard({
       className={cn('mkt-card group flex flex-col overflow-hidden', className)}
     >
       <div className="relative aspect-[16/9] w-full overflow-hidden bg-parchment-dark">
-        {coverUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={coverUrl}
+        {showCover ? (
+          <Image
+            src={coverUrl as string}
             alt={title}
-            loading="lazy"
-            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
+            fill
+            // 3-up on desktop, 2-up tablet, 1-up mobile (matches the journal grid).
+            sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+            priority={priority}
+            onError={() => setImgFailed(true)}
+            className="object-cover transition-transform duration-500 group-hover:scale-[1.04]"
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-ink/25">

@@ -19,13 +19,14 @@
  * mint a guest cart (`storeApi.createCart()` persists its `X-Cart-Token` in
  * localStorage) before adding the item.
  *
- * MOUNTING (note — not wired yet)
- * -------------------------------
- * This provider is intentionally NOT yet added to the root layout or `Layout.tsx`
- * (per the task brief — wiring the header badge is a follow-up). Each store page
- * that needs the cart should be wrapped in `<StoreCartProvider>` for now, OR the
- * provider can be hoisted into the root `app/layout.tsx` alongside
- * `StoreAuthProvider` later. Calling `useStoreCart()` outside a provider throws
+ * MOUNTING
+ * --------
+ * This provider is mounted at the ROOT (`app/layout.tsx`) alongside
+ * `StoreAuthProvider`, so the header cart badge + `<CartDrawer/>` in `Layout.tsx`
+ * can read the count and drive the drawer app-wide. Store pages that wrap their
+ * own `<StoreCartProvider>` (e.g. /cart) still work — nested providers are
+ * independent React contexts, so a page-local provider simply shadows the root
+ * one for its subtree. Calling `useStoreCart()` outside any provider throws
  * fail-fast so a missing mount is caught immediately.
  */
 
@@ -66,6 +67,12 @@ interface StoreCartContextType {
   removeCoupon: () => Promise<void>;
   /** Drop the in-memory cart (e.g. after a successful checkout). */
   clear: () => void;
+  /** Whether the slide-over cart drawer is open (header badge ↔ <CartDrawer/>). */
+  isOpen: boolean;
+  /** Open the slide-over cart drawer. */
+  openCart: () => void;
+  /** Close the slide-over cart drawer. */
+  closeCart: () => void;
 }
 
 const StoreCartContext = createContext<StoreCartContextType | null>(null);
@@ -91,12 +98,20 @@ export function StoreCartProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<CartResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [mutating, setMutating] = useState(false);
+  // Ref mirror of `mutating` so callbacks (e.g. openCart) can read the latest
+  // in-flight status without taking `mutating` as a dependency (which would
+  // re-create them on every mutation toggle).
+  const mutatingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  // Slide-over drawer visibility — owned here (not the header button) so the
+  // badge in <Layout/> and the <CartDrawer/> portal share one source of truth.
+  const [isOpen, setIsOpen] = useState(false);
   // Guards against a setState after unmount during the initial hydrate.
+  // Initialised to true at the `useRef` call; the effect only flips it to false
+  // on unmount (re-asserting true here would be a no-op).
   const mounted = useRef(true);
 
   useEffect(() => {
-    mounted.current = true;
     return () => {
       mounted.current = false;
     };
@@ -159,6 +174,7 @@ export function StoreCartProvider({ children }: { children: ReactNode }) {
   // show a per-action toast / inline coupon error).
   const runMutation = useCallback(
     async (fn: () => Promise<CartResponse>) => {
+      mutatingRef.current = true;
       setMutating(true);
       setError(null);
       try {
@@ -168,6 +184,7 @@ export function StoreCartProvider({ children }: { children: ReactNode }) {
         setError(messageOf(err, 'Something went wrong. Please try again.'));
         throw err;
       } finally {
+        mutatingRef.current = false;
         setMutating(false);
       }
     },
@@ -217,6 +234,23 @@ export function StoreCartProvider({ children }: { children: ReactNode }) {
   const clear = useCallback(() => {
     setCart(null);
     setError(null);
+    setIsOpen(false);
+  }, []);
+
+  const openCart = useCallback(() => {
+    setIsOpen(true);
+    // Pull the freshest server-computed totals when the drawer opens; refresh is
+    // a silent no-op when the visitor has no cart identity yet. Skip it while a
+    // mutation is in flight: a concurrent getCart() would race the mutation's own
+    // setCart(res) and could clobber the freshly-mutated cart (stale write). The
+    // in-flight mutation already commits the recomputed cart on completion.
+    if (!mutatingRef.current) {
+      void refresh();
+    }
+  }, [refresh]);
+
+  const closeCart = useCallback(() => {
+    setIsOpen(false);
   }, []);
 
   return (
@@ -234,6 +268,9 @@ export function StoreCartProvider({ children }: { children: ReactNode }) {
         applyCoupon,
         removeCoupon,
         clear,
+        isOpen,
+        openCart,
+        closeCart,
       }}
     >
       {children}

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth";
 import { StoreAuthProvider } from "@/lib/storeAuth";
+import { StoreCartProvider } from "@/lib/storeCart";
 import GoogleProvider from "@/components/GoogleAuthProvider";
 import { SettingsProvider } from "@/lib/settings";
 import TrackerInit from "@/components/TrackerInit";
@@ -36,10 +37,22 @@ export default function RootLayout({
               app/articles/layout.tsx) so it never hydrates on non-store pages.
             */}
             <StoreAuthProvider>
-              <SettingsProvider>
-                <TrackerInit />
-                {children}
-              </SettingsProvider>
+              {/*
+                StoreCartProvider is hoisted to the root so the global navbar
+                (Layout.tsx) can render the cart badge + slide-over drawer on
+                every public surface without per-route wiring. It is thin and
+                hydration-safe: on cold load it fetches the cart ONLY when a guest
+                cart token or customer session already exists, so it is a no-op on
+                pure platform pages (/admin/*, /). Store pages that wrap their own
+                <StoreCartProvider> (e.g. /cart) still work — the nested provider
+                simply shadows this root one for its subtree.
+              */}
+              <StoreCartProvider>
+                <SettingsProvider>
+                  <TrackerInit />
+                  {children}
+                </SettingsProvider>
+              </StoreCartProvider>
             </StoreAuthProvider>
           </AuthProvider>
         </GoogleProvider>

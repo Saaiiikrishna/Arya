@@ -30,6 +30,7 @@ import {
   MediaGallery,
   Tabs,
   BlockRenderer,
+  JsonLd,
 } from '@/components/store';
 import type { GalleryMedia, ContentBlock } from '@/components/store';
 import { storeApi, ProductDetail } from '@/lib/storeApi';
@@ -109,6 +110,62 @@ function hasBuildGuide(product: ProductDetail): boolean {
   if (p.diyGuide && typeof p.diyGuide === 'object') return true;
   if (p.guide && typeof p.guide === 'object') return true;
   return false;
+}
+
+/**
+ * Build a schema.org Product structured-data object (rendered as JSON-LD).
+ *
+ * - `offers.price` is in RUPEES with 2 decimals (schema.org expects a decimal
+ *   currency value), converted from the lowest available SKU price in integer
+ *   paise — the same number the buy box shows. `priceCurrency` is INR.
+ * - `availability` reflects whether ANY SKU is in stock.
+ * - Only fields we can populate confidently are emitted; absent ones are omitted
+ *   rather than sent empty. The object is OUR OWN data → safe to JSON-LD.
+ */
+function buildProductJsonLd(
+  product: ProductDetail,
+  skus: SkuView[],
+  media: GalleryMedia[],
+): Record<string, unknown> {
+  // Lowest effective price across SKUs (paise), preferring server priceFrom.
+  const skuPrices = skus
+    .map((s) => s.effectivePrice)
+    .filter((p): p is number => typeof p === 'number' && Number.isFinite(p));
+  const lowestPaise =
+    num(product.priceFrom) ?? (skuPrices.length ? Math.min(...skuPrices) : null);
+  const inStock = skus.some((s) => s.inStock);
+
+  const data: Record<string, unknown> = {
+    '@context': 'https://schema.org',
+    '@type': 'Product',
+    name: product.name,
+  };
+
+  const desc = str(product.shortDescription) ?? str(product.subtitle) ?? str(product.description);
+  if (desc) data.description = desc;
+
+  const brand = str(product.brand);
+  if (brand) data.brand = { '@type': 'Brand', name: brand };
+
+  const imageUrls = media.map((m) => m.url).filter(Boolean);
+  if (imageUrls.length) data.image = imageUrls;
+
+  const sku = str(product.sku) ?? (skus.length ? str(skus[0].skuCode) : null);
+  if (sku) data.sku = sku;
+
+  if (lowestPaise != null) {
+    data.offers = {
+      '@type': 'Offer',
+      // Paise → rupees, fixed 2dp, as a string (schema.org price is a decimal).
+      price: (lowestPaise / 100).toFixed(2),
+      priceCurrency: str(product.currency) ?? 'INR',
+      availability: inStock
+        ? 'https://schema.org/InStock'
+        : 'https://schema.org/OutOfStock',
+    };
+  }
+
+  return data;
 }
 
 // ── Page ─────────────────────────────────────────────────────────────────────
@@ -346,12 +403,20 @@ function ProductView({
     setActiveTabKey(defaultTabKey);
   }, [defaultTabKey]);
 
+  // schema.org Product structured data (JSON-LD) for SEO / rich results.
+  const productJsonLd = useMemo(
+    () => buildProductJsonLd(product, skus, media),
+    [product, skus, media],
+  );
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
     >
+      <JsonLd data={productJsonLd} />
+
       {/* Breadcrumb */}
       <nav className="mb-6 flex items-center gap-2 font-sans text-[11px] uppercase tracking-[0.08em] text-ink/45">
         <Link href="/store" className="transition-colors hover:text-saffron-deep">

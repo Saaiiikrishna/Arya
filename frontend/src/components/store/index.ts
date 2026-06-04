@@ -49,6 +49,9 @@ export type { CodeBlockProps } from './CodeBlock';
 export { default as BlockRenderer } from './BlockRenderer';
 export type { BlockRendererProps, ContentBlock, BlockType } from './BlockRenderer';
 
+export { default as JsonLd } from './JsonLd';
+export type { JsonLdProps } from './JsonLd';
+
 export { default as CartLineItem } from './CartLineItem';
 export type { CartLineItemProps } from './CartLineItem';
 

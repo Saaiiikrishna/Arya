@@ -1,6 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { ImageOff } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import Money from './Money';
@@ -33,6 +35,13 @@ export interface ProductCardProps {
   eyebrow?: string | null;
   /** One-line subtitle under the name. */
   subtitle?: string | null;
+  /**
+   * Eager-load the thumbnail (sets next/image `priority`, disabling lazy-load).
+   * Set this on the first above-the-fold card in a catalog grid — it is frequently
+   * the Largest Contentful Paint element, so prioritising it improves LCP. Leave
+   * `false` (the default) for all other cards so they lazy-load as usual.
+   */
+  priority?: boolean;
   className?: string;
 }
 
@@ -47,6 +56,7 @@ export default function ProductCard({
   stockQty,
   eyebrow,
   subtitle,
+  priority = false,
   className,
 }: ProductCardProps) {
   const isRange =
@@ -54,19 +64,29 @@ export default function ProductCard({
   const onSale =
     compareAtPaise != null && priceFrom != null && compareAtPaise > priceFrom;
 
+  // next/image optimizes the remote thumbnail (a known CDN/S3 URL). If the host
+  // is not in next.config remotePatterns, or the fetch errors, we fall back to
+  // the same placeholder used when no image exists — so a bad/un-listed URL
+  // degrades gracefully instead of breaking the card.
+  const [imgFailed, setImgFailed] = useState(false);
+  const showImage = !!imageUrl && !imgFailed;
+
   return (
     <Link
       href={href}
       className={cn('mkt-card group block overflow-hidden', className)}
     >
       <div className="relative aspect-[4/5] w-full overflow-hidden bg-parchment-dark">
-        {imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={imageUrl}
+        {showImage ? (
+          <Image
+            src={imageUrl as string}
             alt={imageAlt || name}
-            loading="lazy"
-            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
+            fill
+            // 5-up on desktop, 2-up tablet, 1-up mobile (matches the catalog grid).
+            sizes="(min-width: 1024px) 20vw, (min-width: 640px) 50vw, 100vw"
+            priority={priority}
+            onError={() => setImgFailed(true)}
+            className="object-cover transition-transform duration-500 group-hover:scale-[1.04]"
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-ink/25">

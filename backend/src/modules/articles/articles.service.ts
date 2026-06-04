@@ -25,6 +25,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../prisma';
 import { EmailService } from '../email/email.service';
+import { StoreAuthService } from '../store-auth';
 import {
   CreateArticleDto,
   UpdateArticleDto,
@@ -95,6 +96,10 @@ export class ArticlesService implements OnModuleInit {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly email: EmailService,
+    // StoreAuthService owns the Discord article-announcement webhook poster
+    // (it already holds the SiteSettings-backed webhook config + URL validation).
+    // StoreAuthModule is imported by ArticlesModule and exports this service.
+    private readonly storeAuth: StoreAuthService,
   ) {
     this.s3 = new S3Client({
       region: this.config.get<string>('AWS_REGION', 'ap-south-1'),
@@ -1043,7 +1048,32 @@ export class ArticlesService implements OnModuleInit {
       `Good news — your article <strong>${this.escape(published.title)}</strong> has been approved and published on Aryavartham.`,
     );
 
+    // Announce the freshly-published article to Discord (best-effort, fire-and-
+    // forget — NOT awaited, never inside a transaction). postDiscordArticle is a
+    // no-op unless an admin has configured the webhook URL in SiteSettings, so
+    // this is fully config-gated; a webhook failure can never affect the publish.
+    void this.storeAuth.postDiscordArticle({
+      title: published.title,
+      url: `${this.frontendBaseUrl()}/articles/${published.slug}`,
+      excerpt: published.excerpt,
+    });
+
     return published;
+  }
+
+  /**
+   * Resolve the canonical public site origin for building shareable article links.
+   * FRONTEND_URL may be a comma-separated CORS origin list (see realtime
+   * constants); take the first entry and strip any trailing slash so the joined
+   * `/articles/<slug>` path is well-formed.
+   */
+  private frontendBaseUrl(): string {
+    const raw = this.config.get<string>(
+      'FRONTEND_URL',
+      'https://aryavartham.com',
+    );
+    const first = raw.split(',')[0]?.trim() || 'https://aryavartham.com';
+    return first.replace(/\/+$/, '');
   }
 
   /**

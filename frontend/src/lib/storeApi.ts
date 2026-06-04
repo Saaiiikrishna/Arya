@@ -468,6 +468,42 @@ class StoreApiClient {
     return data;
   }
 
+  /**
+   * Fetch the Discord OAuth2 authorize URL to redirect the customer to. Returns
+   * null when Discord is not configured (the backend replies 404 in that case) so
+   * the caller can hide the "Continue with Discord" button — config-gated feature.
+   * Never throws: any error (including the 404) resolves to null.
+   */
+  async getDiscordAuthUrl(): Promise<string | null> {
+    try {
+      const res = await this.request<{ url?: string }>('/store/auth/discord/url', {
+        auth: false,
+      });
+      return res?.url ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Exchange a Discord OAuth2 authorization code (from the callback redirect) for
+   * a CUSTOMER token pair and persist the session (same slots as login/register).
+   * `state` is the anti-CSRF nonce Discord round-trips back to the callback; the
+   * backend verifies + single-use-consumes it before exchanging the code.
+   */
+  async loginWithDiscord(
+    code: string,
+    state: string,
+  ): Promise<CustomerAuthResult> {
+    const data = await this.request<CustomerAuthResult>('/store/auth/discord', {
+      method: 'POST',
+      body: { code, state },
+      auth: false,
+    });
+    this.applyAuth(data);
+    return data;
+  }
+
   /** Manual refresh (the request layer also auto-refreshes on 401). */
   async refreshCustomer(): Promise<boolean> {
     return this.refreshCustomerToken();

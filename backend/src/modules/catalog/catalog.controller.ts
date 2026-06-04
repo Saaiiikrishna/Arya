@@ -29,6 +29,7 @@ import {
   CreateSkuDto,
   UpdateSkuDto,
   CreatePriceTierDto,
+  SkuSearchQueryDto,
   CreateCategoryDto,
   UpdateCategoryDto,
   DeleteCategoryQueryDto,
@@ -159,6 +160,16 @@ export class CatalogController {
   }
 
   // ─── ADMIN: SKUS + PRICE TIERS ────────────────────────────
+
+  // SKU typeahead for the admin SkuPicker (replaces raw SKU-UUID text inputs in
+  // the inventory + purchasing forms). AdminGuard is applied at the class level
+  // (CatalogAdminGuard); standard (medium) admin throttle tier. Returns a
+  // lightweight projection { id, skuCode, name, productName }.
+  @Throttle({ medium: { limit: 100, ttl: 60000 } })
+  @Get('admin/store/skus')
+  adminSearchSkus(@Query() query: SkuSearchQueryDto) {
+    return this.catalog.adminSearchSkus(query.search, query.limit);
+  }
 
   @Post('admin/store/products/:id/skus')
   createSku(

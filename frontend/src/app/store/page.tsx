@@ -473,7 +473,7 @@ export default function StorePage() {
                 transition={{ duration: 0.4 }}
                 className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4"
               >
-                {products.map((p) => (
+                {products.map((p, i) => (
                   <ProductCard
                     key={p.id}
                     name={p.name}
@@ -484,6 +484,9 @@ export default function StorePage() {
                     priceTo={p.priceTo ?? null}
                     eyebrow={p.brand ?? resolveCategoryLabel(p) ?? null}
                     subtitle={p.subtitle ?? null}
+                    // Eager-load the first card's image — the top-left grid cell is
+                    // the above-the-fold LCP element on the catalog.
+                    priority={i === 0}
                   />
                 ))}
               </motion.div>

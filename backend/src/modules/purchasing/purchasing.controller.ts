@@ -89,6 +89,7 @@ export class PurchasingController {
     return this.purchasing.createSupplier(dto);
   }
 
+  @Throttle({ medium: { limit: 100, ttl: 60_000 } })
   @UseGuards(AdminGuard)
   @Patch('admin/store/suppliers/:id')
   updateSupplier(
@@ -100,6 +101,7 @@ export class PurchasingController {
     return this.purchasing.updateSupplier(id, dto);
   }
 
+  @Throttle({ medium: { limit: 100, ttl: 60_000 } })
   @UseGuards(AdminGuard)
   @Patch('admin/store/suppliers/:id/deactivate')
   deactivateSupplier(@Param('id', ParseUUIDPipe) id: string, @Req() req: any) {
@@ -130,6 +132,7 @@ export class PurchasingController {
     return this.purchasing.createPurchaseOrder(dto, this.mutator(req));
   }
 
+  @Throttle({ medium: { limit: 100, ttl: 60_000 } })
   @UseGuards(AdminGuard)
   @Patch('admin/store/purchase-orders/:id/submit')
   submitPurchaseOrder(@Param('id', ParseUUIDPipe) id: string, @Req() req: any) {
@@ -137,6 +140,7 @@ export class PurchasingController {
     return this.purchasing.placePurchaseOrder(id);
   }
 
+  @Throttle({ medium: { limit: 100, ttl: 60_000 } })
   @UseGuards(AdminGuard)
   @Patch('admin/store/purchase-orders/:id/cancel')
   cancelPurchaseOrder(@Param('id', ParseUUIDPipe) id: string, @Req() req: any) {

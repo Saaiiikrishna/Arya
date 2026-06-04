@@ -69,6 +69,10 @@ const DEFAULT_PAGE_LIMIT = 20;
 /** Hard cap on a single listing page (clamps a caller-supplied limit). */
 const MAX_PAGE_LIMIT = 100;
 
+/** Default / max result count for the admin SKU typeahead (SkuPicker). */
+const SKU_SEARCH_DEFAULT_LIMIT = 10;
+const SKU_SEARCH_MAX_LIMIT = 50;
+
 /**
  * Clamp a caller-supplied page/limit to safe bounds: page >= 1 (default 1), limit
  * in [1, {@link MAX_PAGE_LIMIT}] (default {@link DEFAULT_PAGE_LIMIT}). Shared by
@@ -947,6 +951,56 @@ export class CatalogService {
       }
       throw e;
     }
+  }
+
+  /**
+   * Admin SKU typeahead for the SkuPicker. Returns a lightweight projection
+   * (`id`, `skuCode`, `name`, `productName`) for SKUs whose skuCode / name — or
+   * whose parent product's name — matches the (case-insensitive) `search` term.
+   * The product name is read via a single relational `select` (no N+1: one query
+   * resolves both the SKU fields and the joined product name). `limit` is clamped
+   * to [1, {@link SKU_SEARCH_MAX_LIMIT}] (default {@link SKU_SEARCH_DEFAULT_LIMIT})
+   * so the typeahead can never request an unbounded scan. An empty/blank `search`
+   * returns the most recent SKUs (handy as an initial list before the operator
+   * types).
+   */
+  async adminSearchSkus(search?: string, limit?: number) {
+    const take =
+      limit && limit > 0
+        ? Math.min(limit, SKU_SEARCH_MAX_LIMIT)
+        : SKU_SEARCH_DEFAULT_LIMIT;
+
+    const term = search?.trim();
+    const where: Prisma.SkuWhereInput = term
+      ? {
+          OR: [
+            { skuCode: { contains: term, mode: 'insensitive' } },
+            { name: { contains: term, mode: 'insensitive' } },
+            { product: { name: { contains: term, mode: 'insensitive' } } },
+          ],
+        }
+      : {};
+
+    const rows = await this.prisma.sku.findMany({
+      where,
+      orderBy: [{ skuCode: 'asc' }],
+      take,
+      // Lightweight projection only — never the full SKU row. The product name is
+      // pulled through the relation in the same query (no second round-trip).
+      select: {
+        id: true,
+        skuCode: true,
+        name: true,
+        product: { select: { name: true } },
+      },
+    });
+
+    return rows.map((s) => ({
+      id: s.id,
+      skuCode: s.skuCode,
+      name: s.name,
+      productName: s.product?.name ?? null,
+    }));
   }
 
   // ─── TAX CLASS ────────────────────────────────────────────
