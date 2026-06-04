@@ -56,6 +56,7 @@ import { ReturnsModule } from './modules/returns';
 import { StoreRealtimeModule } from './modules/store-realtime/store-realtime.module';
 import { StoreJobsModule } from './modules/store-jobs/store-jobs.module';
 import { StoreAnalyticsModule } from './modules/store-analytics/store-analytics.module';
+import { ArticlesModule } from './modules/articles/articles.module';
 
 /**
  * Fail-fast environment validation. Signing secrets must ALWAYS be strong
@@ -207,6 +208,7 @@ function validateEnv(config: Record<string, unknown>): Record<string, unknown> {
     StoreRealtimeModule,
     StoreJobsModule,
     StoreAnalyticsModule,
+    ArticlesModule,
   ],
   providers: [
     // Apply rate limiting globally; per-route @Throttle still tunes the tiers.

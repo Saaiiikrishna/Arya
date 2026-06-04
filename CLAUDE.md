@@ -108,6 +108,7 @@ These were hardened in PRs and must not be undone:
 - **`pgcrypto` extension was removed** from the migration chain (`888c39a`) — do not re-add it; migrations must resolve cleanly without it
 - **`triggeredBy` / identity fields in request body are stripped** — all identity is pinned to the JWT at login (`17edb1a`, `3d9b73a`, `fdc0655`, `1788c00`)
 - **WhatsApp WABA integration is live** — `WhatsappModule` is `@Global()`, controller wired at `GET/POST /api/whatsapp/webhook`, admin endpoints at `/api/admin/whatsapp/*`. Webhook HMAC validated via `WHATSAPP_APP_SECRET`; verify token guarded fail-closed. 16 template stubs registered. See `backend/src/modules/whatsapp/`
+- **Article `body` is untrusted rich-text JSON** — stored verbatim and returned as-is by `GET /api/articles/:slug`. The storefront MUST render it through a sandboxed rich-text renderer (never `dangerouslySetInnerHTML` or equivalent) to avoid stored XSS. `coverS3Key` is server-validated against the article's own `articles/{id}/` prefix + a CONFIRMED media row (no cross-article key injection). Admin authorship/identity (`decidedByAdminId`) is always pinned from the AdminGuard JWT; public article responses never expose `viewCount`. See `backend/src/modules/articles/`
 
 ---
 
