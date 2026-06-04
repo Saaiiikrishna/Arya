@@ -212,6 +212,21 @@ class ApiClient {
     return this.request<any>('/applicants/me/profile');
   }
 
+  // WhatsApp verification — the only path that legitimately sets whatsappVerified=true
+  async sendWhatsappVerifyOtp() {
+    return this.request<{ success: boolean; alreadyVerified?: boolean }>(
+      '/applicants/me/whatsapp/send-otp',
+      { method: 'POST' },
+    );
+  }
+
+  async verifyWhatsappOtp(otp: string) {
+    return this.request<{ success: boolean; whatsappVerified: boolean }>(
+      '/applicants/me/whatsapp/verify',
+      { method: 'POST', body: { otp } },
+    );
+  }
+
   // Dashboard
   async getDashboardStats() {
     return this.request<any>('/admin/dashboard/stats');
@@ -964,7 +979,28 @@ class ApiClient {
   }
 
   async executeHandover(companyId: string) {
-    return this.request<any>(`/admin/equity/companies/${companyId}/handover`, { method: 'POST' });
+    return this.request<any>(`/admin/equity/companies/${companyId}/handover`, {
+      method: 'POST',
+      body: { confirm: true },
+    });
+  }
+
+  // Handover dual-approval (admin + assigned co-founder) gating the 1000-day handover
+  async getHandoverApprovals(companyId: string) {
+    return this.request<{
+      admin: { approverId: string; note?: string; createdAt: string } | null;
+      coFounder: { approverId: string; note?: string; createdAt: string } | null;
+      adminApproved: boolean;
+      coFounderApproved: boolean;
+      fullyApproved: boolean;
+    }>(`/admin/equity/companies/${companyId}/handover-approvals`);
+  }
+
+  async approveHandoverAsAdmin(companyId: string, note?: string) {
+    return this.request<any>(`/admin/equity/companies/${companyId}/handover-approval`, {
+      method: 'POST',
+      body: { note },
+    });
   }
 
   async updateEquityTimers() {

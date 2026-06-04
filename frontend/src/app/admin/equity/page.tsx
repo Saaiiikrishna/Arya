@@ -6,7 +6,7 @@ import Link from 'next/link';
 import {
   Building2, Clock, ArrowRightLeft, Plus, ChevronRight,
   Play, HandMetal, AlertTriangle, CheckCircle, Timer, TrendingUp,
-  FileSignature, Pencil, X, Stamp, FileText
+  FileSignature, Pencil, X, Stamp, FileText, CheckCircle2, Circle
 } from 'lucide-react';
 
 interface CompanyRow {
@@ -71,6 +71,10 @@ export default function AdminEquityPage() {
     eventType: 'TRANSFER', fromHolderId: '', toHolderId: '', percentageAmount: '', description: '',
   });
 
+  // Handover dual-approval state (company detail panel)
+  const [approvals, setApprovals] = useState<any>(null);
+  const [approveNote, setApproveNote] = useState('');
+
   // Company edit form state (company detail panel)
   const [showEditForm, setShowEditForm] = useState(false);
   const [editForm, setEditForm] = useState({
@@ -105,9 +109,15 @@ export default function AdminEquityPage() {
     setShowAgreementForm(false);
     setShowEventForm(false);
     setShowEditForm(false);
+    setApproveNote('');
+    setApprovals(null);
     try {
-      const d = await api.getEquityCompanyDetail(id);
+      const [d, appr] = await Promise.all([
+        api.getEquityCompanyDetail(id),
+        api.getHandoverApprovals(id).catch(() => null),
+      ]);
       setDetail(d);
+      setApprovals(appr);
     } catch (e) { console.error(e); }
     finally { setLoadingDetail(false); }
   };
@@ -123,6 +133,21 @@ export default function AdminEquityPage() {
     finally { setActionLoading(false); }
   };
 
+  const approveAsAdmin = async (id: string) => {
+    if (!confirm('Record your ADMIN approval that this company is profitable and sustainable for handover? The 1000-day handover only unlocks once BOTH admin and the assigned co-founder approve.')) return;
+    setActionLoading(true);
+    try {
+      await api.approveHandoverAsAdmin(id, approveNote.trim() || undefined);
+      const appr = await api.getHandoverApprovals(id).catch(() => null);
+      setApprovals(appr);
+      setApproveNote('');
+    } catch (e: any) {
+      alert(e?.message || 'Failed to record approval');
+      console.error(e);
+    }
+    finally { setActionLoading(false); }
+  };
+
   const doHandover = async (id: string) => {
     if (!confirm('Execute equity handover? This will transfer the platform\'s entire stake to the founding members. This is IRREVERSIBLE.')) return;
     setActionLoading(true);
@@ -130,7 +155,7 @@ export default function AdminEquityPage() {
       await api.executeHandover(id);
       await openDetail(id);
       await refresh();
-    } catch (e) { alert('Failed to execute handover'); console.error(e); }
+    } catch (e: any) { alert(e?.message || 'Failed to execute handover'); console.error(e); }
     finally { setActionLoading(false); }
   };
 
@@ -602,8 +627,9 @@ export default function AdminEquityPage() {
                     {detail.status === 'ACTIVE' && detail.daysElapsed >= 1000 && (
                       <button
                         onClick={() => doHandover(detail.id)}
-                        disabled={actionLoading}
-                        className="px-4 py-2 bg-terracotta text-white text-[10px] uppercase tracking-widest font-bold hover:bg-terracotta/90 disabled:opacity-50 flex items-center gap-2"
+                        disabled={actionLoading || !approvals?.fullyApproved}
+                        title={approvals?.fullyApproved ? undefined : 'Requires joint approval from admin + the assigned co-founder'}
+                        className="px-4 py-2 bg-terracotta text-white text-[10px] uppercase tracking-widest font-bold hover:bg-terracotta/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                       >
                         <ArrowRightLeft className="w-3 h-3" /> Execute Handover
                       </button>
@@ -611,6 +637,71 @@ export default function AdminEquityPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Handover Readiness — dual approval (admin + assigned co-founder) */}
+              {detail.status === 'ACTIVE' && detail.timerStartDate && (
+                <div className="border border-hairline bg-parchment/40 p-5">
+                  <div className="flex items-center gap-2 mb-3">
+                    <ArrowRightLeft className="w-4 h-4 text-terracotta" />
+                    <h3 className="text-[11px] uppercase tracking-widest font-bold text-ink/70">
+                      Handover Readiness
+                    </h3>
+                  </div>
+                  <p className="text-[11px] text-ink/50 mb-4 max-w-xl">
+                    The 1000-day handover transfers the platform&apos;s 51% to the founders. It only
+                    unlocks once the company is judged profitable &amp; sustainable by BOTH an admin and
+                    the team&apos;s assigned co-founder.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                    {(['admin', 'coFounder'] as const).map((role) => {
+                      const ap = approvals?.[role];
+                      const approved = role === 'admin' ? approvals?.adminApproved : approvals?.coFounderApproved;
+                      return (
+                        <div key={role} className="border border-hairline bg-alabaster p-3">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[10px] uppercase tracking-widest font-bold text-ink/60">
+                              {role === 'admin' ? 'Admin' : 'Co-Founder'}
+                            </span>
+                            {approved ? (
+                              <span className="flex items-center gap-1 text-[10px] uppercase tracking-widest font-bold text-forest">
+                                <CheckCircle2 className="w-3.5 h-3.5" /> Approved
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1 text-[10px] uppercase tracking-widest font-bold text-ink/30">
+                                <Circle className="w-3.5 h-3.5" /> Pending
+                              </span>
+                            )}
+                          </div>
+                          {ap?.note && <p className="text-[11px] text-ink/50 italic">“{ap.note}”</p>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {!approvals?.adminApproved && (
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <input
+                        type="text"
+                        value={approveNote}
+                        onChange={(e) => setApproveNote(e.target.value)}
+                        placeholder="Optional approval note (e.g. profitable since Q3)"
+                        className="flex-1 px-3 py-2 border border-hairline bg-white text-[12px] text-ink focus:border-forest focus:outline-none"
+                      />
+                      <button
+                        onClick={() => approveAsAdmin(detail.id)}
+                        disabled={actionLoading}
+                        className="px-4 py-2 border border-forest text-forest text-[10px] uppercase tracking-widest font-bold hover:bg-forest hover:text-parchment transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                      >
+                        <CheckCircle2 className="w-3 h-3" /> Approve as Admin
+                      </button>
+                    </div>
+                  )}
+                  {approvals?.fullyApproved && (
+                    <p className="text-[11px] uppercase tracking-widest font-bold text-forest flex items-center gap-2">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Jointly approved — handover unlocked
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Edit Company Form */}
               {showEditForm && (

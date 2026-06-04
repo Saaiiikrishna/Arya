@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { SprintService } from './sprint.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { EmailService } from '../email/email.service';
+import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { NotFoundException } from '@nestjs/common';
 
 describe('SprintService', () => {
@@ -9,6 +11,7 @@ describe('SprintService', () => {
   const mockPrismaService = {
     sprint: {
       create: jest.fn(),
+      count: jest.fn(),
       findFirst: jest.fn(),
       findUnique: jest.fn(),
       findMany: jest.fn(),
@@ -19,6 +22,11 @@ describe('SprintService', () => {
     },
   };
 
+  // SprintService also injects EmailService + WhatsappService for milestone
+  // completion notifications; stub the methods it calls so DI resolves.
+  const mockEmailService = { sendTemplatedEmail: jest.fn() };
+  const mockWhatsappService = { sendMvpComplete: jest.fn() };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -26,6 +34,14 @@ describe('SprintService', () => {
         {
           provide: PrismaService,
           useValue: mockPrismaService,
+        },
+        {
+          provide: EmailService,
+          useValue: mockEmailService,
+        },
+        {
+          provide: WhatsappService,
+          useValue: mockWhatsappService,
         },
       ],
     }).compile();
@@ -45,6 +61,8 @@ describe('SprintService', () => {
     it('should create a sprint', async () => {
       // DTO date fields are ISO strings (@IsDateString).
       const dto = { teamId: 't1', title: 'Sprint 1', startDate: '2026-07-01T00:00:00.000Z', endDate: '2026-07-15T00:00:00.000Z' };
+      // First sprint for the team → derived sprintNumber 1.
+      mockPrismaService.sprint.count.mockResolvedValue(0);
       mockPrismaService.sprint.create.mockResolvedValue({ id: 's1', ...dto });
       const result = await service.createSprint(dto);
       expect(result.id).toEqual('s1');

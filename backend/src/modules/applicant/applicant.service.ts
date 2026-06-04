@@ -1,4 +1,7 @@
 import { Injectable, ConflictException, NotFoundException, BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import Redis from 'ioredis';
+import { randomInt, timingSafeEqual } from 'crypto';
 import { PrismaService } from '../../prisma';
 import { ApplyDto, SubmitAdditionalAnswersDto } from './dto';
 import { v4 as uuidv4 } from 'uuid';
@@ -17,6 +20,7 @@ function sanitizeText(input: string | null | undefined): string | null {
 @Injectable()
 export class ApplicantService {
   private readonly logger = new Logger(ApplicantService.name);
+  private readonly redis: Redis;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -24,7 +28,88 @@ export class ApplicantService {
     private readonly badgeService: BadgeService,
     private readonly notifications: NotificationService,
     private readonly backfill: BackfillService,
-  ) { }
+    private readonly configService: ConfigService,
+  ) {
+    const port = this.configService.get<number>('REDIS_PORT', 6379);
+    const password = this.configService.get<string>('REDIS_PASSWORD');
+    const useTls = String(port) === '6380';
+    this.redis = new Redis({
+      host: this.configService.get<string>('REDIS_HOST', 'localhost'),
+      port,
+      ...(password ? { password } : {}),
+      ...(useTls ? { tls: {} } : {}),
+      maxRetriesPerRequest: null,
+      lazyConnect: true,
+    });
+  }
+
+  // ─── WhatsApp verification (the ONLY path that sets whatsappVerified=true) ──
+
+  /** Send a WhatsApp OTP to the applicant's number to begin verification. */
+  async sendWhatsappVerifyOtp(applicantId: string) {
+    const applicant = await this.prisma.applicant.findUnique({
+      where: { id: applicantId },
+      select: { id: true, whatsappPhone: true, phone: true, whatsappVerified: true },
+    });
+    if (!applicant) throw new NotFoundException('Applicant not found');
+    if (applicant.whatsappVerified) {
+      return { success: true, alreadyVerified: true, message: 'WhatsApp already verified.' };
+    }
+    const phone = applicant.whatsappPhone || applicant.phone;
+    if (!phone) throw new BadRequestException('No WhatsApp number on file to verify.');
+
+    const otp = String(randomInt(100000, 1000000));
+    await this.redis.set(`wa_otp:${applicantId}`, otp, 'EX', 300);
+    try {
+      await this.whatsappService.sendOtp(phone, otp);
+    } catch (e) {
+      this.logger.error(`WhatsApp verify OTP send failed for ${applicantId}: ${(e as any)?.message}`);
+    }
+    return { success: true, message: 'A verification code has been sent to your WhatsApp.' };
+  }
+
+  /**
+   * Verify the WhatsApp OTP and, on success, set whatsappVerified=true — the real
+   * server-side verification the welcome message gates on. Constant-time compare
+   * with a 5-attempt burn, mirroring the email OTP flow.
+   */
+  async verifyWhatsappOtp(applicantId: string, otp: string) {
+    if (!otp || !/^\d{6}$/.test(String(otp))) {
+      throw new BadRequestException('A valid 6-digit code is required.');
+    }
+    const key = `wa_otp:${applicantId}`;
+    const stored = await this.redis.get(key);
+    if (!stored) {
+      throw new BadRequestException('Code expired or not requested. Please request a new one.');
+    }
+    const attemptsKey = `wa_otp_attempts:${applicantId}`;
+    const candidate = String(otp);
+    const matches =
+      stored.length === candidate.length &&
+      timingSafeEqual(Buffer.from(stored), Buffer.from(candidate));
+    if (!matches) {
+      const attempts = await this.redis.incr(attemptsKey);
+      if (attempts === 1) await this.redis.expire(attemptsKey, 300);
+      if (attempts >= 5) {
+        await this.redis.del(key);
+        await this.redis.del(attemptsKey);
+        throw new BadRequestException('Too many incorrect attempts. Please request a new code.');
+      }
+      throw new BadRequestException('Invalid verification code.');
+    }
+    await this.redis.del(key);
+    await this.redis.del(attemptsKey);
+
+    // The real server-side verification: flip the flag the rest of the platform
+    // (broadcasts, opt-in gating) keys off. Now legitimately set, not client-trusted.
+    await this.prisma.applicant.update({
+      where: { id: applicantId },
+      data: { whatsappVerified: true },
+    });
+
+    this.logger.log(`WhatsApp verified for applicant ${applicantId}`);
+    return { success: true, whatsappVerified: true };
+  }
 
   async apply(dto: ApplyDto) {
     // Check if email already exists

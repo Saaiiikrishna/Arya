@@ -5,6 +5,7 @@ import Layout from '@/components/Layout';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { LogOut, User, Mail, Shield } from 'lucide-react';
+import WhatsappVerify from '@/components/WhatsappVerify';
 
 export default function ProfilePage() {
   const { user, isAuthenticated, loading, logout } = useAuth();
@@ -69,6 +70,8 @@ export default function ProfilePage() {
                 <p className="text-ink font-serif text-lg capitalize">{user.role.toLowerCase()}</p>
               </div>
             </div>
+
+            <WhatsappVerify />
 
             <hr className="border-t border-hairline" />
 
