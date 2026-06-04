@@ -8,7 +8,7 @@
  *   - Customer access token  → in memory only (never localStorage; XSS-readable).
  *   - Customer refresh token  → sessionStorage `arya_store_refresh`, rotated on use
  *                               via POST /store/auth/refresh (its OWN refresh slot,
- *                               independent of the admin `arya_refresh`).
+ *                               independent of the platform refresh cookie).
  *   - Guest cart token        → localStorage `arya_cart_token`, sent as the
  *                               `X-Cart-Token` header on cart/checkout calls.
  *   - Guest order token       → NOT persisted globally; the caller holds it (it is

@@ -1,17 +1,30 @@
-import { Controller, Post, Get, Patch, Param, Body, Req, UseGuards, Query } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Param, Body, Req, Res, UseGuards, Query } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import type { Response } from 'express';
 import { CoFounderService } from './cofounder.service';
 import { AdminGuard } from '../auth/guards/admin.guard';
 import { CoFounderGuard } from './cofounder.guard';
+import { setRefreshCookie } from '../auth/refresh-cookie';
 
 @Controller('api')
 export class CoFounderController {
-  constructor(private readonly coFounderService: CoFounderService) {}
+  constructor(
+    private readonly coFounderService: CoFounderService,
+    private readonly config: ConfigService,
+  ) {}
 
   // ─── Co-founder auth ──────────────────────────────────────
+  // Refresh/logout reuse the shared /admin/auth/* endpoints (which resolve the
+  // COFOUNDER role from the token), so login just needs to set the cookie.
 
   @Post('cofounder/login')
-  login(@Body() body: { email: string; password: string }) {
-    return this.coFounderService.login(body.email, body.password);
+  async login(
+    @Body() body: { email: string; password: string },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.coFounderService.login(body.email, body.password);
+    setRefreshCookie(res, result.refreshToken, this.config);
+    return result;
   }
 
   // ─── Co-founder portal ────────────────────────────────────

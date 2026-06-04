@@ -126,6 +126,8 @@ These were hardened in PRs and must not be undone:
 - **`triggeredBy` in audit/event models is always sourced from the JWT** — never accept it from the request body (`4ebf502`)
 - **Refresh tokens are stored hashed (bcrypt)** in `refresh_tokens` table — never store raw tokens (`9a5bb4a`)
 - **Refresh tokens rotate on use** — each use issues a new pair and revokes the old one
+- **Refresh tokens use RFC 9700 family reuse detection** — every rotation chain shares a `family_id`; rotated tokens are REVOKED (not deleted) so replaying one revokes the whole family. Each token carries a unique `jti`. A daily cron prunes expired rows. Do not switch rotation back to deleting the old token (Issue #2)
+- **Refresh tokens are delivered to browsers via an HttpOnly cookie** (`arya_refresh`, `path=/api`, `Secure`+`SameSite=None` in prod, `Lax` in dev) — never stored in JS-readable `sessionStorage`/`localStorage`. The frontend keeps only a non-sensitive `arya_has_session` hint. Cookie helpers live in `backend/src/modules/auth/refresh-cookie.ts`; the body-token fallback is for non-browser clients only (Issue #3)
 - **`pgcrypto` extension was removed** from the migration chain (`888c39a`) — do not re-add it; migrations must resolve cleanly without it
 - **`triggeredBy` / identity fields in request body are stripped** — all identity is pinned to the JWT at login (`17edb1a`, `3d9b73a`, `fdc0655`, `1788c00`)
 - **WhatsApp WABA integration is live** — `WhatsappModule` is `@Global()`, controller wired at `GET/POST /api/whatsapp/webhook`, admin endpoints at `/api/admin/whatsapp/*`. Webhook HMAC validated via `WHATSAPP_APP_SECRET`; verify token guarded fail-closed. 16 template stubs registered. See `backend/src/modules/whatsapp/`

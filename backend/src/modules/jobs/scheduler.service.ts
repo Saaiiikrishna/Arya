@@ -37,6 +37,27 @@ export class SchedulerService {
   }
 
   /**
+   * refresh-token-gc: prune expired refresh tokens daily. RFC 9700 reuse
+   * detection keeps rotated tokens (revoked, not deleted) so a replay is
+   * detectable — but once a token is past its expiry it can never be accepted
+   * again, so retaining it adds no security value. Deleting expired rows keeps
+   * the table bounded to roughly the set of live sessions.
+   */
+  @Cron('0 15 4 * * *') // 04:15 UTC = 09:45 IST — off-peak, distinct from other jobs
+  async pruneExpiredRefreshTokens() {
+    try {
+      const { count } = await this.prisma.refreshToken.deleteMany({
+        where: { expiresAt: { lt: new Date() } },
+      });
+      if (count > 0) {
+        this.logger.log(`refresh-token-gc pruned ${count} expired refresh tokens`);
+      }
+    } catch (e) {
+      this.logger.error(`refresh-token-gc failed: ${(e as Error)?.message}`);
+    }
+  }
+
+  /**
    * Runs every hour. Finds interview bookings whose slot has ended with no decision
    * and marks them NO_SHOW, then sends a notification email.
    */

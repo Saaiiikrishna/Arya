@@ -1162,6 +1162,10 @@ model DailyPageStat {
 model RefreshToken {
   id        String    @id @default(uuid()) @db.Uuid
   userId    String    @map("user_id") @db.Uuid
+  // RFC 9700 reuse detection: every token in a rotation chain shares one
+  // familyId. A fresh login starts a new family; a rotation keeps it. Presenting
+  // an already-revoked token from a family revokes the entire family.
+  familyId  String    @map("family_id") @db.Uuid
   token     String    @unique
   expiresAt DateTime  @map("expires_at")
   createdAt DateTime  @default(now()) @map("created_at")
@@ -1169,6 +1173,7 @@ model RefreshToken {
 
   @@index([userId])
   @@index([token])
+  @@index([familyId])
   @@map("refresh_tokens")
 }
 

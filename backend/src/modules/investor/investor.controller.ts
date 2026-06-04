@@ -1,9 +1,12 @@
 import {
-  Controller, Get, Post, Patch, Param, Body, UseGuards, Query, Req,
+  Controller, Get, Post, Patch, Param, Body, UseGuards, Query, Req, Res,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import type { Response } from 'express';
 import { InvestorService } from './investor.service';
 import { AuthService } from '../auth/auth.service';
 import { JwtAuthGuard, AdminGuard, InvestorGuard } from '../auth/guards';
+import { setRefreshCookie } from '../auth/refresh-cookie';
 import { CreateInvestorDto } from './dto/create-investor.dto';
 
 @Controller('api')
@@ -11,6 +14,7 @@ export class InvestorController {
   constructor(
     private readonly investorService: InvestorService,
     private readonly authService: AuthService,
+    private readonly config: ConfigService,
   ) {}
 
   // ─── Public ────────────────────────────────────────
@@ -21,9 +25,17 @@ export class InvestorController {
   }
 
   // Investor email+password login → JWT with role INVESTOR (issued only once approved).
+  // Refresh/logout reuse the shared /admin/auth/* endpoints, which resolve the
+  // INVESTOR role from the token, so only the cookie needs setting here.
   @Post('investors/login')
-  async login(@Body('email') email: string, @Body('password') password: string) {
-    return this.authService.investorLogin(email, password);
+  async login(
+    @Body('email') email: string,
+    @Body('password') password: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.investorLogin(email, password);
+    setRefreshCookie(res, result.refreshToken, this.config);
+    return result;
   }
 
   @Get('investors/showcases')
