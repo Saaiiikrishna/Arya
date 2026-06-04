@@ -143,7 +143,7 @@ export default function AdminReviewsPage() {
   );
 
   return (
-    <div className="text-ink animate-fade-in px-8 py-12 max-w-[1200px] mx-auto min-h-screen">
+    <div className="text-ink animate-fade-in px-4 sm:px-6 lg:px-8 py-8 sm:py-12 max-w-[1200px] 3xl:max-w-[1600px] mx-auto min-h-screen">
       {/* Header */}
       <header className="border-b border-hairline pb-8 mb-10">
         <Link
@@ -152,8 +152,8 @@ export default function AdminReviewsPage() {
         >
           ← Command Center
         </Link>
-        <h1 className="font-serif text-5xl font-bold leading-none flex items-center gap-3">
-          <MessageSquare className="w-9 h-9 text-forest/70" /> Reviews Moderation
+        <h1 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-bold leading-none flex items-center gap-3">
+          <MessageSquare className="w-7 h-7 sm:w-9 sm:h-9 text-forest/70" /> Reviews Moderation
         </h1>
         <p className="text-ink/50 mt-2 font-serif italic">
           Approve or reject customer product reviews. Approving adds the rating to the product score.
@@ -201,7 +201,8 @@ export default function AdminReviewsPage() {
         </div>
       ) : (
         <>
-          <div className="border border-hairline bg-white">
+          <div className="border border-hairline bg-white overflow-x-auto">
+            <div className="min-w-[820px]">
             <div className="grid grid-cols-12 gap-4 px-6 py-3 bg-alabaster border-b border-hairline text-[9px] uppercase tracking-widest text-ink/40 font-bold">
               <div className="col-span-5">Review</div>
               <div className="col-span-2">Product</div>
@@ -292,6 +293,7 @@ export default function AdminReviewsPage() {
                 </div>
               ))
             )}
+            </div>
           </div>
 
           {/* Footer: count + pagination */}

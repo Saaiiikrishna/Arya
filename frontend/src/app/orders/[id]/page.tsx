@@ -217,7 +217,7 @@ function OrderClient({ orderId, queryToken }: { orderId: string; queryToken: str
 
   if (error || !order) {
     return (
-      <div className="mkt-card mx-auto max-w-xl px-8 py-16 text-center">
+      <div className="mkt-card mx-auto max-w-xl px-6 py-16 text-center sm:px-8">
         <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-terracotta/10 text-terracotta">
           <AlertCircle className="h-7 w-7" aria-hidden />
         </div>
@@ -276,11 +276,12 @@ function OrderClient({ orderId, queryToken }: { orderId: string; queryToken: str
   const BannerIcon = statusBanner.icon;
 
   return (
-    <div className="mx-auto max-w-screen-xl">
-      {/* Status banner */}
+    <div className="mx-auto max-w-screen-xl 3xl:max-w-[100rem]">
+      {/* Status banner — flat 0px surface per the matte directive (no glossy
+          rounded look). Tonal layering + a 1px border carry depth. */}
       <div
         className={cn(
-          'mb-8 flex items-start gap-4 rounded-2xl border px-6 py-5',
+          'mb-8 flex items-start gap-3 border px-4 py-5 sm:gap-4 sm:px-6',
           statusBanner.tone,
         )}
       >
@@ -300,11 +301,13 @@ function OrderClient({ orderId, queryToken }: { orderId: string; queryToken: str
       </div>
 
       <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <span className="font-sans text-[11px] font-semibold uppercase tracking-[0.1em] text-ink/50">
             Order
           </span>
-          <p className="font-mono text-sm text-forest">{orderNumber}</p>
+          {/* break-all so a 36-char UUID order number can't force horizontal
+              overflow at 360px when no human-readable orderNumber is present. */}
+          <p className="break-all font-mono text-sm text-forest">{orderNumber}</p>
           {order.createdAt && (
             <p className="mt-0.5 font-sans text-xs text-ink/50">Placed {fmtDate(order.createdAt)}</p>
           )}
@@ -329,10 +332,10 @@ function OrderClient({ orderId, queryToken }: { orderId: string; queryToken: str
         <p className="-mt-4 mb-6 text-right font-sans text-xs text-terracotta">{invoiceError}</p>
       )}
 
-      <div className="grid grid-cols-1 gap-10 lg:grid-cols-[1fr_360px]">
-        <div className="space-y-6">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_22rem] lg:gap-10 xl:grid-cols-[1fr_24rem]">
+        <div className="min-w-0 space-y-6">
           {/* Items */}
-          <section className="mkt-card px-6 py-2 sm:px-8">
+          <section className="mkt-card px-4 py-2 sm:px-6 lg:px-8">
             {items.length === 0 ? (
               <p className="py-8 text-center font-sans text-sm text-ink/50">
                 No item details available.
@@ -353,7 +356,7 @@ function OrderClient({ orderId, queryToken }: { orderId: string; queryToken: str
                     key={id}
                     className="flex items-center gap-4 border-b border-hairline/60 py-4 last:border-0"
                   >
-                    <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-parchment-dark">
+                    <div className="relative h-16 w-16 shrink-0 overflow-hidden bg-parchment-dark">
                       {imageUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={imageUrl} alt={name} className="h-full w-full object-cover" />
@@ -380,7 +383,7 @@ function OrderClient({ orderId, queryToken }: { orderId: string; queryToken: str
           </section>
 
           {/* Tracking */}
-          <section className="mkt-card px-6 py-7 sm:px-8">
+          <section className="mkt-card px-4 py-7 sm:px-6 lg:px-8">
             <div className="mb-4 flex items-center gap-2 text-forest">
               <Truck className="h-4 w-4" aria-hidden />
               <h2 className="font-sans text-[11px] font-semibold uppercase tracking-[0.1em]">
@@ -465,7 +468,7 @@ function OrderClient({ orderId, queryToken }: { orderId: string; queryToken: str
 
           {/* Addresses */}
           {(order.shippingAddress || order.billingAddress) && (
-            <section className="mkt-card grid grid-cols-1 gap-8 px-6 py-7 sm:grid-cols-2 sm:px-8">
+            <section className="mkt-card grid grid-cols-1 gap-8 px-4 py-7 sm:grid-cols-2 sm:px-6 lg:px-8">
               {order.shippingAddress && (
                 <div>
                   <h3 className="mb-2 font-sans text-[11px] font-semibold uppercase tracking-[0.1em] text-ink/50">
@@ -522,7 +525,7 @@ export default function OrderDetailPage({
 
   return (
     <Layout activeTab="store">
-      <div className="mkt min-h-[60vh] bg-parchment px-6 py-14 sm:px-8 lg:py-20">
+      <div className="mkt min-h-[60vh] bg-parchment px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
         <OrderClient orderId={id} queryToken={token ?? null} />
       </div>
     </Layout>

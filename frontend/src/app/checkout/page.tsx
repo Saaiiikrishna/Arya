@@ -414,7 +414,7 @@ function CheckoutContents() {
   );
 
   return (
-    <div className="mkt min-h-[60vh] bg-parchment px-6 py-14 sm:px-8 lg:py-20">
+    <div className="mkt min-h-[60vh] bg-parchment px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
       {/* Razorpay checkout.js — load once, lazily, on this page only. */}
       <Script
         src={RAZORPAY_SRC}
@@ -425,8 +425,8 @@ function CheckoutContents() {
         }
       />
 
-      <div className="mx-auto max-w-screen-xl">
-        <header className="mb-10">
+      <div className="mx-auto max-w-screen-xl 3xl:max-w-[100rem]">
+        <header className="mb-8 sm:mb-10">
           <Link
             href="/cart"
             className="mb-4 inline-flex items-center gap-1.5 font-sans text-[11px] uppercase tracking-[0.08em] text-forest transition-colors hover:text-saffron-deep"
@@ -434,7 +434,7 @@ function CheckoutContents() {
             <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
             Back to cart
           </Link>
-          <h1 className="font-serif text-4xl text-forest sm:text-5xl">Checkout</h1>
+          <h1 className="font-serif text-3xl text-forest sm:text-4xl lg:text-5xl">Checkout</h1>
         </header>
 
         {loading || authLoading ? (
@@ -443,7 +443,7 @@ function CheckoutContents() {
             <span className="ml-3 font-sans text-sm uppercase tracking-[0.05em]">Loading…</span>
           </div>
         ) : cartEmpty ? (
-          <div className="mkt-card mx-auto max-w-xl px-8 py-16 text-center">
+          <div className="mkt-card mx-auto max-w-xl px-6 py-16 text-center sm:px-8">
             <h2 className="font-serif text-2xl text-forest">Your cart is empty</h2>
             <p className="mx-auto mt-2 max-w-sm font-sans text-sm text-ink/60">
               Add something to your cart before checking out.
@@ -453,8 +453,8 @@ function CheckoutContents() {
             </Link>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-10 lg:grid-cols-[1fr_360px]">
-            <div className="space-y-6">
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_22rem] lg:gap-10 xl:grid-cols-[1fr_24rem]">
+            <div className="min-w-0 space-y-6">
               {error && (
                 <div className="flex items-start gap-3 border border-terracotta/30 bg-terracotta/5 px-5 py-4 text-terracotta">
                   <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden />
@@ -464,7 +464,7 @@ function CheckoutContents() {
 
               {/* Contact — guests only */}
               {!isAuthed && (
-                <section className="mkt-card px-6 py-7 sm:px-8">
+                <section className="mkt-card px-4 py-7 sm:px-6 lg:px-8">
                   <h2 className="mb-1 font-serif text-xl text-forest">Contact</h2>
                   <p className="mb-5 font-sans text-xs text-ink/55">
                     We’ll send order updates here.{' '}
@@ -495,7 +495,7 @@ function CheckoutContents() {
               )}
 
               {isAuthed && customer && (
-                <section className="mkt-card flex items-center justify-between gap-4 px-6 py-5 sm:px-8">
+                <section className="mkt-card flex items-center justify-between gap-4 px-4 py-5 sm:px-6 lg:px-8">
                   <div>
                     <span className="font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-ink/55">
                       Signed in as
@@ -506,13 +506,13 @@ function CheckoutContents() {
               )}
 
               {/* Shipping address */}
-              <section className="mkt-card px-6 py-7 sm:px-8">
+              <section className="mkt-card px-4 py-7 sm:px-6 lg:px-8">
                 <h2 className="mb-5 font-serif text-xl text-forest">Shipping address</h2>
                 <AddressFields value={shipping} onChange={setShipping} />
               </section>
 
               {/* Billing address */}
-              <section className="mkt-card px-6 py-7 sm:px-8">
+              <section className="mkt-card px-4 py-7 sm:px-6 lg:px-8">
                 <div className="mb-4 flex items-center justify-between gap-4">
                   <h2 className="font-serif text-xl text-forest">Billing address</h2>
                 </div>
@@ -534,7 +534,7 @@ function CheckoutContents() {
             </div>
 
             {/* Summary + pay */}
-            <aside className="lg:sticky lg:top-28 lg:self-start">
+            <aside className="min-w-0 lg:sticky lg:top-28 lg:self-start">
               <PriceSummary
                 subtotal={summary.subtotal}
                 discount={summary.discount}

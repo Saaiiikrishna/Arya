@@ -168,7 +168,7 @@ function SearchIndex() {
         style={{ background: 'radial-gradient(circle, rgba(244,163,0,0.18), transparent 62%)' }}
       />
 
-      <div className="relative z-10 mx-auto max-w-screen-2xl px-6 py-14 md:px-8 md:py-20">
+      <div className="relative z-10 mx-auto max-w-screen-2xl px-4 py-14 sm:px-6 md:px-8 md:py-20 3xl:max-w-[110rem]">
         {/* ── Header + search box ───────────────────────────────── */}
         <motion.div
           initial={{ opacity: 0, y: 22 }}
@@ -182,10 +182,10 @@ function SearchIndex() {
               Search
             </span>
           </div>
-          <h1 className="font-serif-display font-bold text-5xl md:text-6xl text-forest leading-[0.95] tracking-[-0.025em]">
+          <h1 className="font-serif-display font-bold text-4xl sm:text-5xl md:text-6xl text-forest leading-[0.95] tracking-[-0.025em]">
             {hasQuery ? 'Search results' : 'Search the workshop'}
           </h1>
-          <p className="mt-5 font-sans text-ink/70 text-lg leading-relaxed">
+          <p className="mt-5 font-sans text-ink/70 text-base sm:text-lg leading-relaxed">
             Find products and articles across the store and the journal.
           </p>
 
@@ -202,7 +202,7 @@ function SearchIndex() {
                 placeholder="Search products and articles…"
                 aria-label="Search products and articles"
                 autoFocus
-                className="w-full rounded-full border border-hairline bg-white/70 py-3.5 pl-11 pr-10 font-sans text-sm text-ink placeholder:text-ink/40 outline-none backdrop-blur transition-colors focus:border-saffron focus:ring-2 focus:ring-saffron/30"
+                className="w-full border border-hairline bg-alabaster py-3.5 pl-11 pr-10 font-sans text-sm text-ink placeholder:text-ink/40 outline-none transition-colors focus:border-saffron"
               />
               {input && (
                 <button
@@ -215,7 +215,7 @@ function SearchIndex() {
                 </button>
               )}
             </div>
-            <button type="submit" className="mkt-btn shrink-0 !px-6 !py-3.5">
+            <button type="submit" className="mkt-btn mkt-btn-sm shrink-0">
               <span>Search</span>
             </button>
           </form>
@@ -229,7 +229,11 @@ function SearchIndex() {
 
         {/* ── States ────────────────────────────────────────────── */}
         {!hasQuery ? (
-          <div className="mt-16 mx-auto flex max-w-md flex-col items-center gap-4 rounded-2xl border border-hairline bg-white/50 px-8 py-16 text-center backdrop-blur">
+          // DESIGN: intentional mkt-* exception — a static prompt panel (no hover
+          // lift). The rounded-2xl is in-scope inside the `.mkt` wrapper (DESIGN.md
+          // §7); the surface is matte (bg-alabaster + 1px hairline), NOT frosted
+          // glass, per the matte directive.
+          <div className="mt-16 mx-auto flex max-w-md flex-col items-center gap-4 rounded-2xl border border-hairline bg-alabaster px-8 py-16 text-center">
             <Search className="h-9 w-9 text-ink/25" aria-hidden />
             <p className="font-sans text-sm text-ink/60">
               Type a search term above to look across products and articles.
@@ -241,15 +245,22 @@ function SearchIndex() {
             <span className="font-sans text-sm">Searching…</span>
           </div>
         ) : error ? (
+          // DESIGN: intentional mkt-* exception — a static error panel, not an
+          // interactive mkt-card. The rounded-2xl is in-scope inside the `.mkt`
+          // wrapper (DESIGN.md §7).
           <div className="mt-16 mx-auto flex max-w-md flex-col items-center gap-4 rounded-2xl border border-terracotta/30 bg-terracotta/[0.04] px-8 py-14 text-center">
             <SearchX className="h-8 w-8 text-terracotta" aria-hidden />
             <p className="font-sans text-sm text-ink/75">{error}</p>
-            <button type="button" onClick={() => void load()} className="mkt-btn-ghost !py-2.5 !px-5">
+            <button type="button" onClick={() => void load()} className="mkt-btn-ghost mkt-btn-sm">
               <span>Try again</span>
             </button>
           </div>
         ) : totalResults === 0 ? (
-          <div className="mt-16 mx-auto flex max-w-md flex-col items-center gap-4 rounded-2xl border border-hairline bg-white/50 px-8 py-16 text-center backdrop-blur">
+          // DESIGN: intentional mkt-* exception — a static empty-state panel (no
+          // hover lift). The rounded-2xl is in-scope inside the `.mkt` wrapper
+          // (DESIGN.md §7); the surface is matte (bg-alabaster + 1px hairline), NOT
+          // frosted glass, per the matte directive.
+          <div className="mt-16 mx-auto flex max-w-md flex-col items-center gap-4 rounded-2xl border border-hairline bg-alabaster px-8 py-16 text-center">
             <SearchX className="h-9 w-9 text-ink/25" aria-hidden />
             <h3 className="font-serif text-xl text-forest">No results for “{q}”</h3>
             <p className="font-sans text-sm text-ink/60">
@@ -268,7 +279,7 @@ function SearchIndex() {
                     ({products.length})
                   </span>
                 </div>
-                <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4">
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4 3xl:grid-cols-5">
                   {products.map((p, i) => {
                     const rating = productRating(p);
                     return (
@@ -302,7 +313,7 @@ function SearchIndex() {
                     ({articles.length})
                   </span>
                 </div>
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 3xl:grid-cols-4">
                   {articles.map((a, i) => (
                     <ArticleCard
                       key={a.id}

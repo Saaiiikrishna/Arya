@@ -419,14 +419,14 @@ export default function AdminStoreOrdersPage() {
   }
 
   return (
-    <div className="text-ink animate-fade-in px-8 py-12 max-w-[1280px] mx-auto min-h-screen">
+    <div className="text-ink animate-fade-in px-4 sm:px-6 lg:px-8 py-8 sm:py-12 max-w-[1280px] 3xl:max-w-[1600px] mx-auto min-h-screen">
       {/* Header */}
-      <header className="border-b border-hairline pb-8 mb-10 flex justify-between items-end">
+      <header className="border-b border-hairline pb-8 mb-10 flex flex-wrap justify-between items-end gap-4">
         <div>
           <Link href="/admin/dashboard" className="text-sm uppercase tracking-widest text-forest font-medium mb-3 inline-block">
             ← Command Center
           </Link>
-          <h1 className="font-serif text-5xl font-bold leading-none">Order Board</h1>
+          <h1 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-bold leading-none">Order Board</h1>
           <p className="text-ink/50 mt-2 font-serif italic">Live fulfillment, shipping &amp; invoicing</p>
         </div>
         <div className="flex items-center gap-4">
@@ -472,8 +472,8 @@ export default function AdminStoreOrdersPage() {
               {s ? s.replace(/_/g, ' ') : 'All'}
             </button>
           ))}
-          <div className="ml-auto flex items-center gap-2">
-            <div className="relative">
+          <div className="w-full sm:w-auto sm:ml-auto flex items-center gap-2">
+            <div className="relative flex-1 sm:flex-none">
               <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-ink/30" />
               <input
                 type="text"
@@ -481,7 +481,7 @@ export default function AdminStoreOrdersPage() {
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') applySearch(); }}
-                className="border border-hairline pl-9 pr-3 py-2 text-sm focus:outline-none focus:border-forest w-56"
+                className="w-full sm:w-56 border border-hairline pl-9 pr-3 py-2 text-sm focus:outline-none focus:border-forest"
               />
             </div>
             <button
@@ -510,7 +510,8 @@ export default function AdminStoreOrdersPage() {
       )}
 
       {/* Orders table */}
-      <div className="border border-hairline bg-white">
+      <div className="border border-hairline bg-white overflow-x-auto">
+        <div className="min-w-[820px]">
         <div className="grid grid-cols-12 gap-4 px-6 py-3 bg-alabaster border-b border-hairline text-[9px] uppercase tracking-widest text-ink/40 font-bold">
           <div className="col-span-3">Order</div>
           <div className="col-span-3">Customer</div>
@@ -559,6 +560,7 @@ export default function AdminStoreOrdersPage() {
             </button>
           ))
         )}
+        </div>
       </div>
 
       {meta.totalPages > 1 && (
@@ -899,7 +901,7 @@ export default function AdminStoreOrdersPage() {
           <p className="text-xs text-ink/50">
             Creating a manual shipment records the courier + AWB and advances the order to <strong>SHIPPED</strong>.
           </p>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-[10px] uppercase tracking-widest text-ink/60 mb-2 font-bold">Courier *</label>
               <select
@@ -931,7 +933,7 @@ export default function AdminStoreOrdersPage() {
               className="w-full border border-hairline px-4 py-3 text-sm focus:outline-none focus:border-forest"
             />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-[10px] uppercase tracking-widest text-ink/60 mb-2 font-bold">Shipping Cost (₹, optional)</label>
               <input

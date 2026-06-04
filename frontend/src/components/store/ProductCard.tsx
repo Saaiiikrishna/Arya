@@ -102,9 +102,10 @@ export default function ProductCard({
             src={imageUrl as string}
             alt={imageAlt || name}
             fill
-            // Matches the catalog grid: 4-up at ≥1024px (25vw), 3-up at ≥640px
-            // (33vw), 2-up below that (50vw) — see store/page.tsx grid-cols classes.
-            sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw"
+            // Matches the catalog grid (store/page.tsx grid-cols classes):
+            // 5-up at ≥1920px (20vw), 4-up at ≥1280px (25vw), 3-up at ≥768px
+            // (33vw), 2-up below that (50vw).
+            sizes="(min-width: 1920px) 20vw, (min-width: 1280px) 25vw, (min-width: 768px) 33vw, 50vw"
             priority={priority}
             onError={() => setImgFailed(true)}
             className="object-cover transition-transform duration-500 group-hover:scale-[1.04]"

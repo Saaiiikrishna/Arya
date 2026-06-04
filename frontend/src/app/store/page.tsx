@@ -241,7 +241,7 @@ export default function StorePage() {
 
   return (
     <Layout activeTab="store">
-      <div className="mkt relative overflow-hidden bg-parchment min-h-[calc(100vh-80px)]">
+      <div className="mkt relative overflow-hidden bg-parchment min-h-[calc(100dvh-80px)]">
         {/* Ambient brand orbs */}
         <div
           aria-hidden
@@ -255,7 +255,7 @@ export default function StorePage() {
         />
 
         {/* ── Hero strip ───────────────────────────────────── */}
-        <section className="relative z-10 mx-auto max-w-screen-2xl px-6 pt-16 pb-10 md:px-8 md:pt-20">
+        <section className="relative z-10 mx-auto max-w-[1600px] px-4 pt-14 pb-10 sm:px-6 md:px-8 md:pt-20">
           <motion.div
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
@@ -268,10 +268,10 @@ export default function StorePage() {
                 The Workshop Store
               </span>
             </div>
-            <h1 className="font-serif-display text-5xl font-bold leading-[0.95] tracking-[-0.025em] text-forest md:text-6xl">
+            <h1 className="font-serif-display text-4xl font-bold leading-[0.95] tracking-[-0.025em] text-forest sm:text-5xl md:text-6xl 3xl:text-7xl">
               Kits, components &amp; build-it-yourself projects.
             </h1>
-            <p className="mt-6 max-w-2xl font-sans text-lg leading-relaxed text-ink/70">
+            <p className="mt-5 max-w-2xl font-sans text-base leading-relaxed text-ink/70 sm:mt-6 sm:text-lg">
               Everything a founder needs to go from idea to working prototype —
               curated hardware, modular kits, and the parts to build them yourself.
             </p>
@@ -279,7 +279,7 @@ export default function StorePage() {
         </section>
 
         {/* ── Controls bar ─────────────────────────────────── */}
-        <section className="relative z-10 mx-auto max-w-screen-2xl px-6 md:px-8">
+        <section className="relative z-10 mx-auto max-w-[1600px] px-4 sm:px-6 md:px-8">
           <div className="mkt-card flex flex-col gap-4 p-4 md:flex-row md:items-center md:gap-3 md:p-5">
             {/* Search */}
             <div className="relative flex-1">
@@ -290,7 +290,7 @@ export default function StorePage() {
                 onChange={(e) => setSearchInput(e.target.value)}
                 placeholder="Search kits, components, brands…"
                 aria-label="Search the catalog"
-                className="w-full rounded-full border border-hairline bg-white/70 py-3 pl-11 pr-10 font-sans text-sm text-forest backdrop-blur placeholder:text-ink/40 focus:border-saffron focus:outline-none focus:ring-2 focus:ring-saffron/30"
+                className="mkt-input w-full py-3 pl-11 pr-10 text-forest"
               />
               {searchInput && (
                 <button
@@ -305,7 +305,7 @@ export default function StorePage() {
             </div>
 
             {/* Sort */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
               <label
                 htmlFor="store-sort"
                 className="hidden font-sans text-[10px] font-semibold uppercase tracking-[0.12em] text-ink/50 md:inline"
@@ -319,7 +319,7 @@ export default function StorePage() {
                   setSort(e.target.value as SortKey);
                   setPage(1);
                 }}
-                className="rounded-full border border-hairline bg-white/70 px-4 py-3 font-sans text-sm text-forest backdrop-blur focus:border-saffron focus:outline-none focus:ring-2 focus:ring-saffron/30"
+                className="mkt-input min-w-0 flex-1 px-4 py-3 text-forest md:flex-none"
               >
                 {SORT_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>
@@ -334,7 +334,7 @@ export default function StorePage() {
                   type="button"
                   onClick={() => setFiltersOpen((v) => !v)}
                   aria-expanded={filtersOpen}
-                  className="inline-flex items-center gap-2 rounded-full border border-hairline bg-white/70 px-4 py-3 font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-forest backdrop-blur transition-colors hover:border-saffron md:hidden"
+                  className="inline-flex shrink-0 items-center gap-2 rounded-full border border-hairline bg-white/70 px-4 py-3 font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-forest backdrop-blur transition-colors hover:border-saffron md:hidden"
                 >
                   <SlidersHorizontal className="h-4 w-4" />
                   Filters
@@ -417,12 +417,12 @@ export default function StorePage() {
         {/* ── Product grid ─────────────────────────────────── */}
         <section
           ref={gridRef}
-          className="relative z-10 mx-auto max-w-screen-2xl scroll-mt-24 px-6 pb-24 pt-8 md:px-8"
+          className="relative z-10 mx-auto max-w-[1600px] scroll-mt-24 px-4 pb-24 pt-8 sm:px-6 md:px-8"
         >
           {/* Loading */}
           {loading && (
             <div
-              className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4"
+              className="grid grid-cols-2 gap-4 sm:gap-5 md:grid-cols-3 xl:grid-cols-4 3xl:grid-cols-5"
               aria-busy="true"
               aria-label="Loading products"
             >
@@ -481,7 +481,7 @@ export default function StorePage() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.4 }}
-                className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4"
+                className="grid grid-cols-2 gap-4 sm:gap-5 md:grid-cols-3 xl:grid-cols-4 3xl:grid-cols-5"
               >
                 {products.map((p, i) => {
                   const rating = resolveRating(p);

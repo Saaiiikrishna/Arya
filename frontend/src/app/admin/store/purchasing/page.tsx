@@ -519,20 +519,20 @@ export default function AdminPurchasingPage() {
   // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="text-ink animate-fade-in px-8 py-12 max-w-[1280px] mx-auto min-h-screen">
+    <div className="text-ink animate-fade-in px-4 sm:px-6 lg:px-8 py-8 sm:py-12 max-w-[1280px] 3xl:max-w-[1600px] mx-auto min-h-screen">
       {/* Header */}
-      <header className="border-b border-hairline pb-8 mb-10 flex justify-between items-end gap-6">
+      <header className="border-b border-hairline pb-8 mb-10 flex flex-wrap justify-between items-end gap-6">
         <div>
           <Link href="/admin/dashboard" className="text-sm uppercase tracking-widest text-forest font-medium mb-3 inline-block">
             ← Command Center
           </Link>
-          <h1 className="font-serif text-5xl font-bold leading-none">Purchasing</h1>
+          <h1 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-bold leading-none">Purchasing</h1>
           <p className="text-ink/50 mt-2 font-serif italic">Suppliers &amp; purchase orders — receive into stock</p>
         </div>
       </header>
 
       {/* Tabs */}
-      <div className="flex border-b border-hairline mb-8">
+      <div className="flex border-b border-hairline mb-8 overflow-x-auto">
         {([
           { key: 'suppliers' as Tab, label: 'Suppliers', icon: Building2 },
           { key: 'orders' as Tab, label: 'Purchase Orders', icon: ClipboardList },
@@ -540,7 +540,7 @@ export default function AdminPurchasingPage() {
           <button
             key={key}
             onClick={() => { setTab(key); if (key === 'orders') setOrdersPanel('list'); }}
-            className={`px-6 py-3 text-[11px] uppercase tracking-widest font-bold transition-colors border-b-2 -mb-px flex items-center gap-2 ${
+            className={`px-6 py-3 text-[11px] uppercase tracking-widest font-bold transition-colors border-b-2 -mb-px flex items-center gap-2 shrink-0 whitespace-nowrap ${
               tab === key ? 'border-forest text-forest' : 'border-transparent text-ink/40 hover:text-ink'
             }`}
           >
@@ -593,7 +593,8 @@ export default function AdminPurchasingPage() {
               <button onClick={openCreateSupplier} className="px-5 py-2.5 border border-forest text-forest text-[10px] uppercase tracking-widest font-bold hover:bg-forest hover:text-parchment transition-colors">Add First Supplier</button>
             </div>
           ) : (
-            <div className="border border-hairline bg-white">
+            <div className="border border-hairline bg-white overflow-x-auto">
+              <div className="min-w-[820px]">
               <div className="grid grid-cols-12 gap-4 px-6 py-3 bg-alabaster border-b border-hairline text-[9px] uppercase tracking-widest text-ink/40 font-bold">
                 <div className="col-span-3">Name / Code</div>
                 <div className="col-span-3">Contact</div>
@@ -637,6 +638,7 @@ export default function AdminPurchasingPage() {
                   </div>
                 </div>
               ))}
+              </div>
             </div>
           )}
 
@@ -690,7 +692,8 @@ export default function AdminPurchasingPage() {
               <button onClick={openCreatePo} className="px-5 py-2.5 border border-forest text-forest text-[10px] uppercase tracking-widest font-bold hover:bg-forest hover:text-parchment transition-colors">Create First PO</button>
             </div>
           ) : (
-            <div className="border border-hairline bg-white">
+            <div className="border border-hairline bg-white overflow-x-auto">
+              <div className="min-w-[820px]">
               <div className="grid grid-cols-12 gap-4 px-6 py-3 bg-alabaster border-b border-hairline text-[9px] uppercase tracking-widest text-ink/40 font-bold">
                 <div className="col-span-2">PO Number</div>
                 <div className="col-span-3">Supplier</div>
@@ -722,6 +725,7 @@ export default function AdminPurchasingPage() {
                   </div>
                 </button>
               ))}
+              </div>
             </div>
           )}
 
@@ -783,7 +787,7 @@ export default function AdminPurchasingPage() {
                 </div>
 
                 {/* Totals */}
-                <div className="grid grid-cols-3 gap-4 mt-6 pt-6 border-t border-hairline">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6 pt-6 border-t border-hairline">
                   <div>
                     <div className="text-[9px] uppercase tracking-widest text-ink/40 font-bold mb-1">Subtotal</div>
                     <Money paise={detail.subtotal} className="font-serif text-lg font-bold" />
@@ -801,7 +805,7 @@ export default function AdminPurchasingPage() {
 
               {/* Lines + receive */}
               <div className="border border-hairline bg-white">
-                <div className="flex items-center justify-between px-6 py-4 border-b border-hairline">
+                <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-hairline">
                   <h3 className="font-serif text-lg font-bold flex items-center gap-2"><FileText className="w-5 h-5 text-forest/60" /> Line Items</h3>
                   {(detail.status === 'SUBMITTED' || detail.status === 'PARTIALLY_RECEIVED') && (
                     <button onClick={submitReceive} disabled={receiving} className="px-5 py-2.5 bg-forest text-parchment text-[10px] uppercase tracking-widest font-bold hover:bg-forest/90 disabled:opacity-50 transition-colors flex items-center gap-2">
@@ -810,6 +814,8 @@ export default function AdminPurchasingPage() {
                   )}
                 </div>
 
+                <div className="overflow-x-auto">
+                <div className="min-w-[760px]">
                 <div className="grid grid-cols-12 gap-4 px-6 py-3 bg-alabaster border-b border-hairline text-[9px] uppercase tracking-widest text-ink/40 font-bold">
                   <div className="col-span-4">SKU</div>
                   <div className="col-span-1 text-right">Lot</div>
@@ -861,6 +867,8 @@ export default function AdminPurchasingPage() {
                     </div>
                   );
                 })}
+                </div>
+                </div>
               </div>
             </div>
           )}
@@ -874,7 +882,7 @@ export default function AdminPurchasingPage() {
             ← Back to Purchase Orders
           </button>
 
-          <div className="border border-hairline bg-white p-8 max-w-[900px]">
+          <div className="border border-hairline bg-white p-4 sm:p-8 max-w-[900px]">
             <h2 className="font-serif text-2xl font-bold mb-6 flex items-center gap-2"><Truck className="w-5 h-5 text-forest/60" /> New Purchase Order</h2>
 
             {activeSuppliers.length === 0 && (
@@ -890,7 +898,7 @@ export default function AdminPurchasingPage() {
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-4 mb-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
               <div>
                 <label className={LABEL}>Supplier *</label>
                 <select value={createForm.supplierId} onChange={(e) => setCreateForm({ ...createForm, supplierId: e.target.value })} className={INPUT}>
@@ -917,6 +925,8 @@ export default function AdminPurchasingPage() {
                 </button>
               </div>
 
+              <div className="overflow-x-auto">
+              <div className="min-w-[680px]">
               <div className="grid grid-cols-12 gap-3 mb-2 px-1 text-[9px] uppercase tracking-widest text-ink/40 font-bold">
                 <div className="col-span-4">SKU *</div>
                 <div className="col-span-2">Ordered Qty *</div>
@@ -961,6 +971,8 @@ export default function AdminPurchasingPage() {
                     </div>
                   </div>
                 ))}
+              </div>
+              </div>
               </div>
 
               <p className="text-[9px] text-ink/35 mt-3">Tax in basis points (1800 = 18%) — used only for the PO total. Same SKU may repeat with distinct lot numbers.</p>
@@ -1009,7 +1021,7 @@ export default function AdminPurchasingPage() {
               <button onClick={() => setShowSupplierForm(false)} className="text-ink/40 hover:text-ink transition-colors"><X className="w-5 h-5" /></button>
             </div>
             <div className="p-8 space-y-5">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className={LABEL}>Name *</label>
                   <input value={supplierForm.name} onChange={(e) => setSupplierForm({ ...supplierForm, name: e.target.value })} className={INPUT} />
@@ -1019,7 +1031,7 @@ export default function AdminPurchasingPage() {
                   <input value={supplierForm.code} onChange={(e) => setSupplierForm({ ...supplierForm, code: e.target.value })} placeholder="SUP-001" className={INPUT} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className={LABEL}>Contact Name</label>
                   <input value={supplierForm.contactName} onChange={(e) => setSupplierForm({ ...supplierForm, contactName: e.target.value })} className={INPUT} />
@@ -1029,7 +1041,7 @@ export default function AdminPurchasingPage() {
                   <input type="email" value={supplierForm.email} onChange={(e) => setSupplierForm({ ...supplierForm, email: e.target.value })} className={INPUT} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className={LABEL}>Phone</label>
                   <input value={supplierForm.phone} onChange={(e) => setSupplierForm({ ...supplierForm, phone: e.target.value })} className={INPUT} />
@@ -1039,7 +1051,7 @@ export default function AdminPurchasingPage() {
                   <input value={supplierForm.gstin} onChange={(e) => setSupplierForm({ ...supplierForm, gstin: e.target.value })} placeholder="27AAACU1234A1Z5" className={INPUT} />
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="col-span-1">
                   <label className={LABEL}>City</label>
                   <input value={supplierForm.city} onChange={(e) => setSupplierForm({ ...supplierForm, city: e.target.value })} className={INPUT} />
