@@ -3,6 +3,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { PrismaModule } from './prisma';
 import { AuthModule } from './modules/auth';
 import { QuestionModule } from './modules/question';
@@ -52,6 +53,9 @@ import { InvoicingModule } from './modules/invoicing';
 import { OrdersModule } from './modules/orders';
 import { ShippingModule } from './modules/shipping';
 import { ReturnsModule } from './modules/returns';
+import { StoreRealtimeModule } from './modules/store-realtime/store-realtime.module';
+import { StoreJobsModule } from './modules/store-jobs/store-jobs.module';
+import { StoreAnalyticsModule } from './modules/store-analytics/store-analytics.module';
 
 /**
  * Fail-fast environment validation. Signing secrets must ALWAYS be strong
@@ -100,6 +104,12 @@ function validateEnv(config: Record<string, unknown>): Record<string, unknown> {
   imports: [
     // Config
     ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
+
+    // In-process domain events (decouples commerce services from the Socket.io
+    // gateways: services emit 'stock.updated'/'order.updated'/... and the store
+    // gateways broadcast). Note: cross-replica fan-out needs the Socket.io Redis
+    // adapter (documented follow-up); listeners are wildcard-enabled.
+    EventEmitterModule.forRoot({ wildcard: true, delimiter: '.' }),
 
     // Rate limiting: multi-tier configuration
     ThrottlerModule.forRoot([{
@@ -194,6 +204,9 @@ function validateEnv(config: Record<string, unknown>): Record<string, unknown> {
     OrdersModule,
     ShippingModule,
     ReturnsModule,
+    StoreRealtimeModule,
+    StoreJobsModule,
+    StoreAnalyticsModule,
   ],
   providers: [
     // Apply rate limiting globally; per-route @Throttle still tunes the tiers.

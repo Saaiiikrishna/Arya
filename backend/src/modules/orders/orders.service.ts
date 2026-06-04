@@ -9,6 +9,7 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   CustomerType,
   Order,
@@ -29,6 +30,7 @@ import { CouponService } from '@/modules/coupons/coupons.service';
 import {
   InventoryService,
   StockLine,
+  StockUpdatedEvent,
 } from '@/modules/inventory/inventory.service';
 import { TaxService } from '@/modules/tax/tax.service';
 import { GuestTokenService } from '@/modules/store-auth/guest-token.service';
@@ -40,6 +42,13 @@ import {
   apportion as apportionShared,
   resolveUnitPrice as resolveUnitPriceShared,
 } from '../store/shared/pricing.utils';
+// Import the CANONICAL realtime event name + payload type from store-realtime and
+// re-export them below, so this producer and the gateway @OnEvent consumer share a
+// single source of truth and cannot drift on a rename / field addition (Section 6).
+import {
+  ORDER_UPDATED_EVENT as CANONICAL_ORDER_UPDATED_EVENT,
+  type OrderUpdatedPayload,
+} from '@/modules/store-realtime/realtime.constants';
 import { CheckoutAddressDto, CheckoutDto, OrderQueryDto } from './dto';
 
 /** The checkout caller, resolved from the guard (CUSTOMER JWT or guest token). */
@@ -75,6 +84,23 @@ interface RazorpayWebhookEnvelope {
   event?: string;
   payload?: { payment?: { entity?: RazorpayPaymentEntity } };
 }
+
+/**
+ * Realtime `order.updated` event name + payload. Emitted on the global
+ * EventEmitter2 bus AFTER an order-mutation transaction COMMITS (checkout /
+ * webhook capture / status transition) and consumed by the store-realtime
+ * OrdersGateway, which relays it to the admin / order / customer rooms. Kept
+ * best-effort: an emit failure must never break the business path (Section 6).
+ */
+export const ORDER_UPDATED_EVENT = CANONICAL_ORDER_UPDATED_EVENT;
+
+/**
+ * Authoritative `order.updated` payload. Aliased to the canonical
+ * `OrderUpdatedPayload` in realtime.constants.ts so the producer (here) and the
+ * gateway @OnEvent consumer reference ONE type — adding a field in one place
+ * surfaces in the other rather than silently dropping at the relay (Section 6).
+ */
+export type OrderUpdatedEvent = OrderUpdatedPayload;
 
 /** Reservation TTL for an unpaid order (architecture 4.6 / 5.2). */
 const RESERVATION_TTL_MS = 30 * 60 * 1000; // 30 minutes
@@ -136,11 +162,39 @@ export class OrdersService {
     private readonly settings: SettingsService,
     private readonly documents: DocumentService,
     private readonly invoicing: InvoicingService,
+    private readonly events: EventEmitter2,
   ) {
     this.razorpay = new Razorpay({
       key_id: this.config.get<string>('RAZORPAY_KEY_ID', ''),
       key_secret: this.config.get<string>('RAZORPAY_KEY_SECRET', ''),
     });
+  }
+
+  /**
+   * Best-effort realtime emit of a committed order change. Called ONLY after the
+   * mutating transaction has committed. Swallows any emitter error so realtime
+   * can never poison the order/payment business path (Section 6).
+   */
+  private emitOrderUpdated(order: {
+    id: string;
+    orderNumber: string;
+    status: OrderStatus;
+    paymentStatus: OrderPaymentStatus;
+    customerId: string | null;
+  }): void {
+    try {
+      this.events.emit(ORDER_UPDATED_EVENT, {
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        status: order.status,
+        paymentStatus: order.paymentStatus,
+        customerId: order.customerId,
+      } satisfies OrderUpdatedEvent);
+    } catch (e) {
+      this.logger.warn(
+        `order.updated emit failed for ${order.orderNumber}: ${(e as Error)?.message}`,
+      );
+    }
   }
 
   // ════════════════════════════════════════════════════════════════════════
@@ -385,6 +439,10 @@ export class OrdersService {
     //       `markConverted`'s CAS (step 4) fails and the whole tx rolls back with
     //       a clean 409 — still no duplicate order, reservation, or charge.
     let reused = false;
+    // Deferred realtime stock emits: reserveMany runs INSIDE this tx, so it must
+    // not emit until we commit. It drains the post-commit payloads here; we flush
+    // them to the bus only after the $transaction resolves successfully.
+    const stockEmitSink: StockUpdatedEvent[] = [];
     const created = await this.prisma.$transaction(async (tx) => {
       // Serialize same-cart checkout attempts for the lifetime of this tx.
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`store_checkout_${cartId}`}))`;
@@ -458,11 +516,14 @@ export class OrdersService {
       });
 
       // (2) reserve stock under globally-ordered locks (authoritative re-check).
+      // emitSink defers the stock.updated realtime emits until after THIS tx
+      // commits (Section 6: never emit inside the tx).
       await this.inventory.reserveMany(tx, stockLines, {
         orderId: order.id,
         expiresAt,
         actor: { id: customerId, role: 'CUSTOMER' },
         referenceType: 'ORDER',
+        emitSink: stockEmitSink,
       });
 
       // (3) redeem the coupon atomically (CAS usedCount + per-email cap).
@@ -494,6 +555,24 @@ export class OrdersService {
 
       return order;
     });
+
+    // ── Post-commit realtime (Section 6). Drain the deferred stock emits and
+    // announce the new order. Skipped on the reuse path (no new mutation —
+    // `created` is a pre-existing order, its events were already emitted on the
+    // winning attempt). Best-effort: the inventory helper swallows emit errors,
+    // and emitOrderUpdated does too, so realtime never affects the checkout result.
+    if (!reused) {
+      if (stockEmitSink.length > 0) {
+        this.inventory.publishStockChanges(stockEmitSink);
+      }
+      this.emitOrderUpdated({
+        id: created.id,
+        orderNumber: created.orderNumber,
+        status: created.status,
+        paymentStatus: created.paymentStatus,
+        customerId: created.customerId,
+      });
+    }
 
     // ── Phase 8: create the Razorpay order AFTER commit (never inside the tx).
     // On the reuse path the order ALREADY carries a live razorpayOrderId, so we
@@ -664,6 +743,8 @@ export class OrdersService {
       return;
     }
 
+    // Deferred stock emits: commitReservation runs inside the capture tx.
+    const stockEmitSink: StockUpdatedEvent[] = [];
     const promoted = await this.prisma.$transaction(async (tx) => {
       // Exactly-once CAS: PENDING_PAYMENT → PAID/CONFIRMED. A duplicate delivery
       // sees count 0 and no-ops.
@@ -691,9 +772,11 @@ export class OrdersService {
       });
 
       // Commit every active reservation (reserved→onHand decrement + OUT/SALE).
+      // emitSink defers the stock.updated emits until after this tx commits.
       for (const r of reservations) {
         await this.inventory.commitReservation(tx, r.id, {
           actor: { id: 'SYSTEM', role: 'SYSTEM' },
+          emitSink: stockEmitSink,
         });
       }
 
@@ -715,6 +798,20 @@ export class OrdersService {
     if (!promoted) {
       return; // duplicate delivery already confirmed this order
     }
+
+    // ── Post-commit realtime (Section 6): the order is now CONFIRMED/PAID and the
+    // sale decrements are committed. Flush the deferred stock emits and announce
+    // the order's new state to the admin + order + customer rooms.
+    if (stockEmitSink.length > 0) {
+      this.inventory.publishStockChanges(stockEmitSink);
+    }
+    this.emitOrderUpdated({
+      id: order.id,
+      orderNumber: order.orderNumber,
+      status: OrderStatus.CONFIRMED,
+      paymentStatus: OrderPaymentStatus.PAID,
+      customerId: order.customerId,
+    });
 
     // Best-effort, AFTER commit: notification + invoice. Never throw out of the
     // webhook (matches payment.service).
@@ -741,7 +838,9 @@ export class OrdersService {
       return; // already paid/confirmed/cancelled — ignore a late failure
     }
 
-    await this.prisma.$transaction(async (tx) => {
+    // Deferred stock emits: releaseReservation runs inside the cancel tx.
+    const stockEmitSink: StockUpdatedEvent[] = [];
+    const cancelled = await this.prisma.$transaction(async (tx) => {
       // No PAYMENT_FAILED member in OrderPaymentStatus; the failed payment leaves
       // paymentStatus UNPAID and flips the order to CANCELLED (stock released).
       const flip = await tx.order.updateMany({
@@ -749,7 +848,7 @@ export class OrdersService {
         data: { status: OrderStatus.CANCELLED },
       });
       if (flip.count !== 1) {
-        return;
+        return false;
       }
       // Fetch reservations INSIDE the tx after the CANCEL CAS won (see
       // handleCaptured) so we only release rows still ACTIVE at commit time.
@@ -760,6 +859,7 @@ export class OrdersService {
       for (const r of reservations) {
         await this.inventory.releaseReservation(tx, r.id, {
           actor: { id: 'SYSTEM', role: 'SYSTEM' },
+          emitSink: stockEmitSink,
         });
       }
       await tx.orderEvent.create({
@@ -773,6 +873,23 @@ export class OrdersService {
           note: `Payment failed (${paymentEntity?.id ?? 'unknown'})`,
         },
       });
+      return true;
+    });
+
+    if (!cancelled) {
+      return; // concurrent transition already finalized this order
+    }
+
+    // ── Post-commit realtime (Section 6): order CANCELLED, holds released.
+    if (stockEmitSink.length > 0) {
+      this.inventory.publishStockChanges(stockEmitSink);
+    }
+    this.emitOrderUpdated({
+      id: order.id,
+      orderNumber: order.orderNumber,
+      status: OrderStatus.CANCELLED,
+      paymentStatus: order.paymentStatus,
+      customerId: order.customerId,
     });
   }
 
@@ -811,6 +928,14 @@ export class OrdersService {
     // When the caller supplies its own transaction we run the core inline (the
     // caller owns the advisory lock + commit boundary); otherwise we open our own
     // transaction and take the per-order advisory lock here.
+    //
+    // REALTIME (Section 6): we may only emit AFTER commit. On the own-tx path we
+    // own the commit, so we drain a deferred sink + emit once the $transaction
+    // resolves. On the FORWARDED-tx path the caller (e.g. shipping ship()) owns
+    // the commit and the store-realtime lane must not edit shipping.service.ts, so
+    // we do NOT emit here — that caller's own realtime (shipment.updated, owned by
+    // store-jobs) covers it, and emitting a not-yet-committed value would violate
+    // the after-commit rule.
     if (opts?.tx) {
       return this.transitionStatusInTx(
         opts.tx,
@@ -824,12 +949,30 @@ export class OrdersService {
         },
       );
     }
-    return this.prisma.$transaction((tx) =>
+
+    const stockEmitSink: StockUpdatedEvent[] = [];
+    const updated = await this.prisma.$transaction((tx) =>
       this.transitionStatusInTx(tx, orderId, toStatus, actor, note, {
         deliveredAt: opts?.deliveredAt,
         ownLock: true,
+        stockEmitSink,
       }),
     );
+
+    // Post-commit realtime. A no-op transition (from === toStatus) leaves the sink
+    // empty and re-announces the unchanged state harmlessly.
+    if (stockEmitSink.length > 0) {
+      this.inventory.publishStockChanges(stockEmitSink);
+    }
+    this.emitOrderUpdated({
+      id: updated.id,
+      orderNumber: updated.orderNumber,
+      status: updated.status,
+      paymentStatus: updated.paymentStatus,
+      customerId: updated.customerId,
+    });
+
+    return updated;
   }
 
   /**
@@ -843,7 +986,12 @@ export class OrdersService {
     toStatus: OrderStatus,
     actor: OrderActor,
     note: string | undefined,
-    opts: { deliveredAt?: Date; ownLock: boolean },
+    opts: {
+      deliveredAt?: Date;
+      ownLock: boolean;
+      /** Sink for deferred stock emits (own-tx path only; flushed post-commit). */
+      stockEmitSink?: StockUpdatedEvent[];
+    },
   ) {
     // Lock the order row for the duration of the transition so two concurrent
     // admin actions can't both flip from the same source status. When a caller
@@ -878,7 +1026,12 @@ export class OrdersService {
 
     // CANCEL from a pre-shipped state: free the held/committed stock.
     if (toStatus === OrderStatus.CANCELLED && PRE_SHIPPED_STATUSES.has(from)) {
-      await this.releaseOrRestockForCancel(tx, order, actor);
+      await this.releaseOrRestockForCancel(
+        tx,
+        order,
+        actor,
+        opts.stockEmitSink,
+      );
     }
 
     // paymentStatus is left untouched here: an unpaid cancel stays UNPAID; a
@@ -1074,8 +1227,8 @@ export class OrdersService {
     // ── Step 3a: API succeeded — finalize the order status + audit. The money is
     // already reflected in refundedTotal (reserved in step 1).
     const fullyRefunded = reserved.newRefundedTotal >= reserved.grandTotal;
-    await this.prisma.$transaction(async (tx) => {
-      await tx.order.update({
+    const finalized = await this.prisma.$transaction(async (tx) => {
+      const upd = await tx.order.update({
         where: { id: args.orderId },
         data: {
           paymentStatus: fullyRefunded
@@ -1084,6 +1237,13 @@ export class OrdersService {
           status: fullyRefunded
             ? OrderStatus.REFUNDED
             : OrderStatus.PARTIALLY_REFUNDED,
+        },
+        select: {
+          id: true,
+          orderNumber: true,
+          status: true,
+          paymentStatus: true,
+          customerId: true,
         },
       });
       await tx.orderEvent.create({
@@ -1098,7 +1258,11 @@ export class OrdersService {
           metadata: { razorpayRefundId, amountPaise: args.amountPaise },
         },
       });
+      return upd;
     });
+
+    // ── Post-commit realtime (Section 6): announce the (partial) refund.
+    this.emitOrderUpdated(finalized);
 
     return { razorpayRefundId, refundedTotal: reserved.newRefundedTotal };
   }
@@ -1354,6 +1518,7 @@ export class OrdersService {
     tx: Prisma.TransactionClient,
     order: Order,
     actor: OrderActor,
+    stockEmitSink?: StockUpdatedEvent[],
   ): Promise<void> {
     const reservations = await tx.stockReservation.findMany({
       where: {
@@ -1365,6 +1530,7 @@ export class OrdersService {
       if (r.status === ReservationStatus.ACTIVE) {
         await this.inventory.releaseReservation(tx, r.id, {
           actor: { id: actor.id, role: actor.role },
+          emitSink: stockEmitSink,
         });
       } else if (r.status === ReservationStatus.CONSUMED) {
         // Paid order cancelled before shipping: return the units to stock.
@@ -1381,6 +1547,7 @@ export class OrdersService {
             referenceId: order.id,
             actor: { id: actor.id, role: actor.role },
             note: `Restock on cancel of order ${order.orderNumber}`,
+            emitSink: stockEmitSink,
           },
         );
       }

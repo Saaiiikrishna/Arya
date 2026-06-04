@@ -25,6 +25,7 @@ import {
   courierWebhookSecretKey,
 } from './shipping.constants';
 import { CourierProviderFactory } from './courier';
+import type { CourierTrackingEvent } from './courier';
 import type {
   CreateShipmentDto,
   ShipmentQueryDto,
@@ -61,6 +62,23 @@ const STATUS_RANK: Readonly<Record<ShipmentStatus, number>> = {
   FAILED: 6,
   RETURNED: 7,
 };
+
+/**
+ * Terminal shipment states the courier-sync cron skips: once a shipment is
+ * DELIVERED / FAILED / RETURNED there is nothing left to poll, so the cron never
+ * re-fetches tracking for it (matches architecture Section 7 "shipments not in
+ * {DELIVERED,FAILED,RETURNED}").
+ */
+const TERMINAL_SHIPMENT_STATUSES: ReadonlySet<ShipmentStatus> = new Set([
+  ShipmentStatus.DELIVERED,
+  ShipmentStatus.FAILED,
+  ShipmentStatus.RETURNED,
+]);
+
+/** A shipment is "stale" (eligible for a courier re-poll) after this long without a sync. */
+const SHIPMENT_SYNC_STALE_MS = 12 * 60 * 1000; // 12 minutes (< the 15-min store-courier-sync cron cadence, Section 7)
+/** Hard cap on shipments synced in one cron pass so a backlog can't run unbounded. */
+const SHIPMENT_SYNC_BATCH_LIMIT = 200;
 
 /**
  * Map a courier-supplied status/code string to our canonical ShipmentStatus.
@@ -399,10 +417,30 @@ export class ShippingService {
     }
 
     const events = this.normalizeEvents(parsed, shipment.id);
-    if (events.length === 0) {
-      return { received: true };
-    }
+    // Funnel through the SHARED ingest core so the webhook path and the
+    // courier-sync cron apply identical dedupe + forward-only advance + deliver
+    // semantics. An empty event set still stamps lastSyncedAt (no-op advance).
+    await this.ingestNormalizedEvents(shipment, events);
+    return { received: true };
+  }
 
+  /**
+   * SHARED idempotent ingest core for a resolved shipment + already-normalized
+   * events. Used by BOTH the inbound courier webhook and the courier-sync cron
+   * (store-jobs), so the two paths can never diverge on dedupe / forward-only
+   * status advance / DELIVERED handling.
+   *
+   *  - inserts each event idempotently (`@@unique([shipmentId, courierEventId])`)
+   *  - advances Shipment.status to the highest-ranked event seen (never regress)
+   *    and always stamps lastSyncedAt (so the cron's staleness filter advances
+   *    even on a poll that returned only duplicates / nothing)
+   *  - on a freshly-seen DELIVERED event, advances the order + stamps
+   *    Order.deliveredAt (opens the 7-day returns window)
+   */
+  private async ingestNormalizedEvents(
+    shipment: { id: string; orderId: string; status: ShipmentStatus },
+    events: NormalizedEvent[],
+  ): Promise<void> {
     // Insert each event idempotently and compute the highest status seen.
     let highest = STATUS_RANK[shipment.status];
     let highestStatus = shipment.status;
@@ -442,8 +480,152 @@ export class ShippingService {
         ),
       );
     }
+  }
 
-    return { received: true };
+  // ════════════════════════════════════════════════════════════════════════
+  //  COURIER SYNC (polled by store-jobs store-courier-sync cron, Section 7)
+  // ════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Poll the active courier for every non-terminal shipment whose tracking has
+   * gone stale, and ingest the returned checkpoints through the SAME idempotent
+   * dedupe/advance/deliver path the inbound webhook uses (`ingestNormalizedEvents`).
+   *
+   * Called by the store-jobs `store-courier-sync` cron (architecture Section 7).
+   * Fully idempotent: re-running re-reads live shipment state and the
+   * `@@unique([shipmentId, courierEventId])` constraint dedupes every event, so a
+   * double-fire never double-applies a checkpoint or re-delivers an order.
+   *
+   * Skips entirely when the active provider is the `manual` courier (no upstream
+   * feed to poll — `ManualCourierProvider.getTracking` returns []). For real
+   * providers, a per-shipment failure is logged and skipped (one bad AWB never
+   * aborts the batch). Returns counts the cron logs.
+   *
+   * NOTE: only shipments with a non-null AWB and a non-manual `courier` are polled
+   * — a manually-keyed shipment (Courier.OTHER, admin-entered AWB) has no provider
+   * tracking endpoint and is advanced solely by the inbound webhook.
+   */
+  async syncActiveShipments(): Promise<{
+    polled: number;
+    updated: number;
+    skipped: number;
+    failed: number;
+  }> {
+    const provider = await this.couriers.resolve();
+    // The manual provider has no upstream tracking feed — nothing to poll.
+    if (provider.key === this.couriers.fallback.key) {
+      return { polled: 0, updated: 0, skipped: 0, failed: 0 };
+    }
+
+    const staleBefore = new Date(Date.now() - SHIPMENT_SYNC_STALE_MS);
+    const candidates = await this.prisma.shipment.findMany({
+      where: {
+        status: { notIn: [...TERMINAL_SHIPMENT_STATUSES] },
+        awb: { not: null },
+        // Only poll this provider's own shipments; a manually-keyed shipment
+        // (Courier.OTHER) has no endpoint on a remote provider.
+        courier: provider.courier,
+        OR: [{ lastSyncedAt: null }, { lastSyncedAt: { lt: staleBefore } }],
+      },
+      orderBy: { lastSyncedAt: { sort: 'asc', nulls: 'first' } },
+      take: SHIPMENT_SYNC_BATCH_LIMIT,
+      select: { id: true, orderId: true, status: true, awb: true },
+    });
+
+    let polled = 0;
+    let updated = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    for (const shipment of candidates) {
+      const awb = shipment.awb;
+      if (!awb) {
+        skipped++;
+        continue;
+      }
+      let trackingEvents: CourierTrackingEvent[];
+      try {
+        polled++;
+        trackingEvents = await provider.getTracking(awb);
+      } catch (e) {
+        // One AWB's courier failure must never abort the whole sweep — log and
+        // move on. The shipment stays non-terminal and is retried next pass.
+        failed++;
+        this.logger.warn(
+          `courier-sync getTracking failed for AWB ${awb} (shipment ${shipment.id}): ${(e as Error)?.message}`,
+        );
+        continue;
+      }
+
+      const normalized = this.normalizeProviderEvents(
+        trackingEvents,
+        shipment.id,
+      );
+      try {
+        await this.ingestNormalizedEvents(
+          {
+            id: shipment.id,
+            orderId: shipment.orderId,
+            status: shipment.status,
+          },
+          normalized,
+        );
+        updated++;
+      } catch (e) {
+        failed++;
+        this.logger.error(
+          `courier-sync ingest failed for shipment ${shipment.id} (AWB ${awb}): ${(e as Error)?.message}`,
+        );
+      }
+    }
+
+    return { polled, updated, skipped, failed };
+  }
+
+  /**
+   * Map provider-returned {@link CourierTrackingEvent}s into the same canonical
+   * {@link NormalizedEvent} shape the webhook path produces, so both feed the one
+   * shared ingest core. Mirrors `normalizeEvents`' bounding/synthesis rules: the
+   * courier event id is bounded (or a stable id synthesized) and free-text fields
+   * are truncated to the DB column widths.
+   */
+  private normalizeProviderEvents(
+    events: CourierTrackingEvent[],
+    shipmentId: string,
+  ): NormalizedEvent[] {
+    const out: NormalizedEvent[] = [];
+    for (const ev of events ?? []) {
+      const statusStr = String(ev.status ?? ev.code ?? '').trim();
+      const codeStr = String(ev.code ?? ev.status ?? '').trim();
+      if (!statusStr && !codeStr) continue;
+
+      const occurredAt = this.toDate(ev.occurredAt);
+      const mappedStatus = ShippingService.mapStatus(`${statusStr} ${codeStr}`);
+      const courierEventId =
+        ev.courierEventId !== undefined &&
+        ev.courierEventId !== null &&
+        String(ev.courierEventId).length > 0
+          ? String(ev.courierEventId).slice(0, COURIER_EVENT_ID_MAX)
+          : ShippingService.synthEventId(
+              shipmentId,
+              codeStr || statusStr,
+              occurredAt,
+            );
+
+      const description = (ev.description ?? (statusStr || codeStr)) || '';
+      out.push({
+        mappedStatus,
+        courierEventId,
+        description: description.slice(0, COURIER_EVENT_DESCRIPTION_MAX),
+        location:
+          ev.location != null
+            ? String(ev.location).slice(0, COURIER_EVENT_LOCATION_MAX)
+            : undefined,
+        occurredAt,
+        raw: ev.raw ?? ev,
+      });
+    }
+    return out;
   }
 
   // ════════════════════════════════════════════════════════════════════════

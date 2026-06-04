@@ -623,13 +623,23 @@ export class PurchasingService {
    * with no purchase history are skipped (no supplier to address). One DRAFT PO is
    * created per (supplier, warehouse) bucket.
    *
-   * Returns a summary of created drafts. Idempotency note: this does NOT dedupe
-   * against existing open DRAFT/SUBMITTED POs — the store-reorder-alerts cron
-   * (Section 7) owns that gate; this helper is the raw builder it composes.
+   * Returns a summary of created drafts. Idempotency: the store-reorder-alerts
+   * cron (Section 7) owns the "skip SKUs already on an open PO" gate and passes
+   * the already-covered SKU ids in `opts.excludeSkuIds`; this helper honours that
+   * exclusion so a second daily run (or two replicas firing together) does not
+   * draft duplicate POs for the same under-stocked SKU. Callers that want the raw
+   * builder with no dedup may omit `excludeSkuIds`.
    */
-  async reorderToDraftPo(actor: StockActor, warehouseId?: string) {
+  async reorderToDraftPo(
+    actor: StockActor,
+    warehouseId?: string,
+    opts?: { excludeSkuIds?: Iterable<string> },
+  ) {
     const report = await this.inventory.getReorderReport(warehouseId);
-    const rows = report.data.filter((r) => (r.suggestedOrderQty ?? 0) > 0);
+    const exclude = new Set(opts?.excludeSkuIds ?? []);
+    const rows = report.data.filter(
+      (r) => (r.suggestedOrderQty ?? 0) > 0 && !exclude.has(r.skuId),
+    );
     if (rows.length === 0) {
       return {
         created: [],

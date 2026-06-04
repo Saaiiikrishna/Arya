@@ -12,7 +12,12 @@ import {
   StockMovementReason,
   StockMovementType,
 } from '@prisma/client';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../../prisma/prisma.service';
+// Import the CANONICAL realtime event name from the store-realtime constants and
+// re-export it below, so the producer (this service) and the gateway @OnEvent
+// consumer can never drift apart on a rename (single source of truth, Section 6).
+import { STOCK_UPDATED_EVENT as CANONICAL_STOCK_UPDATED_EVENT } from '../store-realtime/realtime.constants';
 import {
   CreateWarehouseDto,
   InventoryMatrixQueryDto,
@@ -45,11 +50,68 @@ const DEFAULT_PAGE_LIMIT = 50;
 /** Hard cap on rows the reorder report will materialise, so the endpoint cannot OOM. */
 const REORDER_REPORT_LIMIT = 500;
 
+/**
+ * Realtime `stock.updated` event name + payload. Emitted on the global
+ * EventEmitter2 bus AFTER a stock-mutation transaction COMMITS (never inside the
+ * tx) and consumed by the store-realtime StockGateway, which relays it to the
+ * admin room. Kept best-effort: an emit failure must never break the business
+ * path (Section 6).
+ */
+export const STOCK_UPDATED_EVENT = CANONICAL_STOCK_UPDATED_EVENT;
+
+/**
+ * Authoritative `stock.updated` payload. `version` is the POST-CAS optimistic-lock
+ * counter (Section 6 names it in the contract) so an admin dashboard can drop
+ * stale, out-of-order frames. Structurally compatible with
+ * `StockUpdatedPayload` in realtime.constants.ts (the gateway relays that type).
+ */
+export interface StockUpdatedEvent {
+  skuId: string;
+  warehouseId: string;
+  onHand: number;
+  reserved: number;
+  available: number;
+  version: number;
+}
+
 @Injectable()
 export class InventoryService {
   private readonly logger = new Logger(InventoryService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly events: EventEmitter2,
+  ) {}
+
+  /**
+   * Publish a batch of stock changes that were DEFERRED into a caller-supplied
+   * `emitSink` while a primitive ran inside the caller's transaction. The caller
+   * (e.g. checkout in orders.service) drains the sink and calls this AFTER its own
+   * transaction commits, so subscribers only ever observe committed state. This is
+   * the post-commit half of the nested-tx emit contract (`emitSink` collects;
+   * `publishStockChanges` flushes). Best-effort (errors swallowed).
+   */
+  publishStockChanges(changes: StockUpdatedEvent[]): void {
+    this.emitStockUpdated(changes);
+  }
+
+  /**
+   * Best-effort realtime emit of a committed stock change. Called ONLY after the
+   * mutating transaction has committed, with the post-commit counters captured
+   * during the tx — so subscribers never see a not-yet-committed value. Swallows
+   * any emitter error so realtime can never poison a stock mutation.
+   */
+  private emitStockUpdated(changes: StockUpdatedEvent[]): void {
+    for (const c of changes) {
+      try {
+        this.events.emit(STOCK_UPDATED_EVENT, c);
+      } catch (e) {
+        this.logger.warn(
+          `stock.updated emit failed for SKU ${c.skuId}@${c.warehouseId}: ${(e as Error)?.message}`,
+        );
+      }
+    }
+  }
 
   // ─────────────────────────────────────────────────────────────
   //  Lock-ordering helpers (Section 5.1 — deadlock elimination)
@@ -140,6 +202,37 @@ export class InventoryService {
     return (db as PrismaService).IS_PRISMA_SERVICE !== true;
   }
 
+  /**
+   * True when THIS call owns the commit boundary (it was handed the PrismaService,
+   * so `withTx` will open + commit a fresh transaction). When false the caller is
+   * inside its own transaction and owns the commit — realtime emits must be
+   * deferred to the caller's `opts.emitSink` so we never publish a value the outer
+   * transaction has not yet committed (Section 6: "emit after commit, never inside
+   * the tx").
+   */
+  private ownsTx(db: Db): boolean {
+    return !this.isTransactionClient(db);
+  }
+
+  /**
+   * Route a set of post-commit stock changes correctly: if this call owns the
+   * transaction, emit them now (we are past commit); otherwise drain them into the
+   * caller's `emitSink` so the caller emits after ITS commit. Either way the
+   * subscriber only ever observes committed state.
+   */
+  private routeStockChanges(
+    db: Db,
+    changes: StockUpdatedEvent[],
+    emitSink?: StockUpdatedEvent[],
+  ): void {
+    if (changes.length === 0) return;
+    if (this.ownsTx(db)) {
+      this.emitStockUpdated(changes);
+    } else if (emitSink) {
+      emitSink.push(...changes);
+    }
+  }
+
   // ─────────────────────────────────────────────────────────────
   //  EXPORTED PRIMITIVES (used by checkout / returns / procurement)
   // ─────────────────────────────────────────────────────────────
@@ -168,6 +261,8 @@ export class InventoryService {
       expiresAt: Date;
       actor?: StockActor;
       referenceType?: string;
+      /** Sink for deferred realtime emits when running inside the caller's tx. */
+      emitSink?: StockUpdatedEvent[];
     },
   ): Promise<string[]> {
     if (!lines || lines.length === 0) {
@@ -179,7 +274,11 @@ export class InventoryService {
     const actor = this.requireActor(opts.actor);
     const coalesced = InventoryService.coalesce(lines);
 
-    return this.withTx(db, async (tx) => {
+    // Post-commit realtime payloads, captured DURING the tx and published only
+    // AFTER it commits (or handed to the caller's sink when nested).
+    const changes: StockUpdatedEvent[] = [];
+
+    const result = await this.withTx(db, async (tx) => {
       // (2) one globally-ordered up-front lock pass over the full set.
       await this.acquireLocks(tx, coalesced);
 
@@ -253,10 +352,26 @@ export class InventoryService {
           referenceId: opts.orderId ?? opts.cartId ?? null,
           actor,
         });
+
+        // Capture the post-CAS counters (onHand unchanged; reserved +qty) for the
+        // post-commit realtime emit. version is the read value + 1 (the CAS bumped
+        // it by 1).
+        const newReserved = level.reserved + line.qty;
+        changes.push({
+          skuId: line.skuId,
+          warehouseId: line.warehouseId,
+          onHand: level.onHand,
+          reserved: newReserved,
+          available: level.onHand - newReserved,
+          version: level.version + 1,
+        });
       }
 
       return reservationIds;
     });
+
+    this.routeStockChanges(db, changes, opts.emitSink);
+    return result;
   }
 
   /**
@@ -272,12 +387,18 @@ export class InventoryService {
   async releaseReservation(
     db: Db,
     reservationId: string,
-    opts: { expired?: boolean; actor?: StockActor } = {},
+    opts: {
+      expired?: boolean;
+      actor?: StockActor;
+      /** Sink for deferred realtime emits when running inside the caller's tx. */
+      emitSink?: StockUpdatedEvent[];
+    } = {},
   ): Promise<boolean> {
     const actor = opts.actor ?? SYSTEM_ACTOR;
     const terminal: ReservationStatus = opts.expired ? 'EXPIRED' : 'RELEASED';
 
-    return this.withTx(db, async (tx) => {
+    const changes: StockUpdatedEvent[] = [];
+    const result = await this.withTx(db, async (tx) => {
       const reservation = await tx.stockReservation.findUnique({
         where: { id: reservationId },
       });
@@ -366,8 +487,22 @@ export class InventoryService {
           : 'Reservation released',
       });
 
+      // Post-commit realtime: onHand unchanged; reserved -qty; version bumped by 1.
+      const newReserved = level.reserved - reservation.quantity;
+      changes.push({
+        skuId: reservation.skuId,
+        warehouseId: reservation.warehouseId,
+        onHand: level.onHand,
+        reserved: newReserved,
+        available: level.onHand - newReserved,
+        version: level.version + 1,
+      });
+
       return true;
     });
+
+    this.routeStockChanges(db, changes, opts.emitSink);
+    return result;
   }
 
   /**
@@ -381,11 +516,16 @@ export class InventoryService {
   async commitReservation(
     db: Db,
     reservationId: string,
-    opts: { actor?: StockActor } = {},
+    opts: {
+      actor?: StockActor;
+      /** Sink for deferred realtime emits when running inside the caller's tx. */
+      emitSink?: StockUpdatedEvent[];
+    } = {},
   ): Promise<boolean> {
     const actor = opts.actor ?? SYSTEM_ACTOR;
 
-    return this.withTx(db, async (tx) => {
+    const changes: StockUpdatedEvent[] = [];
+    const result = await this.withTx(db, async (tx) => {
       const reservation = await tx.stockReservation.findUnique({
         where: { id: reservationId },
       });
@@ -463,8 +603,22 @@ export class InventoryService {
         newOnHand,
         level.reorderPoint,
       );
+
+      // Post-commit realtime: both onHand and reserved drop by qty; version +1.
+      const newReserved = level.reserved - reservation.quantity;
+      changes.push({
+        skuId: reservation.skuId,
+        warehouseId: reservation.warehouseId,
+        onHand: newOnHand,
+        reserved: newReserved,
+        available: newOnHand - newReserved,
+        version: level.version + 1,
+      });
       return true;
     });
+
+    this.routeStockChanges(db, changes, opts.emitSink);
+    return result;
   }
 
   /**
@@ -481,6 +635,8 @@ export class InventoryService {
       referenceId?: string | null;
       actor?: StockActor;
       note?: string;
+      /** Sink for deferred realtime emits when running inside the caller's tx. */
+      emitSink?: StockUpdatedEvent[];
     } = {},
   ): Promise<void> {
     if (!Number.isInteger(line.qty) || line.qty <= 0) {
@@ -490,6 +646,7 @@ export class InventoryService {
     }
     const actor = opts.actor ?? SYSTEM_ACTOR;
 
+    const changes: StockUpdatedEvent[] = [];
     await this.withTx(db, async (tx) => {
       await this.acquireLocks(tx, [line]);
       const level = await this.lockedLevelOrThrow(
@@ -524,7 +681,20 @@ export class InventoryService {
         actor,
         note: opts.note,
       });
+
+      // Post-commit realtime: onHand +qty; reserved unchanged; version +1.
+      const newOnHand = level.onHand + line.qty;
+      changes.push({
+        skuId: line.skuId,
+        warehouseId: line.warehouseId,
+        onHand: newOnHand,
+        reserved: level.reserved,
+        available: newOnHand - level.reserved,
+        version: level.version + 1,
+      });
     });
+
+    this.routeStockChanges(db, changes, opts.emitSink);
   }
 
   /**
@@ -1133,7 +1303,7 @@ export class InventoryService {
       throw new BadRequestException('quantityDelta must be a non-zero integer');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       await this.acquireLocks(tx, [
         { skuId: dto.skuId, warehouseId: dto.warehouseId, qty: 1 },
       ]);
@@ -1192,8 +1362,23 @@ export class InventoryService {
         warehouseId: dto.warehouseId,
         onHand: newOnHand,
         reserved: level.reserved,
+        version: level.version + 1,
       };
     });
+
+    // adjust always owns its transaction (this.prisma.$transaction), so emit the
+    // committed change directly. version is the post-CAS value (read + 1).
+    this.emitStockUpdated([
+      {
+        skuId: result.skuId,
+        warehouseId: result.warehouseId,
+        onHand: result.onHand,
+        reserved: result.reserved,
+        available: result.onHand - result.reserved,
+        version: result.version,
+      },
+    ]);
+    return result;
   }
 
   /**
@@ -1215,7 +1400,7 @@ export class InventoryService {
       );
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       // BOTH endpoints locked in global order before any mutation.
       await this.acquireLocks(tx, [
         {
@@ -1312,11 +1497,53 @@ export class InventoryService {
       );
       return {
         skuId: dto.skuId,
-        from: { warehouseId: dto.fromWarehouseId, onHand: fromOnHand },
-        to: { warehouseId: dto.toWarehouseId, onHand: toOnHand },
+        from: {
+          warehouseId: dto.fromWarehouseId,
+          onHand: fromOnHand,
+          reserved: fromLevel.reserved,
+          version: fromLevel.version + 1,
+        },
+        to: {
+          warehouseId: dto.toWarehouseId,
+          onHand: toOnHand,
+          reserved: toLevel.reserved,
+          version: toLevel.version + 1,
+        },
         quantity: dto.quantity,
       };
     });
+
+    // transfer owns its transaction; emit BOTH committed endpoint changes (a
+    // transfer moves onHand between two (sku, warehouse) rows, reserved unchanged).
+    // Each endpoint's version is its post-CAS value (read + 1).
+    this.emitStockUpdated([
+      {
+        skuId: result.skuId,
+        warehouseId: result.from.warehouseId,
+        onHand: result.from.onHand,
+        reserved: result.from.reserved,
+        available: result.from.onHand - result.from.reserved,
+        version: result.from.version,
+      },
+      {
+        skuId: result.skuId,
+        warehouseId: result.to.warehouseId,
+        onHand: result.to.onHand,
+        reserved: result.to.reserved,
+        available: result.to.onHand - result.to.reserved,
+        version: result.to.version,
+      },
+    ]);
+
+    return {
+      skuId: result.skuId,
+      from: {
+        warehouseId: result.from.warehouseId,
+        onHand: result.from.onHand,
+      },
+      to: { warehouseId: result.to.warehouseId, onHand: result.to.onHand },
+      quantity: result.quantity,
+    };
   }
 
   // ─────────────────────────────────────────────────────────────
