@@ -1560,7 +1560,7 @@ class ApiClient {
   async adminAdjustStock(data: {
     skuId: string;
     warehouseId: string;
-    delta: number;
+    quantityDelta: number;
     reason?: string;
     [k: string]: any;
   }) {
@@ -1572,7 +1572,7 @@ class ApiClient {
     skuId: string;
     fromWarehouseId: string;
     toWarehouseId: string;
-    qty: number;
+    quantity: number;
     reason?: string;
     [k: string]: any;
   }) {
@@ -1625,7 +1625,7 @@ class ApiClient {
   async adminCreatePurchaseOrder(data: {
     supplierId: string;
     warehouseId: string;
-    lines: Array<{ skuId: string; qty: number; unitCost: number; [k: string]: any }>;
+    lines: Array<{ skuId: string; orderedQty: number; unitCostPaise: number; lotNo?: string; taxBps?: number; [k: string]: any }>;
     [k: string]: any;
   }) {
     return this.request<any>('/admin/store/purchase-orders', { method: 'POST', body: data });
@@ -1642,7 +1642,7 @@ class ApiClient {
 
   /** Receive PO lines into stock (full/partial; audited + idempotent server-side). */
   async adminReceivePurchaseOrder(id: string, data: {
-    lines: Array<{ poLineId: string; qtyReceived: number; [k: string]: any }>;
+    lines: Array<{ lineId: string; receivedQty: number; [k: string]: any }>;
     [k: string]: any;
   }) {
     return this.request<any>(`/admin/store/purchase-orders/${id}/receive`, {

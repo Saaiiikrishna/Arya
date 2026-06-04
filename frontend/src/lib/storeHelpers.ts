@@ -10,6 +10,22 @@
  * now so a single implementation is shared (CODE SMELL fix).
  */
 
+/**
+ * Extract a human-readable message from an unknown thrown value
+ * (ApiError | Error | …), falling back to a caller-supplied default.
+ *
+ * Previously copy-pasted verbatim into the admin store coupons / analytics /
+ * settings pages; consolidated here so the error-surfacing shape is shared
+ * (CODE SMELL fix).
+ */
+export function errMsg(e: unknown, fallback: string): string {
+  if (e && typeof e === 'object' && 'message' in e) {
+    const m = (e as { message?: unknown }).message;
+    if (typeof m === 'string' && m) return m;
+  }
+  return fallback;
+}
+
 /** Pull the first non-empty string field off a permissive item shape. */
 export function str(
   obj: Record<string, unknown> | null | undefined,
