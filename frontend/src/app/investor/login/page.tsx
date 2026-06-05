@@ -19,14 +19,15 @@ export default function InvestorLoginPage() {
     try {
       const data = await api.investorLogin(email, password);
       // investorLogin does NOT auto-store the token (unlike api.login), so set
-      // the in-memory access token ourselves. The refresh token is delivered as
-      // an HttpOnly cookie by the server; we only record the session hint so a
-      // page reload knows to attempt a silent refresh.
+      // the in-memory access token + persist the refresh token ourselves so a
+      // page reload can silently refresh. (The server also sets an HttpOnly
+      // cookie, used once the API is served same-site; the body token is the
+      // reliable cross-domain transport meanwhile.)
       if (data?.accessToken) {
         api.setToken(data.accessToken);
       }
-      if (typeof window !== 'undefined') {
-        sessionStorage.setItem('arya_has_session', '1');
+      if (typeof window !== 'undefined' && data?.refreshToken) {
+        sessionStorage.setItem('arya_refresh', data.refreshToken);
       }
       router.push('/investor');
     } catch (err: any) {

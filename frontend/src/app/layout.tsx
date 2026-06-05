@@ -191,10 +191,10 @@ export default async function RootLayout({
               StoreAuthProvider currently lives at the ROOT so the store customer
               identity is available on every store/article surface without per-route
               wiring. It is independent of the platform AuthProvider (it touches only
-              storeApi / the store session hint), so the nesting order is purely so any
+              storeApi / arya_store_refresh), so the nesting order is purely so any
               future store code may also read useAuth(). Trade-off: it fires one silent
               customer refresh on cold load even on pure platform pages (/admin/*, /) —
-              a no-op when the arya_store_has_session hint is absent. At larger scale this should be
+              a no-op when arya_store_refresh is absent. At larger scale this should be
               hoisted into a store-scoped layout (e.g. app/store/layout.tsx,
               app/articles/layout.tsx) so it never hydrates on non-store pages.
             */}

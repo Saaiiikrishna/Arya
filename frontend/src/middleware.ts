@@ -6,14 +6,13 @@
  * The security review recommended a server-side middleware that reads the admin
  * JWT from an HttpOnly cookie and redirects non-admin requests to /admin/login
  * BEFORE the page renders. That is the right pattern in principle, but this app's
- * auth model stores the access token IN MEMORY and the refresh token in an
- * HttpOnly cookie scoped to the API (`path=/api`, see `src/lib/api.ts` and the
- * backend `refresh-cookie.ts`) — by deliberate XSS-hardening design. That cookie
- * is NOT sent to page routes (wrong path) and is an opaque refresh JWT, so it
- * carries no role claim middleware could gate on: a redirect gate here would
- * either be a no-op or lock every admin out. Role-bearing page-level gating
- * would require a separate, dedicated session cookie — a cross-cutting auth
- * change out of scope for the SEO/metadata layer. The client-side guard in `admin/AdminGuard`
+ * auth model stores the access token IN MEMORY and the refresh token in
+ * `sessionStorage` (`arya_refresh`, sent in the request body to /api/admin/auth/
+ * refresh — see `src/lib/api.ts`). There is NO role-bearing auth cookie for
+ * middleware to read, so a redirect gate here would either be a no-op or lock
+ * every admin out. Role-bearing page-level gating would require a dedicated
+ * session cookie — a cross-cutting auth change out of scope for the SEO/metadata
+ * layer. The client-side guard in `admin/AdminGuard`
  * (defense-in-depth) plus the backend `AdminGuard` on every `/api/admin/*`
  * controller (the real authorization gate) remain in force.
  *

@@ -6,12 +6,16 @@
  * platform admin and a logged-in store customer never collide:
  *
  *   - Customer access token  → in memory only (never localStorage; XSS-readable).
- *   - Customer refresh token  → HttpOnly cookie `arya_store_refresh` (set by the
- *                               server, invisible to JS), rotated on use via
- *                               POST /store/auth/refresh with RFC 9700 family
- *                               reuse detection. Its OWN cookie, independent of
- *                               the platform `arya_refresh`. The client keeps only
- *                               a non-sensitive `arya_store_has_session` hint.
+ *   - Customer refresh token  → sessionStorage `arya_store_refresh`, sent in the
+ *                               body to POST /store/auth/refresh; rotated on use
+ *                               with RFC 9700 family reuse detection (server-side).
+ *                               Body transport is REQUIRED cross-domain (the API
+ *                               is on a different registrable domain than the SPA,
+ *                               so the HttpOnly cookie the server also sets is a
+ *                               third-party cookie browsers block). Independent of
+ *                               the platform `arya_refresh`. Once the API is served
+ *                               same-site (api.aryavartham.com) the cookie carries
+ *                               it and this body token can be retired.
  *   - Guest cart token        → localStorage `arya_cart_token`, sent as the
  *                               `X-Cart-Token` header on cart/checkout calls.
  *   - Guest order token       → NOT persisted globally; the caller holds it (it is
@@ -32,9 +36,11 @@ import { ApiError, api } from '@/lib/api';
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
 // sessionStorage / localStorage keys — kept distinct from the admin client's keys.
-// The refresh token itself is an HttpOnly cookie (not JS-readable); we persist
-// only a non-sensitive boolean hint that a customer session may exist.
-const STORE_SESSION_HINT = 'arya_store_has_session';
+// The customer refresh token is persisted + sent in the body: the API is on a
+// different registrable domain than the SPA, so the HttpOnly refresh cookie is a
+// third-party cookie browsers block. credentials:'include' is still sent so the
+// cookie ALSO works once the API is served same-site (api.aryavartham.com).
+const STORE_REFRESH_KEY = 'arya_store_refresh';
 const CART_TOKEN_KEY = 'arya_cart_token';
 
 /**
@@ -304,7 +310,7 @@ class StoreApiClient {
     this.token = null;
     this.refreshPromise = null;
     if (typeof window !== 'undefined') {
-      sessionStorage.removeItem(STORE_SESSION_HINT);
+      sessionStorage.removeItem(STORE_REFRESH_KEY);
     }
   }
 
@@ -347,30 +353,24 @@ class StoreApiClient {
     if (typeof window === 'undefined') return false;
     if (this.refreshPromise) return this.refreshPromise;
 
-    // The refresh token is an HttpOnly cookie (invisible to JS); only a
-    // non-sensitive hint gates the attempt so we don't refresh for a visitor
-    // who never logged in this tab.
-    if (!sessionStorage.getItem(STORE_SESSION_HINT)) return false;
+    // The customer refresh token is persisted + sent in the body (reliable
+    // cross-domain); credentials:'include' (set in request()) also forwards the
+    // HttpOnly cookie once the API is served same-site.
+    const refreshToken = sessionStorage.getItem(STORE_REFRESH_KEY);
+    if (!refreshToken) return false;
 
     this.refreshPromise = (async () => {
       try {
         const data = await this.request<CustomerAuthResult>('/store/auth/refresh', {
           method: 'POST',
-          // No body token — the HttpOnly cookie carries it (credentials:include).
-          body: {},
+          body: { refreshToken },
           auth: false,
           skipAuthRetry: true,
         });
         this.token = data.accessToken;
-        sessionStorage.setItem(STORE_SESSION_HINT, '1');
+        if (data.refreshToken) sessionStorage.setItem(STORE_REFRESH_KEY, data.refreshToken);
         return true;
-      } catch (err) {
-        // Only a definitive auth failure (401) means the session is truly dead.
-        // A transient error (timeout / 5xx / network) must NOT clear the hint, or
-        // the tab gets stuck logged-out after a blip while the cookie is still valid.
-        if (err instanceof ApiError && err.status === 401) {
-          sessionStorage.removeItem(STORE_SESSION_HINT);
-        }
+      } catch {
         return false;
       } finally {
         this.refreshPromise = null;
@@ -576,16 +576,15 @@ class StoreApiClient {
 
   async logoutCustomer(): Promise<void> {
     if (typeof window !== 'undefined') {
-      // Fire the revocation UNCONDITIONALLY (not gated on the per-tab session
-      // hint): the credential is the HttpOnly cookie, which is shared across all
-      // tabs and outlives sessionStorage — so a tab that never set the hint (or
-      // whose hint was cleared by a transient refresh failure) must still revoke
-      // the server-side family + clear the cookie, or logout wouldn't log you out.
-      // Fire-and-forget (never block local logout on the network); the endpoint is
-      // idempotent, generic-message, and strict-rate-limited, so it is not an oracle.
-      this.request('/store/auth/logout', { method: 'POST', body: {}, auth: false }).catch(
-        () => undefined,
-      );
+      const rt = sessionStorage.getItem(STORE_REFRESH_KEY);
+      if (rt) {
+        // Fire-and-forget revocation — send the token in the body (the reliable
+        // cross-domain credential); credentials:'include' also forwards the cookie
+        // when same-site. The endpoint revokes the whole token family server-side.
+        this.request('/store/auth/logout', { method: 'POST', body: { refreshToken: rt }, auth: false }).catch(
+          () => undefined,
+        );
+      }
     }
     this.clearCustomerToken();
   }
@@ -611,10 +610,11 @@ class StoreApiClient {
 
   private applyAuth(data: CustomerAuthResult): void {
     this.setCustomerToken(data.accessToken);
-    // Refresh token is delivered as an HttpOnly cookie by the server; we only
-    // record the non-sensitive session hint so a reload knows to silently refresh.
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem(STORE_SESSION_HINT, '1');
+    // Persist the refresh token so a silent refresh survives reload + works
+    // cross-domain. The server ALSO sets an HttpOnly cookie (used once the API is
+    // same-site); the body token is the reliable transport meanwhile.
+    if (typeof window !== 'undefined' && data.refreshToken) {
+      sessionStorage.setItem(STORE_REFRESH_KEY, data.refreshToken);
     }
   }
 
