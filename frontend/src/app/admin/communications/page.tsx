@@ -11,6 +11,7 @@
  */
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { Megaphone, MessageCircle, Bell, type LucideIcon } from 'lucide-react';
 import AnnouncementsPage from '../announcements/page';
 import AdminWhatsappPage from '../whatsapp/page';
@@ -31,7 +32,9 @@ export default function CommunicationsPage() {
     <div className="text-ink animate-fade-in min-h-screen">
       <div className="px-4 sm:px-6 lg:px-8 pt-8 sm:pt-12 max-w-[1200px] 3xl:max-w-[1600px] mx-auto">
         <header className="mb-6">
-          <p className="text-sm uppercase tracking-widest text-forest font-medium mb-2">Command Center</p>
+          <Link href="/admin/dashboard" className="text-sm uppercase tracking-widest text-forest font-medium mb-2 inline-block hover:text-saffron-deep transition-colors">
+            ← Command Center
+          </Link>
           <h1 className="font-serif text-3xl sm:text-4xl font-bold leading-none">Communications</h1>
         </header>
 

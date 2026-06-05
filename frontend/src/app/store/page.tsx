@@ -288,75 +288,76 @@ export default function StorePage() {
           </motion.div>
         </section>
 
-        {/* ── Heading + description (sleek, readable — below the search) ──── */}
-        <section className="relative z-10 mx-auto max-w-[1600px] px-4 pt-7 sm:px-6 md:px-8 md:pt-9">
+        {/* ── Heading + description (compact, single-line — below the search) ── */}
+        <section className="relative z-10 mx-auto max-w-[1600px] px-4 pt-6 sm:px-6 md:px-8 md:pt-7">
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
             className="max-w-3xl"
           >
-            <div className="mkt-pill mb-4">
+            <div className="mkt-pill mb-3">
               <ShoppingBag className="h-3.5 w-3.5 text-saffron-deep" />
               <span className="font-sans text-[10px] font-bold uppercase tracking-[0.22em] text-forest/80">
                 The Workshop Store
               </span>
             </div>
-            <h1 className="font-serif-display text-2xl font-bold leading-tight tracking-[-0.02em] text-forest sm:text-3xl md:text-4xl">
-              Kits, components &amp; build-it-yourself projects.
+            <h1 className="font-serif-display text-xl font-bold leading-tight tracking-[-0.02em] text-forest sm:text-2xl md:text-3xl">
+              Kits, components &amp; DIY projects
             </h1>
-            <p className="mt-3 max-w-2xl font-sans text-sm leading-relaxed text-ink/70 sm:text-base">
-              Everything a founder needs to go from idea to working prototype —
-              curated hardware, modular kits, and the parts to build them yourself.
+            <p className="mt-2 font-sans text-sm leading-relaxed text-ink/65">
+              Curated hardware &amp; modular kits — built to make real.
             </p>
           </motion.div>
         </section>
 
-        {/* ── Controls bar (sort + filters, sits above the listing) ──────── */}
+        {/* ── Controls bar (count left · sort + filters right) ───────────── */}
         <section className="relative z-10 mx-auto max-w-[1600px] px-4 pt-6 sm:px-6 md:px-8">
           <div className="flex flex-wrap items-center gap-3">
-            {/* Sort */}
-            <label
-              htmlFor="store-sort"
-              className="hidden font-sans text-[10px] font-semibold uppercase tracking-[0.12em] text-ink/50 md:inline"
-            >
-              Sort
-            </label>
-            <select
-              id="store-sort"
-              value={sort}
-              onChange={(e) => {
-                setSort(e.target.value as SortKey);
-                setPage(1);
-              }}
-              className="mkt-input min-w-0 px-4 py-2.5 text-forest"
-            >
-              {SORT_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-
-            {/* Mobile filter toggle */}
-            {categories.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setFiltersOpen((v) => !v)}
-                aria-expanded={filtersOpen}
-                className="inline-flex shrink-0 items-center gap-2 rounded-full border border-hairline bg-white/70 px-4 py-2.5 font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-forest backdrop-blur transition-colors hover:border-saffron md:hidden"
-              >
-                <SlidersHorizontal className="h-4 w-4" />
-                Filters
-              </button>
-            )}
-
-            {/* Results count */}
+            {/* Results count (left) */}
             {!loading && !error && (
-              <span className="ml-auto font-sans text-[11px] uppercase tracking-[0.1em] text-ink/45">
+              <span className="font-sans text-[11px] uppercase tracking-[0.1em] text-ink/45">
                 {total} {total === 1 ? 'result' : 'results'}
               </span>
             )}
+
+            {/* Sort + filters (right) */}
+            <div className="ml-auto flex items-center gap-3">
+              <label
+                htmlFor="store-sort"
+                className="hidden font-sans text-[10px] font-semibold uppercase tracking-[0.12em] text-ink/50 md:inline"
+              >
+                Sort
+              </label>
+              <select
+                id="store-sort"
+                value={sort}
+                onChange={(e) => {
+                  setSort(e.target.value as SortKey);
+                  setPage(1);
+                }}
+                className="mkt-input min-w-0 px-4 py-2.5 text-forest"
+              >
+                {SORT_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+
+              {/* Mobile filter toggle */}
+              {categories.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setFiltersOpen((v) => !v)}
+                  aria-expanded={filtersOpen}
+                  className="inline-flex shrink-0 items-center gap-2 rounded-full border border-hairline bg-white/70 px-4 py-2.5 font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-forest backdrop-blur transition-colors hover:border-saffron md:hidden"
+                >
+                  <SlidersHorizontal className="h-4 w-4" />
+                  Filters
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Category rail */}

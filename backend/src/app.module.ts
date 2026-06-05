@@ -138,20 +138,40 @@ function validateEnv(config: Record<string, unknown>): Record<string, unknown> {
     // adapter (documented follow-up); listeners are wildcard-enabled.
     EventEmitterModule.forRoot({ wildcard: true, delimiter: '.' }),
 
-    // Rate limiting: multi-tier configuration
-    ThrottlerModule.forRoot([{
-      name: 'short', // 6 requests per min (useful for OTPs, strict APIs)
-      ttl: 60000,
-      limit: 6,
-    }, {
-      name: 'medium', // 100 requests per min (standard endpoints)
-      ttl: 60000,
-      limit: 100,
-    }, {
-      name: 'long', // 1000 requests per hour
-      ttl: 3600000,
-      limit: 1000,
-    }]),
+    // Rate limiting: multi-tier configuration.
+    //
+    // CRITICAL: EVERY tier here applies to EVERY route globally (via the APP_GUARD
+    // ThrottlerGuard), so the effective per-route cap is the MOST restrictive tier.
+    // These are the GENEROUS DEFAULTS for normal authenticated browsing (a single
+    // admin page load fires several API calls). Sensitive endpoints (login, OTP,
+    // refresh, webhooks) tighten the `short` tier per-route via `@Throttle({ short:
+    // { limit, ttl } })`, which supplies its own limit+ttl and overrides the
+    // generous default below. Do NOT lower these global defaults to a "strict"
+    // value — that throttles ordinary browsing and (with shared infra IPs) locks
+    // users out. Per-client keying relies on `app.set('trust proxy', 1)` in main.ts.
+    ThrottlerModule.forRoot({
+      throttlers: [{
+        name: 'short', // burst guard: 50 req/sec (strict routes override to e.g. 5/min)
+        ttl: 1000,
+        limit: 50,
+      }, {
+        name: 'medium', // 500 requests per minute (sustained browsing)
+        ttl: 60000,
+        limit: 500,
+      }, {
+        name: 'long', // 10000 requests per hour
+        ttl: 3600000,
+        limit: 10000,
+      }],
+      // Key buckets on the trust-proxy-resolved client IP (req.ip), NOT the
+      // default tracker's leftmost X-Forwarded-For entry (client-spoofable).
+      // Requires `app.set('trust proxy', 1)` (main.ts) to resolve req.ip to the
+      // real client behind the Azure ingress.
+      getTracker: (req: Record<string, any>): string =>
+        (req?.ip as string) ||
+        (Array.isArray(req?.ips) && req.ips.length ? (req.ips[0] as string) : '') ||
+        'unknown',
+    }),
 
     // Redis / BullMQ
     BullModule.forRootAsync({

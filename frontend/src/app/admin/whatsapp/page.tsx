@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import clsx from 'clsx';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -131,6 +132,9 @@ export default function AdminWhatsappPage({ embedded = false }: { embedded?: boo
       <div className="space-y-8">
         {!embedded && (
           <div>
+            <Link href="/admin/dashboard" className="text-sm uppercase tracking-widest text-forest font-medium mb-2 inline-block hover:text-saffron-deep transition-colors">
+              ← Command Center
+            </Link>
             <h1 className="text-4xl font-serif font-black">WhatsApp</h1>
             <p className="text-ink/50 text-sm uppercase tracking-widest mt-1">Meta Business API — WABA</p>
           </div>
