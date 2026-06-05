@@ -55,8 +55,13 @@ class ApiClient {
         this.token = data.accessToken;
         sessionStorage.setItem('arya_has_session', '1');
         return true;
-      } catch {
-        sessionStorage.removeItem('arya_has_session');
+      } catch (err) {
+        // Only a definitive auth failure (401) means the session is truly dead.
+        // A transient error (timeout / 5xx / network) must NOT clear the hint, or
+        // the tab gets stuck logged-out after a blip while the cookie is still valid.
+        if (err instanceof ApiError && err.status === 401) {
+          sessionStorage.removeItem('arya_has_session');
+        }
         return false;
       } finally {
         this.refreshPromise = null;

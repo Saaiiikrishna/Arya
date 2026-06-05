@@ -364,8 +364,13 @@ class StoreApiClient {
         this.token = data.accessToken;
         sessionStorage.setItem(STORE_SESSION_HINT, '1');
         return true;
-      } catch {
-        sessionStorage.removeItem(STORE_SESSION_HINT);
+      } catch (err) {
+        // Only a definitive auth failure (401) means the session is truly dead.
+        // A transient error (timeout / 5xx / network) must NOT clear the hint, or
+        // the tab gets stuck logged-out after a blip while the cookie is still valid.
+        if (err instanceof ApiError && err.status === 401) {
+          sessionStorage.removeItem(STORE_SESSION_HINT);
+        }
         return false;
       } finally {
         this.refreshPromise = null;
