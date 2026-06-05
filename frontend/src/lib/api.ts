@@ -172,11 +172,13 @@ class ApiClient {
 
   logout() {
     if (typeof window !== 'undefined') {
-      // Fire-and-forget revocation — the HttpOnly cookie carries the token
-      // (credentials:include) and the server clears it. Don't block on network.
-      if (sessionStorage.getItem('arya_has_session')) {
-        this.request('/admin/auth/logout', { method: 'POST', body: {} }).catch(() => {});
-      }
+      // Fire the revocation UNCONDITIONALLY (not gated on the per-tab session
+      // hint): the credential is the HttpOnly cookie, shared across tabs and
+      // longer-lived than sessionStorage, so a tab that never set the hint (or
+      // whose hint was cleared by a transient refresh failure) must still revoke
+      // the server-side family + clear the cookie. Fire-and-forget; the endpoint
+      // is idempotent, generic, and rate-limited, so it is not an oracle.
+      this.request('/admin/auth/logout', { method: 'POST', body: {} }).catch(() => {});
       sessionStorage.removeItem('arya_has_session');
       sessionStorage.removeItem('arya_profile'); // clear cached user/role too
       localStorage.removeItem('arya_admin'); // legacy key cleanup

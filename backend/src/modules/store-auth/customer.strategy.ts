@@ -18,6 +18,7 @@ export interface CustomerJwtPayload {
   email?: string | null;
   role: 'CUSTOMER';
   tokenId?: string;
+  jti?: string; // Unique per-token id — makes every refresh token distinct
 }
 
 /**
