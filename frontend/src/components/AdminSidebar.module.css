@@ -29,6 +29,27 @@
   overflow-y: auto;
 }
 
+/* A labelled group of nav items (e.g. Platform / Store). */
+.navSection {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.navSection + .navSection {
+  margin-top: 18px;
+}
+
+/* Small uppercase group heading above each section's items. */
+.navSectionHeading {
+  padding: 0 12px 6px;
+  font-family: var(--font-sans);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(19, 48, 34, 0.45);
+}
+
 .navItem {
   position: relative;
   display: flex;

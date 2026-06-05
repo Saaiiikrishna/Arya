@@ -254,93 +254,109 @@ export default function StorePage() {
           style={{ background: 'radial-gradient(circle, rgba(19,48,34,0.10), transparent 65%)' }}
         />
 
-        {/* ── Hero strip ───────────────────────────────────── */}
-        <section className="relative z-10 mx-auto max-w-[1600px] px-4 pt-14 pb-10 sm:px-6 md:px-8 md:pt-20">
+        {/* ── Search (Amazon-style: the search bar comes first) ─────────────
+            Icon + input + clear are flex SIBLINGS (not an icon absolutely
+            positioned over the input), so the hint text can never sit under the
+            icon. The input is plain (no `.mkt-input` padding shorthand) inside a
+            hairline bar, keeping it on-brand (0px, matte, hairline). */}
+        <section className="relative z-10 mx-auto max-w-[1600px] px-4 pt-8 sm:px-6 md:px-8 md:pt-12">
           <motion.div
-            initial={{ opacity: 0, y: 24 }}
+            initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+            className="flex items-center gap-3 border border-hairline bg-alabaster px-4 py-3.5 transition-colors focus-within:border-saffron"
+          >
+            <Search className="h-5 w-5 shrink-0 text-ink/40" aria-hidden />
+            <input
+              type="search"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Search kits, components & brands by name…"
+              aria-label="Search the catalog"
+              className="w-full border-0 bg-transparent p-0 font-sans text-sm text-forest outline-none placeholder:text-ink/45 sm:text-base"
+            />
+            {searchInput && (
+              <button
+                type="button"
+                onClick={() => setSearchInput('')}
+                aria-label="Clear search"
+                className="shrink-0 text-ink/40 transition-colors hover:text-terracotta"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </motion.div>
+        </section>
+
+        {/* ── Heading + description (sleek, readable — below the search) ──── */}
+        <section className="relative z-10 mx-auto max-w-[1600px] px-4 pt-7 sm:px-6 md:px-8 md:pt-9">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
             className="max-w-3xl"
           >
-            <div className="mkt-pill mb-6">
+            <div className="mkt-pill mb-4">
               <ShoppingBag className="h-3.5 w-3.5 text-saffron-deep" />
               <span className="font-sans text-[10px] font-bold uppercase tracking-[0.22em] text-forest/80">
                 The Workshop Store
               </span>
             </div>
-            <h1 className="font-serif-display text-4xl font-bold leading-[0.95] tracking-[-0.025em] text-forest sm:text-5xl md:text-6xl 3xl:text-7xl">
+            <h1 className="font-serif-display text-2xl font-bold leading-tight tracking-[-0.02em] text-forest sm:text-3xl md:text-4xl">
               Kits, components &amp; build-it-yourself projects.
             </h1>
-            <p className="mt-5 max-w-2xl font-sans text-base leading-relaxed text-ink/70 sm:mt-6 sm:text-lg">
+            <p className="mt-3 max-w-2xl font-sans text-sm leading-relaxed text-ink/70 sm:text-base">
               Everything a founder needs to go from idea to working prototype —
               curated hardware, modular kits, and the parts to build them yourself.
             </p>
           </motion.div>
         </section>
 
-        {/* ── Controls bar ─────────────────────────────────── */}
-        <section className="relative z-10 mx-auto max-w-[1600px] px-4 sm:px-6 md:px-8">
-          <div className="mkt-card flex flex-col gap-4 p-4 md:flex-row md:items-center md:gap-3 md:p-5">
-            {/* Search */}
-            <div className="relative flex-1">
-              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/40" />
-              <input
-                type="search"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Search kits, components, brands…"
-                aria-label="Search the catalog"
-                className="mkt-input w-full py-3 pl-11 pr-10 text-forest"
-              />
-              {searchInput && (
-                <button
-                  type="button"
-                  onClick={() => setSearchInput('')}
-                  aria-label="Clear search"
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-ink/40 transition-colors hover:text-terracotta"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-
+        {/* ── Controls bar (sort + filters, sits above the listing) ──────── */}
+        <section className="relative z-10 mx-auto max-w-[1600px] px-4 pt-6 sm:px-6 md:px-8">
+          <div className="flex flex-wrap items-center gap-3">
             {/* Sort */}
-            <div className="flex items-center gap-2 sm:gap-3">
-              <label
-                htmlFor="store-sort"
-                className="hidden font-sans text-[10px] font-semibold uppercase tracking-[0.12em] text-ink/50 md:inline"
-              >
-                Sort
-              </label>
-              <select
-                id="store-sort"
-                value={sort}
-                onChange={(e) => {
-                  setSort(e.target.value as SortKey);
-                  setPage(1);
-                }}
-                className="mkt-input min-w-0 flex-1 px-4 py-3 text-forest md:flex-none"
-              >
-                {SORT_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+            <label
+              htmlFor="store-sort"
+              className="hidden font-sans text-[10px] font-semibold uppercase tracking-[0.12em] text-ink/50 md:inline"
+            >
+              Sort
+            </label>
+            <select
+              id="store-sort"
+              value={sort}
+              onChange={(e) => {
+                setSort(e.target.value as SortKey);
+                setPage(1);
+              }}
+              className="mkt-input min-w-0 px-4 py-2.5 text-forest"
+            >
+              {SORT_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
 
-              {/* Mobile filter toggle */}
-              {categories.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setFiltersOpen((v) => !v)}
-                  aria-expanded={filtersOpen}
-                  className="inline-flex shrink-0 items-center gap-2 rounded-full border border-hairline bg-white/70 px-4 py-3 font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-forest backdrop-blur transition-colors hover:border-saffron md:hidden"
-                >
-                  <SlidersHorizontal className="h-4 w-4" />
-                  Filters
-                </button>
-              )}
-            </div>
+            {/* Mobile filter toggle */}
+            {categories.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setFiltersOpen((v) => !v)}
+                aria-expanded={filtersOpen}
+                className="inline-flex shrink-0 items-center gap-2 rounded-full border border-hairline bg-white/70 px-4 py-2.5 font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-forest backdrop-blur transition-colors hover:border-saffron md:hidden"
+              >
+                <SlidersHorizontal className="h-4 w-4" />
+                Filters
+              </button>
+            )}
+
+            {/* Results count */}
+            {!loading && !error && (
+              <span className="ml-auto font-sans text-[11px] uppercase tracking-[0.1em] text-ink/45">
+                {total} {total === 1 ? 'result' : 'results'}
+              </span>
+            )}
           </div>
 
           {/* Category rail */}
@@ -382,36 +398,34 @@ export default function StorePage() {
             </div>
           )}
 
-          {/* Active filter summary */}
-          <div className="mt-5 flex flex-wrap items-center gap-3">
-            {!loading && !error && (
-              <span className="font-sans text-[11px] uppercase tracking-[0.1em] text-ink/45">
-                {total} {total === 1 ? 'result' : 'results'}
-              </span>
-            )}
-            {tag && (
-              <button
-                type="button"
-                onClick={() => {
-                  setTag('');
-                  setPage(1);
-                }}
-                className="inline-flex items-center gap-1.5 rounded-full bg-saffron-glow/30 px-3 py-1 font-sans text-[10px] font-semibold uppercase tracking-[0.06em] text-saffron-deep transition-colors hover:bg-saffron-glow/50"
-              >
-                #{tag}
-                <X className="h-3 w-3" />
-              </button>
-            )}
-            {hasActiveFilters && (
-              <button
-                type="button"
-                onClick={clearAll}
-                className="font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-terracotta transition-colors hover:text-terracotta-warm"
-              >
-                Clear all
-              </button>
-            )}
-          </div>
+          {/* Active filter summary (tag + clear-all; result count lives in the
+              controls row above) */}
+          {(tag || hasActiveFilters) && (
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              {tag && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTag('');
+                    setPage(1);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-saffron-glow/30 px-3 py-1 font-sans text-[10px] font-semibold uppercase tracking-[0.06em] text-saffron-deep transition-colors hover:bg-saffron-glow/50"
+                >
+                  #{tag}
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={clearAll}
+                  className="font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-terracotta transition-colors hover:text-terracotta-warm"
+                >
+                  Clear all
+                </button>
+              )}
+            </div>
+          )}
         </section>
 
         {/* ── Product grid ─────────────────────────────────── */}

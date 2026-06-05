@@ -697,8 +697,9 @@ export class ApplicantService {
     search?: string;
     status?: ApplicantStatus;
     batchId?: string;
+    submission?: 'submitted' | 'draft' | 'all';
   }) {
-    const { page = 1, search, status, batchId } = params;
+    const { page = 1, search, status, batchId, submission = 'submitted' } = params;
     // Cap the client-supplied page size so a hostile/large `limit` can't force an
     // unbounded Prisma `take` and exhaust the DB/server.
     const MAX_LIMIT = 100;
@@ -716,12 +717,16 @@ export class ApplicantService {
       ];
     }
 
-    // Filter to only include applicants who have successfully completed a payment
-    where.payments = {
-      some: {
-        status: 'CAPTURED'
-      }
-    };
+    // Submission gating, by whether the application fee has been CAPTURED:
+    //   - 'submitted' (default): paid → a completed application (legacy behaviour).
+    //   - 'draft': started but NOT paid → previously invisible to admins.
+    //   - 'all': both.
+    // Captured payment = the applicant actually submitted (paid the fee).
+    if (submission === 'submitted') {
+      where.payments = { some: { status: 'CAPTURED' } };
+    } else if (submission === 'draft') {
+      where.payments = { none: { status: 'CAPTURED' } };
+    }
 
     const [applicants, total] = await Promise.all([
       this.prisma.applicant.findMany({
@@ -733,6 +738,9 @@ export class ApplicantService {
           batch: { select: { batchNumber: true, status: true } },
           team: { select: { id: true, name: true } },
           matchingProfile: { select: { skills: true, commitmentLevel: true, hoursPerDay: true, hasIdea: true, ideaCategory: true, ideaSummary: true } },
+          // Lightweight progress signal for the Drafts tab (how far an unpaid
+          // applicant got) without pulling full answer rows.
+          _count: { select: { answers: true, documents: true } },
         },
       }),
       this.prisma.applicant.count({ where }),

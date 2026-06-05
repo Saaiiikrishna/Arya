@@ -341,6 +341,7 @@ export default function Layout({ children, activeTab = 'manifesto', onTabChange,
             <div className="flex gap-8">
                <a href="/privacy" className="text-ink/40 font-sans text-[10px] uppercase tracking-widest hover:text-forest transition-colors">Privacy Policy</a>
                <a href="/terms" className="text-ink/40 font-sans text-[10px] uppercase tracking-widest hover:text-forest transition-colors">Terms of Service</a>
+               <a href="/sitemap.xml" className="text-ink/40 font-sans text-[10px] uppercase tracking-widest hover:text-forest transition-colors">Sitemap</a>
             </div>
             <div className="flex flex-col items-center md:items-end gap-1 text-center md:text-right">
               <span className="text-ink/40 font-sans text-[10px] uppercase tracking-widest">

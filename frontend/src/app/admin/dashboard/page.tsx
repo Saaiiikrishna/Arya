@@ -10,6 +10,7 @@ import {
   BookOpen, BarChart2, Megaphone, Settings,
   AlertCircle, CheckCircle2, UserPlus, Scale, Calendar, Bell, MessageCircle,
   Briefcase, Heart, GraduationCap, Zap, Film, Trophy,
+  Inbox, ShoppingBag, Boxes, ShoppingCart, Newspaper, Ticket, Undo2, Receipt, Star, Store,
 } from 'lucide-react';
 
 interface Stats {
@@ -158,12 +159,19 @@ export default function DashboardPage() {
                 </div>
                 <span className="text-[10px] uppercase tracking-widest text-ink/60 leading-relaxed mt-auto">Inspect network cohorts</span>
               </Link>
+              <Link href="/admin/applications" className="border border-hairline p-5 bg-white hover:border-forest transition-all group flex flex-col border-l-4 border-l-forest/30">
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="group-hover:scale-110 transition-transform text-ink/40 group-hover:text-forest"><Inbox size={22} strokeWidth={1.5} /></span>
+                  <span className="font-serif text-lg font-bold group-hover:text-forest transition-colors">Applications</span>
+                </div>
+                <span className="text-[10px] uppercase tracking-widest text-ink/60 leading-relaxed mt-auto">Submitted &amp; draft applications</span>
+              </Link>
               <Link href="/admin/users" className="border border-hairline p-5 bg-white hover:border-forest transition-all group flex flex-col">
                 <div className="flex items-center gap-3 mb-3">
                   <span className="group-hover:scale-110 transition-transform text-ink/40 group-hover:text-forest"><Users size={22} strokeWidth={1.5} /></span>
                   <span className="font-serif text-lg font-bold group-hover:text-forest transition-colors">Roster</span>
                 </div>
-                <span className="text-[10px] uppercase tracking-widest text-ink/60 leading-relaxed mt-auto">Review accepted talent</span>
+                <span className="text-[10px] uppercase tracking-widest text-ink/60 leading-relaxed mt-auto">Accepted talent &amp; documents</span>
               </Link>
               <Link href="/admin/eligibility" className="border border-hairline p-5 bg-white hover:border-forest transition-all group flex flex-col">
                 <div className="flex items-center gap-3 mb-3">
@@ -207,26 +215,12 @@ export default function DashboardPage() {
                 </div>
                 <span className="text-[10px] uppercase tracking-widest text-ink/60 leading-relaxed mt-auto">Slots, bookings & video scoring</span>
               </Link>
-              <Link href="/admin/announcements" className="border border-hairline p-5 bg-white hover:border-forest transition-all group flex flex-col">
+              <Link href="/admin/communications" className="border border-hairline p-5 bg-white hover:border-forest transition-all group flex flex-col">
                 <div className="flex items-center gap-3 mb-3">
                   <span className="group-hover:scale-110 transition-transform text-ink/40 group-hover:text-forest"><Megaphone size={22} strokeWidth={1.5} /></span>
-                  <span className="font-serif text-lg font-bold group-hover:text-forest transition-colors">Dispatches</span>
+                  <span className="font-serif text-lg font-bold group-hover:text-forest transition-colors">Communications</span>
                 </div>
-                <span className="text-[10px] uppercase tracking-widest text-ink/60 leading-relaxed mt-auto">Global announcements broadcast</span>
-              </Link>
-              <Link href="/admin/whatsapp" className="border border-hairline p-5 bg-white hover:border-forest transition-all group flex flex-col">
-                <div className="flex items-center gap-3 mb-3">
-                  <span className="group-hover:scale-110 transition-transform text-ink/40 group-hover:text-forest"><MessageCircle size={22} strokeWidth={1.5} /></span>
-                  <span className="font-serif text-lg font-bold group-hover:text-forest transition-colors">WhatsApp</span>
-                </div>
-                <span className="text-[10px] uppercase tracking-widest text-ink/60 leading-relaxed mt-auto">Template console & direct sends</span>
-              </Link>
-              <Link href="/admin/notifications" className="border border-hairline p-5 bg-white hover:border-forest transition-all group flex flex-col">
-                <div className="flex items-center gap-3 mb-3">
-                  <span className="group-hover:scale-110 transition-transform text-ink/40 group-hover:text-forest"><Bell size={22} strokeWidth={1.5} /></span>
-                  <span className="font-serif text-lg font-bold group-hover:text-forest transition-colors">Notification Log</span>
-                </div>
-                <span className="text-[10px] uppercase tracking-widest text-ink/60 leading-relaxed mt-auto">Email &amp; WhatsApp delivery audit</span>
+                <span className="text-[10px] uppercase tracking-widest text-ink/60 leading-relaxed mt-auto">Announcements, WhatsApp &amp; delivery log</span>
               </Link>
               <Link href="/admin/investors" className="border border-hairline p-5 bg-white hover:border-forest transition-all group flex flex-col">
                 <div className="flex items-center gap-3 mb-3">
@@ -284,6 +278,35 @@ export default function DashboardPage() {
                 </div>
                 <span className="text-[10px] uppercase tracking-widest text-ink/60 leading-relaxed mt-auto">Global preferences, settings & visitor analytics</span>
               </Link>
+            </div>
+          </section>
+
+          {/* Commerce & Storefront Grid */}
+          <section className="mt-12">
+            <h2 className="font-serif text-2xl font-bold mb-6 flex items-center gap-3">
+              Commerce &amp; Storefront
+            </h2>
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+              {[
+                { href: '/admin/store/products', label: 'Products', Icon: ShoppingBag, desc: 'Create & list products' },
+                { href: '/admin/store/articles', label: 'Articles', Icon: Newspaper, desc: 'Review, approve & reject submissions' },
+                { href: '/admin/store/orders', label: 'Orders', Icon: ShoppingCart, desc: 'Orders, payments & fulfilment' },
+                { href: '/admin/store/inventory', label: 'Inventory', Icon: Boxes, desc: 'Multi-warehouse stock levels' },
+                { href: '/admin/store/purchasing', label: 'Purchasing', Icon: Receipt, desc: 'Suppliers & purchase orders' },
+                { href: '/admin/store/returns', label: 'Returns', Icon: Undo2, desc: 'RMAs & refunds' },
+                { href: '/admin/store/coupons', label: 'Coupons', Icon: Ticket, desc: 'Discounts & promo codes' },
+                { href: '/admin/store/reviews', label: 'Reviews', Icon: Star, desc: 'Moderate product reviews' },
+                { href: '/admin/store/analytics', label: 'Store Analytics', Icon: BarChart2, desc: 'Sales & catalog telemetry' },
+                { href: '/admin/store/settings', label: 'Store Settings', Icon: Store, desc: 'GSTIN, courier & CTA config' },
+              ].map(({ href, label, Icon, desc }) => (
+                <Link key={href} href={href} className="border border-hairline p-5 bg-white hover:border-forest transition-all group flex flex-col">
+                  <div className="flex items-center gap-3 mb-3">
+                    <span className="group-hover:scale-110 transition-transform text-ink/40 group-hover:text-forest"><Icon size={22} strokeWidth={1.5} /></span>
+                    <span className="font-serif text-lg font-bold group-hover:text-forest transition-colors">{label}</span>
+                  </div>
+                  <span className="text-[10px] uppercase tracking-widest text-ink/60 leading-relaxed mt-auto">{desc}</span>
+                </Link>
+              ))}
             </div>
           </section>
         </div>
