@@ -55,8 +55,13 @@ class ApiClient {
         this.token = data.accessToken;
         sessionStorage.setItem('arya_has_session', '1');
         return true;
-      } catch {
-        sessionStorage.removeItem('arya_has_session');
+      } catch (err) {
+        // Only a definitive auth failure (401) means the session is truly dead.
+        // A transient error (timeout / 5xx / network) must NOT clear the hint, or
+        // the tab gets stuck logged-out after a blip while the cookie is still valid.
+        if (err instanceof ApiError && err.status === 401) {
+          sessionStorage.removeItem('arya_has_session');
+        }
         return false;
       } finally {
         this.refreshPromise = null;
@@ -172,11 +177,13 @@ class ApiClient {
 
   logout() {
     if (typeof window !== 'undefined') {
-      // Fire-and-forget revocation — the HttpOnly cookie carries the token
-      // (credentials:include) and the server clears it. Don't block on network.
-      if (sessionStorage.getItem('arya_has_session')) {
-        this.request('/admin/auth/logout', { method: 'POST', body: {} }).catch(() => {});
-      }
+      // Fire the revocation UNCONDITIONALLY (not gated on the per-tab session
+      // hint): the credential is the HttpOnly cookie, shared across tabs and
+      // longer-lived than sessionStorage, so a tab that never set the hint (or
+      // whose hint was cleared by a transient refresh failure) must still revoke
+      // the server-side family + clear the cookie. Fire-and-forget; the endpoint
+      // is idempotent, generic, and rate-limited, so it is not an oracle.
+      this.request('/admin/auth/logout', { method: 'POST', body: {} }).catch(() => {});
       sessionStorage.removeItem('arya_has_session');
       sessionStorage.removeItem('arya_profile'); // clear cached user/role too
       localStorage.removeItem('arya_admin'); // legacy key cleanup

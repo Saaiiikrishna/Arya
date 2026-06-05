@@ -64,6 +64,15 @@ const DISCORD_WEBHOOK_CACHE_TTL_MS = 5 * 60_000;
 export class StoreAuthService implements OnModuleDestroy {
   private readonly logger = new Logger(StoreAuthService.name);
   private readonly redis: Redis;
+
+  /**
+   * Grace window (ms) during which presenting an already-rotated refresh token is
+   * treated as a benign concurrent/retried refresh rather than a replay — keeps
+   * multi-tab / cold-start double-refreshes from spuriously revoking the family,
+   * while a genuine stolen-token replay (well after rotation) still trips reuse
+   * detection. Mirrors AuthService.REFRESH_REUSE_LEEWAY_MS.
+   */
+  private static readonly REFRESH_REUSE_LEEWAY_MS = 10_000;
   // In-process TTL cache for the Discord article webhook URL so a high-volume
   // publish stream does not hit the SiteSettings table on every announcement.
   // Holds the resolved value (string) OR an explicit null (disabled) so a
@@ -136,13 +145,20 @@ export class StoreAuthService implements OnModuleDestroy {
   }
 
   private signRefreshToken(payload: CustomerJwtPayload): string {
-    return this.jwtService.sign(payload, {
-      secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
-      expiresIn: this.configService.get<string>(
-        'JWT_REFRESH_EXPIRATION',
-        '7d',
-      ) as any,
-    });
+    // Unique jti per token → every refresh token is distinct even when two are
+    // signed in the same second with an identical payload. Required now that
+    // rotated tokens are RETAINED (revoked) for reuse detection and `token` is
+    // @unique (a same-second re-sign would otherwise collide on insert).
+    return this.jwtService.sign(
+      { ...payload, jti: randomUUID() },
+      {
+        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+        expiresIn: this.configService.get<string>(
+          'JWT_REFRESH_EXPIRATION',
+          '7d',
+        ) as any,
+      },
+    );
   }
 
   private parseExpirationMs(expStr: string): number {
@@ -813,10 +829,30 @@ export class StoreAuthService implements OnModuleDestroy {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
+    // RFC 9700 reuse detection (mirrors AuthService.refreshToken):
+    //  - not found            → unknown/forged/pruned token → reject.
+    //  - found, already revoked → a rotated token is being replayed: past the
+    //      leeway window the chain is compromised → revoke the WHOLE family and
+    //      reject; within the window it's a benign concurrent refresh.
+    //  - found, live, unexpired → legitimate → rotate within the family below.
     const stored = await this.prisma.refreshToken.findUnique({
       where: { token: this.hashToken(rawToken) },
     });
-    if (!stored || stored.revokedAt || stored.expiresAt < new Date()) {
+    if (!stored) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+    if (stored.revokedAt) {
+      const revokedAgoMs = Date.now() - stored.revokedAt.getTime();
+      if (revokedAgoMs > StoreAuthService.REFRESH_REUSE_LEEWAY_MS) {
+        await this.revokeFamily(stored.familyId);
+        this.logger.warn(
+          `Customer refresh token reuse detected for ${stored.userId}; revoked family ${stored.familyId}`,
+        );
+        throw new UnauthorizedException('Refresh token reuse detected. Please sign in again.');
+      }
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+    if (stored.expiresAt < new Date()) {
       throw new UnauthorizedException('Refresh token revoked or expired');
     }
 
@@ -843,7 +879,11 @@ export class StoreAuthService implements OnModuleDestroy {
       throw new UnauthorizedException('Customer not found or inactive');
     }
 
-    // Rotate atomically: delete the consumed token, mint + store a new one.
+    // Rotate atomically within the same family. The old token is REVOKED (not
+    // deleted) so a later replay of it is detectable as reuse. The CAS guard
+    // (revokedAt: null) makes revoke-then-issue race-safe: if a concurrent
+    // refresh already consumed this token, our updateMany matches 0 rows and we
+    // abort instead of minting a second live sibling.
     const newPayload: CustomerJwtPayload = {
       sub: customer.id,
       email: customer.email,
@@ -856,17 +896,27 @@ export class StoreAuthService implements OnModuleDestroy {
     );
     const expiresAt = new Date(Date.now() + this.parseExpirationMs(expStr));
 
-    await this.prisma.$transaction([
-      this.prisma.refreshToken.delete({ where: { id: stored.id } }),
-      this.prisma.refreshToken.create({
+    const rotated = await this.prisma.$transaction(async (tx) => {
+      const res = await tx.refreshToken.updateMany({
+        where: { id: stored.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      if (res.count !== 1) return false; // lost the rotation race
+      await tx.refreshToken.create({
         data: {
           userId: customer.id,
           familyId: stored.familyId, // keep the rotation family across the chain
           token: this.hashToken(newRefresh),
           expiresAt,
         },
-      }),
-    ]);
+      });
+      return true;
+    });
+    if (!rotated) {
+      // A concurrent refresh consumed this exact token first → benign race,
+      // family intact (a genuine replay would arrive past the leeway window).
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
 
     return {
       accessToken: this.signAccessToken(newPayload),
@@ -874,13 +924,32 @@ export class StoreAuthService implements OnModuleDestroy {
     };
   }
 
+  /** Revoke every still-live token in a rotation family (reuse/logout). */
+  private async revokeFamily(familyId: string): Promise<void> {
+    await this.prisma.refreshToken.updateMany({
+      where: { familyId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  }
+
   // ─── Logout ──────────────────────────────────────────────
 
   async logout(rawToken: string) {
-    await this.prisma.refreshToken.updateMany({
+    // Revoke the whole family so logout kills every rotated sibling, not just the
+    // token presented. Falls back to a by-hash revoke if the token isn't on
+    // record (already pruned / never stored).
+    const stored = await this.prisma.refreshToken.findUnique({
       where: { token: this.hashToken(rawToken) },
-      data: { revokedAt: new Date() },
+      select: { familyId: true },
     });
+    if (stored) {
+      await this.revokeFamily(stored.familyId);
+    } else {
+      await this.prisma.refreshToken.updateMany({
+        where: { token: this.hashToken(rawToken) },
+        data: { revokedAt: new Date() },
+      });
+    }
     // Idempotent: succeeds whether or not the token existed, to avoid acting as
     // a presence oracle. Abuse is bounded by the route's strict rate limit.
     return { success: true };

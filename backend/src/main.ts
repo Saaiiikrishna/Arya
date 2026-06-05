@@ -9,6 +9,7 @@ import { AppModule } from './app.module';
 import { PrismaService } from './prisma';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
 import { RedisIoAdapter } from './redis-io.adapter';
+import { allowedOrigins } from './modules/auth/refresh-cookie';
 
 async function autoSeed(app: any) {
   const logger = new Logger('AutoSeed');
@@ -158,17 +159,10 @@ async function bootstrap() {
     }),
   );
 
-  // CORS
-  const frontendUrl = configService.get<string>('FRONTEND_URL', 'http://localhost:3000');
-  const allowedOrigins = [
-    frontendUrl,
-    'http://localhost:3000',
-    'http://localhost:3005',
-    'https://aryavartham.com',
-    'https://www.aryavartham.com',
-  ];
+  // CORS — same allow-list the cookie CSRF check (assertTrustedOrigin) uses, so a
+  // legit origin can never pass one and fail the other.
   app.enableCors({
-    origin: allowedOrigins,
+    origin: allowedOrigins(configService),
     credentials: true,
   });
 

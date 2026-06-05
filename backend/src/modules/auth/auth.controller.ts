@@ -16,7 +16,12 @@ import { AuthService } from './auth.service';
 import { LoginDto, CreateAdminDto } from './dto';
 import { JwtAuthGuard, AdminGuard, RolesGuard } from './guards';
 import { Roles } from './guards/roles.decorator';
-import { setRefreshCookie, clearRefreshCookie, readRefreshToken } from './refresh-cookie';
+import {
+  setRefreshCookie,
+  clearRefreshCookie,
+  readRefreshToken,
+  assertTrustedOrigin,
+} from './refresh-cookie';
 
 @Controller('api/admin/auth')
 @UseGuards(ThrottlerGuard)
@@ -52,6 +57,8 @@ export class AuthController {
     @Body('refreshToken') bodyToken: string,
     @Res({ passthrough: true }) res: Response,
   ) {
+    // CSRF: the cookie is SameSite=None, so reject forged cross-site rotations.
+    assertTrustedOrigin(req, this.config);
     const presented = readRefreshToken(req, bodyToken);
     if (!presented) throw new UnauthorizedException('Refresh token required');
     const result = await this.authService.refreshToken(presented);
@@ -72,6 +79,8 @@ export class AuthController {
     @Body('refreshToken') bodyToken: string,
     @Res({ passthrough: true }) res: Response,
   ) {
+    // CSRF: the cookie is SameSite=None, so reject forged cross-site logouts.
+    assertTrustedOrigin(req, this.config);
     const presented = readRefreshToken(req, bodyToken);
     clearRefreshCookie(res, this.config);
     if (presented) await this.authService.logout(presented);

@@ -6,9 +6,12 @@
  * platform admin and a logged-in store customer never collide:
  *
  *   - Customer access token  → in memory only (never localStorage; XSS-readable).
- *   - Customer refresh token  → sessionStorage `arya_store_refresh`, rotated on use
- *                               via POST /store/auth/refresh (its OWN refresh slot,
- *                               independent of the platform refresh cookie).
+ *   - Customer refresh token  → HttpOnly cookie `arya_store_refresh` (set by the
+ *                               server, invisible to JS), rotated on use via
+ *                               POST /store/auth/refresh with RFC 9700 family
+ *                               reuse detection. Its OWN cookie, independent of
+ *                               the platform `arya_refresh`. The client keeps only
+ *                               a non-sensitive `arya_store_has_session` hint.
  *   - Guest cart token        → localStorage `arya_cart_token`, sent as the
  *                               `X-Cart-Token` header on cart/checkout calls.
  *   - Guest order token       → NOT persisted globally; the caller holds it (it is
@@ -29,7 +32,9 @@ import { ApiError, api } from '@/lib/api';
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
 // sessionStorage / localStorage keys — kept distinct from the admin client's keys.
-const STORE_REFRESH_KEY = 'arya_store_refresh';
+// The refresh token itself is an HttpOnly cookie (not JS-readable); we persist
+// only a non-sensitive boolean hint that a customer session may exist.
+const STORE_SESSION_HINT = 'arya_store_has_session';
 const CART_TOKEN_KEY = 'arya_cart_token';
 
 /**
@@ -299,7 +304,7 @@ class StoreApiClient {
     this.token = null;
     this.refreshPromise = null;
     if (typeof window !== 'undefined') {
-      sessionStorage.removeItem(STORE_REFRESH_KEY);
+      sessionStorage.removeItem(STORE_SESSION_HINT);
     }
   }
 
@@ -342,21 +347,30 @@ class StoreApiClient {
     if (typeof window === 'undefined') return false;
     if (this.refreshPromise) return this.refreshPromise;
 
-    const refreshToken = sessionStorage.getItem(STORE_REFRESH_KEY);
-    if (!refreshToken) return false;
+    // The refresh token is an HttpOnly cookie (invisible to JS); only a
+    // non-sensitive hint gates the attempt so we don't refresh for a visitor
+    // who never logged in this tab.
+    if (!sessionStorage.getItem(STORE_SESSION_HINT)) return false;
 
     this.refreshPromise = (async () => {
       try {
         const data = await this.request<CustomerAuthResult>('/store/auth/refresh', {
           method: 'POST',
-          body: { refreshToken },
+          // No body token — the HttpOnly cookie carries it (credentials:include).
+          body: {},
           auth: false,
           skipAuthRetry: true,
         });
         this.token = data.accessToken;
-        sessionStorage.setItem(STORE_REFRESH_KEY, data.refreshToken);
+        sessionStorage.setItem(STORE_SESSION_HINT, '1');
         return true;
-      } catch {
+      } catch (err) {
+        // Only a definitive auth failure (401) means the session is truly dead.
+        // A transient error (timeout / 5xx / network) must NOT clear the hint, or
+        // the tab gets stuck logged-out after a blip while the cookie is still valid.
+        if (err instanceof ApiError && err.status === 401) {
+          sessionStorage.removeItem(STORE_SESSION_HINT);
+        }
         return false;
       } finally {
         this.refreshPromise = null;
@@ -420,6 +434,9 @@ class StoreApiClient {
         headers,
         body: body === undefined ? undefined : raw ? (body as BodyInit) : JSON.stringify(body),
         signal: controller.signal,
+        // Send the HttpOnly store refresh cookie on auth calls (refresh/logout).
+        // Backend CORS uses an explicit origin allow-list + credentials, so safe.
+        credentials: 'include',
       });
     } catch (error) {
       clearTimeout(timeoutId);
@@ -559,18 +576,16 @@ class StoreApiClient {
 
   async logoutCustomer(): Promise<void> {
     if (typeof window !== 'undefined') {
-      const rt = sessionStorage.getItem(STORE_REFRESH_KEY);
-      if (rt) {
-        // Fire-and-forget revocation — never block local logout on the network.
-        // `auth: false` is correct: the refresh token in the BODY is the credential
-        // the backend revokes (it is SHA-256-matched server-side), not the access
-        // token — so no Authorization header is needed. The endpoint is strict-tier
-        // rate-limited server-side to keep the hash lookup from being an enumeration
-        // oracle. Local state is cleared unconditionally below regardless of outcome.
-        this.request('/store/auth/logout', { method: 'POST', body: { refreshToken: rt }, auth: false }).catch(
-          () => undefined,
-        );
-      }
+      // Fire the revocation UNCONDITIONALLY (not gated on the per-tab session
+      // hint): the credential is the HttpOnly cookie, which is shared across all
+      // tabs and outlives sessionStorage — so a tab that never set the hint (or
+      // whose hint was cleared by a transient refresh failure) must still revoke
+      // the server-side family + clear the cookie, or logout wouldn't log you out.
+      // Fire-and-forget (never block local logout on the network); the endpoint is
+      // idempotent, generic-message, and strict-rate-limited, so it is not an oracle.
+      this.request('/store/auth/logout', { method: 'POST', body: {}, auth: false }).catch(
+        () => undefined,
+      );
     }
     this.clearCustomerToken();
   }
@@ -596,8 +611,10 @@ class StoreApiClient {
 
   private applyAuth(data: CustomerAuthResult): void {
     this.setCustomerToken(data.accessToken);
-    if (typeof window !== 'undefined' && data.refreshToken) {
-      sessionStorage.setItem(STORE_REFRESH_KEY, data.refreshToken);
+    // Refresh token is delivered as an HttpOnly cookie by the server; we only
+    // record the non-sensitive session hint so a reload knows to silently refresh.
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem(STORE_SESSION_HINT, '1');
     }
   }
 

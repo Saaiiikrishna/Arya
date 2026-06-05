@@ -4,14 +4,16 @@
  * Store customer identity context — a SEPARATE auth surface from the platform
  * `useAuth()` (src/lib/auth.tsx). The marketing store (/store, /articles,
  * checkout) has its own customer accounts, its own JWT pair, and its own token
- * slots (handled inside storeApi: in-memory access token + `arya_store_refresh`
- * in sessionStorage). The platform admin/applicant identity in `auth.tsx` is
- * untouched — the two can be authenticated independently in the same tab.
+ * slots (handled inside storeApi: in-memory access token + an HttpOnly
+ * `arya_store_refresh` cookie + a non-sensitive `arya_store_has_session` hint).
+ * The platform admin/applicant identity in `auth.tsx` is untouched — the two can
+ * be authenticated independently in the same tab.
  *
  * Mirrors the hydration pattern in `auth.tsx`: on mount, if there is no
- * in-memory access token, attempt a silent refresh from the persisted refresh
- * token; a failed refresh clears any stale credential. Once a token is present
- * (or freshly minted via login/register), `meCustomer()` hydrates the profile.
+ * in-memory access token, attempt a silent refresh (the HttpOnly cookie carries
+ * the refresh token); a failed refresh clears any stale credential. Once a token
+ * is present (or freshly minted via login/register), `meCustomer()` hydrates the
+ * profile.
  */
 
 import {
@@ -106,7 +108,8 @@ export function StoreAuthProvider({ children }: { children: ReactNode }) {
   const hydrate = useCallback(async () => {
     try {
       // Access token is in-memory only (inside storeApi); if it is gone after a
-      // reload, try a silent refresh from the persisted `arya_store_refresh`.
+      // reload, try a silent refresh — the HttpOnly `arya_store_refresh` cookie
+      // carries the refresh token, gated by the `arya_store_has_session` hint.
       if (!storeApi.getCustomerToken()) {
         const refreshed = await storeApi.refreshCustomer().catch(() => null);
         if (!refreshed) {
@@ -153,8 +156,9 @@ export function StoreAuthProvider({ children }: { children: ReactNode }) {
     async (input: StoreLoginInput): Promise<StoreCustomer> => {
       setLoading(true);
       try {
-        // storeApi.loginCustomer persists the token pair internally (own slot +
-        // arya_store_refresh), matching how api.login handles the platform pair.
+        // storeApi.loginCustomer applies the session internally (in-memory access
+        // token + session hint; refresh token arrives as an HttpOnly cookie),
+        // matching how api.login handles the platform pair.
         const res = await storeApi.loginCustomer(input);
         const next = pickCustomer(res) ?? pickCustomer(await storeApi.meCustomer());
         // Merge the guest cart while the session is live (before returning).
