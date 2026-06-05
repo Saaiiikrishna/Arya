@@ -146,6 +146,9 @@ export class ApplicantController {
     @Query('search') search?: string,
     @Query('status') status?: ApplicantStatus,
     @Query('batchId') batchId?: string,
+    // submission: 'submitted' (paid the fee — default), 'draft' (started but no
+    // captured payment yet), or 'all'. Drafts were previously invisible to admins.
+    @Query('submission') submission?: 'submitted' | 'draft' | 'all',
   ) {
     return this.applicantService.findAll({
       page: page ? parseInt(page) : undefined,
@@ -153,6 +156,7 @@ export class ApplicantController {
       search,
       status,
       batchId,
+      submission,
     });
   }
 

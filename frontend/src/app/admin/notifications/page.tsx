@@ -38,7 +38,7 @@ const TYPE_FILTERS = ['ALL', 'EMAIL', 'WHATSAPP', 'IN_APP'] as const;
 const STATUS_FILTERS = ['ALL', 'SENT', 'FAILED', 'PENDING'] as const;
 const PAGE_LIMIT = 25;
 
-export default function AdminNotificationsPage() {
+export default function AdminNotificationsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [meta, setMeta] = useState<ListMeta>({ total: 0, page: 1, totalPages: 1 });
   const [loading, setLoading] = useState(true);
@@ -165,20 +165,22 @@ export default function AdminNotificationsPage() {
   return (
     <div className="text-ink animate-fade-in px-8 py-12 max-w-[1200px] mx-auto min-h-screen">
       {/* Header */}
-      <header className="border-b border-hairline pb-8 mb-12 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
-        <div>
-          <Link href="/admin/dashboard" className="text-sm uppercase tracking-widest text-forest font-medium mb-3 inline-block">
-            ← Command Center
-          </Link>
-          <h1 className="font-serif text-5xl font-bold leading-none flex items-center gap-4">
-            <Bell className="w-10 h-10" />
-            Notification Log
-          </h1>
-          <p className="text-ink/50 mt-2 font-serif italic">
-            Audit every email &amp; WhatsApp dispatch — re-send failed emails.
-          </p>
-        </div>
-      </header>
+      {!embedded && (
+        <header className="border-b border-hairline pb-8 mb-12 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+          <div>
+            <Link href="/admin/dashboard" className="text-sm uppercase tracking-widest text-forest font-medium mb-3 inline-block">
+              ← Command Center
+            </Link>
+            <h1 className="font-serif text-5xl font-bold leading-none flex items-center gap-4">
+              <Bell className="w-10 h-10" />
+              Notification Log
+            </h1>
+            <p className="text-ink/50 mt-2 font-serif italic">
+              Audit every email &amp; WhatsApp dispatch — re-send failed emails.
+            </p>
+          </div>
+        </header>
+      )}
 
       {/* Filters */}
       <section className="mb-8 space-y-5">

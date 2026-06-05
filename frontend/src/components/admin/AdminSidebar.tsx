@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   LogOut, Menu, X,
   LayoutDashboard, FileQuestion, ShieldCheck, Package, Users, FileSignature,
-  MessageCircle, Bell, Briefcase, Heart, Settings,
+  Megaphone, Briefcase, Heart, Settings, Inbox,
   ShoppingBag, Tags, Receipt, ShoppingCart, Undo2, Ticket, LineChart,
   PenSquare, Star, Store,
   type LucideIcon,
@@ -21,29 +21,46 @@ interface NavItem {
   Icon: LucideIcon;
 }
 
-const navItems: NavItem[] = [
-  { href: '/admin/dashboard', label: 'Dashboard', Icon: LayoutDashboard },
-  { href: '/admin/questions', label: 'Questions', Icon: FileQuestion },
-  { href: '/admin/eligibility', label: 'Eligibility', Icon: ShieldCheck },
-  { href: '/admin/batches', label: 'Batches', Icon: Package },
-  { href: '/admin/users', label: 'Users', Icon: Users },
-  { href: '/admin/consent', label: 'Consent', Icon: FileSignature },
-  { href: '/admin/whatsapp', label: 'WhatsApp', Icon: MessageCircle },
-  { href: '/admin/notifications', label: 'Notifications', Icon: Bell },
-  { href: '/admin/investors', label: 'Investors', Icon: Briefcase },
-  { href: '/admin/donations', label: 'Donations', Icon: Heart },
-  { href: '/admin/settings', label: 'Settings', Icon: Settings },
-  // ─── Store / commerce ───
-  { href: '/admin/store/products', label: 'Products', Icon: ShoppingBag },
-  { href: '/admin/store/inventory', label: 'Inventory', Icon: Tags },
-  { href: '/admin/store/purchasing', label: 'Purchasing', Icon: Receipt },
-  { href: '/admin/store/orders', label: 'Orders', Icon: ShoppingCart },
-  { href: '/admin/store/returns', label: 'Returns', Icon: Undo2 },
-  { href: '/admin/store/coupons', label: 'Coupons', Icon: Ticket },
-  { href: '/admin/store/analytics', label: 'Store Analytics', Icon: LineChart },
-  { href: '/admin/store/articles', label: 'Articles', Icon: PenSquare },
-  { href: '/admin/store/reviews', label: 'Reviews', Icon: Star },
-  { href: '/admin/store/settings', label: 'Store Settings', Icon: Store },
+interface NavSection {
+  heading: string;
+  items: NavItem[];
+}
+
+// Grouped so the commerce surfaces (Products, Articles, Orders, …) are clearly
+// discoverable under a "Store" heading rather than buried at the bottom of one
+// long flat list.
+const navSections: NavSection[] = [
+  {
+    heading: 'Platform',
+    items: [
+      { href: '/admin/dashboard', label: 'Dashboard', Icon: LayoutDashboard },
+      { href: '/admin/applications', label: 'Applications', Icon: Inbox },
+      { href: '/admin/questions', label: 'Questions', Icon: FileQuestion },
+      { href: '/admin/eligibility', label: 'Eligibility', Icon: ShieldCheck },
+      { href: '/admin/batches', label: 'Batches', Icon: Package },
+      { href: '/admin/users', label: 'Users', Icon: Users },
+      { href: '/admin/consent', label: 'Consent', Icon: FileSignature },
+      { href: '/admin/communications', label: 'Communications', Icon: Megaphone },
+      { href: '/admin/investors', label: 'Investors', Icon: Briefcase },
+      { href: '/admin/donations', label: 'Donations', Icon: Heart },
+      { href: '/admin/settings', label: 'Settings', Icon: Settings },
+    ],
+  },
+  {
+    heading: 'Store',
+    items: [
+      { href: '/admin/store/products', label: 'Products', Icon: ShoppingBag },
+      { href: '/admin/store/articles', label: 'Articles', Icon: PenSquare },
+      { href: '/admin/store/orders', label: 'Orders', Icon: ShoppingCart },
+      { href: '/admin/store/inventory', label: 'Inventory', Icon: Tags },
+      { href: '/admin/store/purchasing', label: 'Purchasing', Icon: Receipt },
+      { href: '/admin/store/returns', label: 'Returns', Icon: Undo2 },
+      { href: '/admin/store/coupons', label: 'Coupons', Icon: Ticket },
+      { href: '/admin/store/reviews', label: 'Reviews', Icon: Star },
+      { href: '/admin/store/analytics', label: 'Store Analytics', Icon: LineChart },
+      { href: '/admin/store/settings', label: 'Store Settings', Icon: Store },
+    ],
+  },
 ];
 
 export default function AdminSidebar() {
@@ -114,28 +131,33 @@ export default function AdminSidebar() {
         </div>
 
         <nav className={styles.nav}>
-          {navItems.map((item) => {
-            // Exact match OR a true descendant (href + '/') so a leaf route never
-            // lights up a sibling that merely shares its string prefix. e.g.
-            // `/admin/store/orders` highlights on `/admin/store/orders/[id]` but
-            // `/admin/store` would NOT spuriously match `/admin/store-foo`.
-            const isActive =
-              pathname === item.href || pathname?.startsWith(`${item.href}/`);
-            const { Icon } = item;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setMobileOpen(false)}
-                className={`${styles.navItem} ${isActive ? styles.active : ''}`}
-              >
-                <span className={styles.navIcon} aria-hidden>
-                  <Icon className="w-[18px] h-[18px]" strokeWidth={1.75} />
-                </span>
-                <span className={styles.navLabel}>{item.label}</span>
-              </Link>
-            );
-          })}
+          {navSections.map((section) => (
+            <div key={section.heading} className={styles.navSection}>
+              <span className={styles.navSectionHeading}>{section.heading}</span>
+              {section.items.map((item) => {
+                // Exact match OR a true descendant (href + '/') so a leaf route never
+                // lights up a sibling that merely shares its string prefix. e.g.
+                // `/admin/store/orders` highlights on `/admin/store/orders/[id]` but
+                // `/admin/store` would NOT spuriously match `/admin/store-foo`.
+                const isActive =
+                  pathname === item.href || pathname?.startsWith(`${item.href}/`);
+                const { Icon } = item;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setMobileOpen(false)}
+                    className={`${styles.navItem} ${isActive ? styles.active : ''}`}
+                  >
+                    <span className={styles.navIcon} aria-hidden>
+                      <Icon className="w-[18px] h-[18px]" strokeWidth={1.75} />
+                    </span>
+                    <span className={styles.navLabel}>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
         </nav>
 
         <div className="p-4 border-t border-hairline flex flex-col gap-4">
