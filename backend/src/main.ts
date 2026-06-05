@@ -119,6 +119,14 @@ async function bootstrap() {
     bodyParser: false,
   });
 
+  // Behind Azure Container Apps' ingress (a single reverse-proxy hop), the direct
+  // socket peer is the ingress, NOT the client. Trust ONE proxy hop so Express
+  // derives req.ip / req.ips from X-Forwarded-For — otherwise the rate limiter
+  // (ThrottlerGuard) keys EVERY user to the same ingress IP, sharing one bucket
+  // and locking everyone out at once. `1` (not `true`) avoids trusting a
+  // client-spoofed X-Forwarded-For chain.
+  app.set('trust proxy', 1);
+
   // Request body-size limits (defends against oversized-payload DoS) while
   // keeping the rawBody buffer intact for webhook signature verification.
   const bodyLimit = '1mb';

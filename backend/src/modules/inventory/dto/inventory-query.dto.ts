@@ -77,7 +77,18 @@ function defaultPositiveInt(
   return ({ obj, key }) => {
     const raw = obj?.[key];
     if (raw === undefined || raw === null || raw === '') return fallback;
-    return raw; // preserved as-is so @IsInt()/@Min()/@Max() validate it
+    // Query params arrive as strings. Coerce a NUMERIC string to a number so the
+    // companion @IsInt()/@Min()/@Max() see a number (a bare string fails @IsInt()
+    // even for "50" — and this transform runs alongside @Type(()=>Number), so we
+    // must not hand back a string). Non-numeric garbage (e.g. "banana") is left
+    // as-is so @IsInt() correctly REJECTS it; "0"/"1.5"/"999" coerce to numbers
+    // and are then caught by @Min()/@IsInt()/@Max() as intended.
+    if (typeof raw === 'number') return raw;
+    if (typeof raw === 'string') {
+      const trimmed = raw.trim();
+      if (trimmed !== '' && Number.isFinite(Number(trimmed))) return Number(trimmed);
+    }
+    return raw; // non-numeric → preserved so @IsInt()/@Min()/@Max() reject it
   };
 }
 

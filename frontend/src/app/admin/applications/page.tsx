@@ -182,7 +182,9 @@ export default function ApplicationsPage() {
   return (
     <div className="text-ink animate-fade-in px-4 sm:px-6 lg:px-8 py-8 sm:py-12 max-w-[1200px] 3xl:max-w-[1600px] mx-auto min-h-screen">
       <header className="border-b border-hairline pb-6 mb-8">
-        <p className="text-sm uppercase tracking-widest text-forest font-medium mb-2">Command Center</p>
+        <Link href="/admin/dashboard" className="text-sm uppercase tracking-widest text-forest font-medium mb-2 inline-block hover:text-saffron-deep transition-colors">
+          ← Command Center
+        </Link>
         <h1 className="font-serif text-3xl sm:text-4xl font-bold leading-none">Applications</h1>
         <p className="mt-3 text-ink/60 font-sans text-sm max-w-2xl">
           Submitted applications are those that completed the application-fee payment. Drafts were
