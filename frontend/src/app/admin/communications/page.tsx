@@ -52,11 +52,12 @@ export default function CommunicationsPage() {
         </div>
       </div>
 
-      {/* Each tab renders its original page component (self-contained). */}
+      {/* Each tab renders its page component in EMBEDDED mode so the hub owns the
+          single header (the pages suppress their own title when embedded). */}
       <div>
-        {tab === 'announcements' && <AnnouncementsPage />}
-        {tab === 'whatsapp' && <AdminWhatsappPage />}
-        {tab === 'notifications' && <AdminNotificationsPage />}
+        {tab === 'announcements' && <AnnouncementsPage embedded />}
+        {tab === 'whatsapp' && <AdminWhatsappPage embedded />}
+        {tab === 'notifications' && <AdminNotificationsPage embedded />}
       </div>
     </div>
   );

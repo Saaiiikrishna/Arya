@@ -5,7 +5,7 @@ import { api } from '@/lib/api';
 import Link from 'next/link';
 import { Plus, Megaphone, Pencil, Trash2 } from 'lucide-react';
 
-export default function AnnouncementsPage() {
+export default function AnnouncementsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [batches, setBatches] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -82,16 +82,18 @@ export default function AnnouncementsPage() {
 
   return (
     <div className="text-ink animate-fade-in px-8 py-12 max-w-[1200px] mx-auto min-h-screen">
-      <header className="border-b border-hairline pb-8 mb-12 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
-        <div>
-          <Link href="/admin/dashboard" className="text-sm uppercase tracking-widest text-forest font-medium mb-3 inline-block">
-            ← Command Center
-          </Link>
-          <h1 className="font-serif text-5xl font-bold leading-none flex items-center gap-4">
-            <Megaphone className="w-10 h-10" />
-            Announcements
-          </h1>
-        </div>
+      <header className={`flex flex-col md:flex-row items-start md:items-end gap-6 ${embedded ? 'md:justify-end mb-8' : 'justify-between border-b border-hairline pb-8 mb-12'}`}>
+        {!embedded && (
+          <div>
+            <Link href="/admin/dashboard" className="text-sm uppercase tracking-widest text-forest font-medium mb-3 inline-block">
+              ← Command Center
+            </Link>
+            <h1 className="font-serif text-5xl font-bold leading-none flex items-center gap-4">
+              <Megaphone className="w-10 h-10" />
+              Announcements
+            </h1>
+          </div>
+        )}
         <button
           onClick={() => setShowCreateModal(true)}
           className="flex items-center gap-2 bg-saffron text-parchment px-5 py-3 text-xs uppercase tracking-widest font-semibold hover:bg-saffron-deep transition-colors"

@@ -15,7 +15,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   MARKETING: 'text-terracotta border-terracotta',
 };
 
-export default function AdminWhatsappPage() {
+export default function AdminWhatsappPage({ embedded = false }: { embedded?: boolean } = {}) {
   const router = useRouter();
   const { role, loading: authLoading } = useAuth();
   const [tab, setTab] = useState<Tab>('broadcast');
@@ -129,10 +129,12 @@ export default function AdminWhatsappPage() {
   return (
     <div className="text-ink animate-fade-in px-8 py-12 max-w-5xl mx-auto min-h-screen">
       <div className="space-y-8">
-        <div>
-          <h1 className="text-4xl font-serif font-black">WhatsApp</h1>
-          <p className="text-ink/50 text-sm uppercase tracking-widest mt-1">Meta Business API — WABA</p>
-        </div>
+        {!embedded && (
+          <div>
+            <h1 className="text-4xl font-serif font-black">WhatsApp</h1>
+            <p className="text-ink/50 text-sm uppercase tracking-widest mt-1">Meta Business API — WABA</p>
+          </div>
+        )}
 
         {/* Tab strip */}
         <div className="flex border-b border-ink/10">
