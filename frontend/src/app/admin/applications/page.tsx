@@ -60,6 +60,19 @@ function fmtDate(s?: string): string {
   return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+/**
+ * Answer.value is a JSON column (any shape): string / number / boolean / array
+ * (MULTISELECT) / object. Coerce to a display string so React never receives a
+ * non-primitive child (which would throw "Objects are not valid as a React child").
+ */
+function fmtAnswer(v: unknown): string {
+  if (v === null || v === undefined || v === '') return '—';
+  if (Array.isArray(v)) return v.map((x) => (x && typeof x === 'object' ? JSON.stringify(x) : String(x))).join(', ');
+  if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+  if (typeof v === 'object') return JSON.stringify(v);
+  return String(v);
+}
+
 interface ApplicantRow {
   id: string;
   firstName?: string;
@@ -76,11 +89,15 @@ export default function ApplicationsPage() {
   const [tab, setTab] = useState<Tab>('submitted');
   const [rows, setRows] = useState<ApplicantRow[]>([]);
   const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [actionId, setActionId] = useState<string | null>(null);
+
+  const PAGE_SIZE = 25;
 
   // Expanded detail (answers + documents), lazily loaded per applicant.
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -91,27 +108,32 @@ export default function ApplicationsPage() {
     setLoading(true);
     setError(null);
     try {
-      const params: Record<string, string> = { submission: tab, limit: '100' };
+      const params: Record<string, string> = { submission: tab, page: String(page), limit: String(PAGE_SIZE) };
       if (search) params.search = search;
       const res = await api.getApplicants(params);
       setRows((res?.data as ApplicantRow[]) ?? []);
       setTotal(res?.meta?.total ?? 0);
+      setTotalPages(Math.max(1, res?.meta?.totalPages ?? 1));
     } catch (e: any) {
       setError(e?.message || 'Failed to load applications.');
       setRows([]);
       setTotal(0);
+      setTotalPages(1);
     } finally {
       setLoading(false);
     }
-  }, [tab, search]);
+  }, [tab, search, page]);
 
   useEffect(() => {
     void fetchRows();
   }, [fetchRows]);
 
-  // Debounce the search box into `search`.
+  // Debounce the search box into `search` (resets to page 1).
   useEffect(() => {
-    const h = setTimeout(() => setSearch(searchInput.trim()), 350);
+    const h = setTimeout(() => {
+      setSearch(searchInput.trim());
+      setPage(1);
+    }, 350);
     return () => clearTimeout(h);
   }, [searchInput]);
 
@@ -180,6 +202,7 @@ export default function ApplicationsPage() {
             onClick={() => {
               setTab(id);
               setExpandedId(null);
+              setPage(1);
             }}
             className={`flex items-center gap-2 px-4 py-2.5 font-sans text-[11px] font-bold uppercase tracking-widest transition-colors -mb-px border-b-2 cursor-pointer ${
               tab === id
@@ -317,10 +340,10 @@ export default function ApplicationsPage() {
                               {detail[r.id].answers.map((a: any, i: number) => (
                                 <li key={a.id ?? i} className="border-l-2 border-hairline pl-3">
                                   <p className="font-sans text-xs font-semibold text-forest">
-                                    {a.question?.text ?? a.question?.questionText ?? a.question?.prompt ?? 'Question'}
+                                    {a.question?.label ?? 'Question'}
                                   </p>
                                   <p className="font-sans text-sm text-ink/75 whitespace-pre-wrap break-words">
-                                    {a.answer ?? a.value ?? a.response ?? '—'}
+                                    {fmtAnswer(a.value)}
                                   </p>
                                 </li>
                               ))}
@@ -357,6 +380,33 @@ export default function ApplicationsPage() {
               </Fragment>
             );
           })}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {!loading && !error && rows.length > 0 && totalPages > 1 && (
+        <div className="mt-5 flex items-center justify-between gap-4">
+          <span className="font-sans text-[11px] uppercase tracking-widest text-ink/45">
+            Page {page} of {totalPages} · {total} total
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="border border-hairline px-3 py-1.5 font-sans text-[10px] font-bold uppercase tracking-widest text-forest transition-colors hover:bg-forest hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-forest"
+            >
+              Prev
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="border border-hairline px-3 py-1.5 font-sans text-[10px] font-bold uppercase tracking-widest text-forest transition-colors hover:bg-forest hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-forest"
+            >
+              Next
+            </button>
+          </div>
         </div>
       )}
     </div>
