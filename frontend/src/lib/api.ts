@@ -38,30 +38,28 @@ class ApiClient {
     // Collapse concurrent callers onto a single in-flight refresh.
     if (this.refreshPromise) return this.refreshPromise;
 
-    // The refresh token itself lives in an HttpOnly cookie (invisible to JS, so
-    // an XSS payload can't exfiltrate it). We only keep a non-sensitive boolean
-    // hint in sessionStorage to know whether a session may exist — avoids a
-    // pointless refresh call for users who never logged in this tab.
-    if (!sessionStorage.getItem('arya_has_session')) return false;
+    // Refresh transport: the token is persisted in sessionStorage and sent in
+    // the request body. This is the RELIABLE path because the API is served from
+    // a DIFFERENT registrable domain than the SPA (api on *.azurecontainerapps.io,
+    // SPA on aryavartham.com), so the HttpOnly refresh cookie is a THIRD-PARTY
+    // cookie that Chrome/Safari/Firefox block — relying on it alone logs users
+    // out on every reload. `credentials:'include'` is still sent (below) so the
+    // cookie ALSO works automatically once the API is served same-site
+    // (api.aryavartham.com), at which point the body token can be retired.
+    const refreshToken = sessionStorage.getItem('arya_refresh');
+    if (!refreshToken) return false;
 
     this.refreshPromise = (async () => {
       try {
-        const data = await this.request<{ accessToken: string }>(
+        const data = await this.request<{ accessToken: string; refreshToken: string }>(
           '/admin/auth/refresh',
-          // No body token — the HttpOnly cookie carries it (credentials:include).
           // skipAuthRetry: a 401 here means the session is dead — don't recurse.
-          { method: 'POST', body: {}, skipAuthRetry: true },
+          { method: 'POST', body: { refreshToken }, skipAuthRetry: true },
         );
         this.token = data.accessToken;
-        sessionStorage.setItem('arya_has_session', '1');
+        if (data.refreshToken) sessionStorage.setItem('arya_refresh', data.refreshToken);
         return true;
-      } catch (err) {
-        // Only a definitive auth failure (401) means the session is truly dead.
-        // A transient error (timeout / 5xx / network) must NOT clear the hint, or
-        // the tab gets stuck logged-out after a blip while the cookie is still valid.
-        if (err instanceof ApiError && err.status === 401) {
-          sessionStorage.removeItem('arya_has_session');
-        }
+      } catch {
         return false;
       } finally {
         this.refreshPromise = null;
@@ -134,7 +132,7 @@ class ApiClient {
     this.token = null;
     this.refreshPromise = null;
     if (typeof window !== 'undefined') {
-      sessionStorage.removeItem('arya_has_session');
+      sessionStorage.removeItem('arya_refresh');
       sessionStorage.removeItem('arya_profile');
       localStorage.removeItem('arya_admin');
       // Bounce to the right login for the current area, avoiding redirect loops.
@@ -154,10 +152,11 @@ class ApiClient {
       admin: any;
     }>('/admin/auth/login', { method: 'POST', body: { email, password } });
     this.setToken(data.accessToken);
-    if (typeof window !== 'undefined') {
-      // Refresh token is now an HttpOnly cookie set by the server; only record
-      // the non-sensitive session hint.
-      sessionStorage.setItem('arya_has_session', '1');
+    if (typeof window !== 'undefined' && data.refreshToken) {
+      // Persist the refresh token so a silent refresh survives reload + works
+      // cross-domain. The server ALSO sets an HttpOnly cookie (used once the API
+      // is same-site); the body token is the reliable transport meanwhile.
+      sessionStorage.setItem('arya_refresh', data.refreshToken);
     }
     return data;
   }
@@ -169,22 +168,22 @@ class ApiClient {
       admin: any;
     }>('/admin/auth/google/callback', { method: 'POST', body: { token } });
     this.setToken(data.accessToken);
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('arya_has_session', '1');
+    if (typeof window !== 'undefined' && data.refreshToken) {
+      sessionStorage.setItem('arya_refresh', data.refreshToken);
     }
     return data;
   }
 
   logout() {
     if (typeof window !== 'undefined') {
-      // Fire the revocation UNCONDITIONALLY (not gated on the per-tab session
-      // hint): the credential is the HttpOnly cookie, shared across tabs and
-      // longer-lived than sessionStorage, so a tab that never set the hint (or
-      // whose hint was cleared by a transient refresh failure) must still revoke
-      // the server-side family + clear the cookie. Fire-and-forget; the endpoint
-      // is idempotent, generic, and rate-limited, so it is not an oracle.
-      this.request('/admin/auth/logout', { method: 'POST', body: {} }).catch(() => {});
-      sessionStorage.removeItem('arya_has_session');
+      const rt = sessionStorage.getItem('arya_refresh');
+      // Fire-and-forget revocation — send the token in the body (the reliable
+      // cross-domain credential); credentials:'include' also forwards the cookie
+      // when same-site. The endpoint revokes the whole token family server-side.
+      if (rt) {
+        this.request('/admin/auth/logout', { method: 'POST', body: { refreshToken: rt } }).catch(() => {});
+      }
+      sessionStorage.removeItem('arya_refresh');
       sessionStorage.removeItem('arya_profile'); // clear cached user/role too
       localStorage.removeItem('arya_admin'); // legacy key cleanup
     }
@@ -216,8 +215,8 @@ class ApiClient {
       admin: any;
     }>('/auth/otp/verify', { method: 'POST', body: { email, otp } });
     this.setToken(data.accessToken);
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('arya_has_session', '1');
+    if (typeof window !== 'undefined' && data.refreshToken) {
+      sessionStorage.setItem('arya_refresh', data.refreshToken);
     }
     return data;
   }
