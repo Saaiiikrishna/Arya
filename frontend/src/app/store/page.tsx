@@ -302,7 +302,7 @@ export default function StorePage() {
                 The Workshop Store
               </span>
             </div>
-            <h1 className="font-serif-display text-xl font-bold leading-tight tracking-[-0.02em] text-forest sm:text-2xl md:text-3xl">
+            <h1 className="font-serif text-xl font-bold leading-tight tracking-[-0.02em] text-forest sm:text-2xl md:text-3xl">
               Kits, components &amp; DIY projects
             </h1>
             <p className="mt-2 font-sans text-sm leading-relaxed text-ink/65">

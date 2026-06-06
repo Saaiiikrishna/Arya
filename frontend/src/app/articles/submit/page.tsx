@@ -597,7 +597,7 @@ export default function ArticleSubmitPage() {
           Step 1 of 2 · Write
         </span>
       </div>
-      <h1 className="font-serif-display font-bold text-5xl text-forest leading-[0.95] tracking-[-0.025em]">
+      <h1 className="font-serif font-bold text-5xl text-forest leading-[0.95] tracking-[-0.025em]">
         Write an article
       </h1>
       <p className="mt-4 font-sans text-ink/65 text-base leading-relaxed">

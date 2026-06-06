@@ -318,7 +318,7 @@ export default function ArticleDetailPage({ params }: PageProps) {
               )}
 
               {/* Title */}
-              <h1 className="font-serif-display font-bold text-3xl sm:text-4xl md:text-5xl text-forest leading-[1.02] tracking-[-0.02em]">
+              <h1 className="font-serif font-bold text-3xl sm:text-4xl md:text-5xl text-forest leading-[1.02] tracking-[-0.02em]">
                 {article.title}
               </h1>
 

@@ -202,7 +202,7 @@ function ArticlesIndex() {
                 The Journal
               </span>
             </div>
-            <h1 className="font-serif-display font-bold text-4xl sm:text-5xl md:text-6xl text-forest leading-[0.95] tracking-[-0.025em]">
+            <h1 className="font-serif font-bold text-4xl sm:text-5xl md:text-6xl text-forest leading-[0.95] tracking-[-0.025em]">
               Build logs &amp; teardowns
             </h1>
             <p className="mt-5 font-sans text-ink/70 text-base sm:text-lg leading-relaxed">
