@@ -490,7 +490,7 @@ function ProductView({
               {eyebrow}
             </span>
           )}
-          <h1 className="font-serif-display text-3xl font-bold leading-[1.02] tracking-[-0.02em] text-forest sm:text-4xl md:text-5xl">
+          <h1 className="font-serif text-3xl font-bold leading-[1.02] tracking-[-0.02em] text-forest sm:text-4xl md:text-5xl">
             {product.name}
           </h1>
 
@@ -826,7 +826,7 @@ function ReviewsSection({
 
   return (
     <div>
-      <h2 className="font-serif-display text-3xl font-bold tracking-[-0.02em] text-forest">
+      <h2 className="font-serif text-3xl font-bold tracking-[-0.02em] text-forest">
         Customer reviews
       </h2>
 
@@ -837,7 +837,7 @@ function ReviewsSection({
             {total > 0 ? (
               <>
                 <div className="flex items-end gap-3">
-                  <span className="font-serif-display text-5xl font-bold leading-none text-forest">
+                  <span className="font-serif text-5xl font-bold leading-none text-forest">
                     {summary.average.toFixed(1)}
                   </span>
                   <div className="pb-1">

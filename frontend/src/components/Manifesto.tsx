@@ -136,7 +136,7 @@ function HeroSection({ data, onApply, batchInfo }: { data: any; onApply: () => v
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.55 }}
-          className="text-[3rem] sm:text-6xl md:text-7xl lg:text-[7.5rem] 3xl:text-[8rem] font-serif font-bold leading-[0.9] text-forest tracking-[-0.025em] mb-8 md:mb-10"
+          className="text-[2.5rem] sm:text-5xl md:text-6xl lg:text-[5.5rem] 3xl:text-[6.5rem] font-serif font-bold leading-[0.9] text-forest tracking-[-0.025em] mb-8 md:mb-10"
         >
           {headlinePrefix}
           <br className="hidden sm:block" />

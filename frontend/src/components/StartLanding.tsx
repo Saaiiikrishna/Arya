@@ -108,7 +108,7 @@ export default function StartLanding() {
               initial={{ opacity: 0, y: 24 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.05 }}
-              className="font-serif font-bold text-forest leading-[0.92] tracking-[-0.03em] text-[2.75rem] sm:text-6xl md:text-7xl lg:text-[6.5rem] 3xl:text-[7.5rem]"
+              className="font-serif font-bold text-forest leading-[0.92] tracking-[-0.03em] text-[2.25rem] sm:text-5xl md:text-6xl lg:text-[5rem] 3xl:text-[6rem]"
             >
               Build the thing you<br className="hidden md:block" />{' '}
               can&rsquo;t stop <span className="text-saffron italic">thinking</span> about.
