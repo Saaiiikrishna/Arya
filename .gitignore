@@ -5,7 +5,10 @@ node_modules/
 
 # Build outputs
 dist/
-build/
+# Root-anchored so it does NOT match app route folders named "build"
+# (e.g. frontend/src/app/store/[slug]/build/). Real frontend build output is
+# already ignored by frontend/.gitignore.
+/build/
 .next/
 out/
 
