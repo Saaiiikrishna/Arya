@@ -136,7 +136,7 @@ function HeroSection({ data, onApply, batchInfo }: { data: any; onApply: () => v
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.55 }}
-          className="text-[3rem] sm:text-6xl md:text-7xl lg:text-[7.5rem] 3xl:text-[8rem] font-serif-display font-bold leading-[0.9] text-forest tracking-[-0.025em] mb-8 md:mb-10"
+          className="text-[3rem] sm:text-6xl md:text-7xl lg:text-[7.5rem] 3xl:text-[8rem] font-serif font-bold leading-[0.9] text-forest tracking-[-0.025em] mb-8 md:mb-10"
         >
           {headlinePrefix}
           <br className="hidden sm:block" />
@@ -552,7 +552,7 @@ function CtaSection({ data, onApply }: { data: any; onApply: () => void }) {
       transition={{ duration: 0.8 }}
     >
       <div className="py-40 flex flex-col items-center text-center">
-        <h2 className="font-serif-display font-bold text-6xl md:text-8xl text-parchment mb-16 max-w-5xl tracking-[-0.025em] leading-[0.9]">
+        <h2 className="font-serif font-bold text-6xl md:text-8xl text-parchment mb-16 max-w-5xl tracking-[-0.025em] leading-[0.9]">
           {data.headline}
         </h2>
         <button

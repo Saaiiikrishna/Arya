@@ -108,7 +108,7 @@ export default function StartLanding() {
               initial={{ opacity: 0, y: 24 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.05 }}
-              className="font-serif-display font-bold text-forest leading-[0.92] tracking-[-0.03em] text-[2.75rem] sm:text-6xl md:text-7xl lg:text-[6.5rem] 3xl:text-[7.5rem]"
+              className="font-serif font-bold text-forest leading-[0.92] tracking-[-0.03em] text-[2.75rem] sm:text-6xl md:text-7xl lg:text-[6.5rem] 3xl:text-[7.5rem]"
             >
               Build the thing you<br className="hidden md:block" />{' '}
               can&rsquo;t stop <span className="text-saffron italic">thinking</span> about.
@@ -211,7 +211,7 @@ export default function StartLanding() {
             <p className="font-sans text-[11px] uppercase tracking-[0.24em] text-saffron-glow font-bold mb-5">
               From idea to in-your-hands
             </p>
-            <h2 className="font-serif-display font-bold text-4xl sm:text-5xl md:text-6xl 3xl:text-7xl leading-[0.95] tracking-[-0.025em] mb-6 sm:mb-8">
+            <h2 className="font-serif font-bold text-4xl sm:text-5xl md:text-6xl 3xl:text-7xl leading-[0.95] tracking-[-0.025em] mb-6 sm:mb-8">
               Buy it ready.<br /><span className="italic text-alabaster">Or build it yourself.</span>
             </h2>
             <p className="font-sans text-parchment/70 text-base sm:text-lg leading-relaxed max-w-xl mb-8 sm:mb-10">
@@ -308,7 +308,7 @@ export default function StartLanding() {
             <MessageCircle className="w-3.5 h-3.5 text-saffron-deep" />
             <span className="font-sans text-[10px] uppercase tracking-[0.22em] font-bold text-forest/80">Pull up a chair</span>
           </div>
-          <h2 className="font-serif-display font-bold text-4xl sm:text-5xl md:text-7xl 3xl:text-8xl text-forest leading-[0.95] tracking-[-0.025em] mb-6 sm:mb-8">
+          <h2 className="font-serif font-bold text-4xl sm:text-5xl md:text-7xl 3xl:text-8xl text-forest leading-[0.95] tracking-[-0.025em] mb-6 sm:mb-8">
             The hardest part is<br /><span className="italic text-saffron">starting alone.</span>
           </h2>
           <p className="font-sans text-ink/70 text-base sm:text-lg md:text-xl leading-relaxed max-w-2xl mx-auto mb-10 sm:mb-12">
