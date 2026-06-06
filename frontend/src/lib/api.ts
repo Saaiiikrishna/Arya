@@ -757,6 +757,14 @@ class ApiClient {
     return this.request<{ success: boolean }>('/admin/settings', { method: 'PATCH', body: data });
   }
 
+  // ─── Homepage CMS media (admin) — presigned S3 PUT for section images/videos ──
+  async getAdminMediaUploadUrl(fileName: string, mimeType: string) {
+    return this.request<{ uploadUrl: string; publicUrl: string; key: string }>(
+      '/admin/settings/media-upload-url',
+      { method: 'POST', body: { fileName, mimeType } },
+    );
+  }
+
   // Visitor Analytics
   async getVisitorSummary(days = 30) {
     return this.request<any>(`/admin/settings/visitors/summary?days=${days}`);

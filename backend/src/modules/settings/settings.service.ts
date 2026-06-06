@@ -1,11 +1,51 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { randomUUID } from 'crypto';
 import { PrismaService } from '../../prisma';
 
 @Injectable()
 export class SettingsService {
   private readonly logger = new Logger(SettingsService.name);
+  private readonly s3: S3Client;
+  private readonly bucket: string;
+  private readonly region: string;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {
+    this.region = this.config.get<string>('AWS_REGION', 'ap-south-1');
+    this.bucket = this.config.get<string>('AWS_S3_BUCKET', 'arya-documents');
+    this.s3 = new S3Client({
+      region: this.region,
+      credentials: {
+        accessKeyId: this.config.get<string>('AWS_ACCESS_KEY_ID', ''),
+        secretAccessKey: this.config.get<string>('AWS_SECRET_ACCESS_KEY', ''),
+      },
+    });
+  }
+
+  /**
+   * Presign an S3 PUT for Homepage-CMS media (section images/videos). Admin-only
+   * (see SettingsController). Returns the upload URL + the eventual public URL.
+   */
+  async getMediaUploadUrl(
+    fileName: string,
+    mimeType: string,
+  ): Promise<{ uploadUrl: string; publicUrl: string; key: string }> {
+    const ext = (fileName.split('.').pop() ?? 'bin').toLowerCase();
+    const key = `homepage-media/${randomUUID()}.${ext}`;
+    const command = new PutObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+      ContentType: mimeType,
+    });
+    const uploadUrl = await getSignedUrl(this.s3, command, { expiresIn: 3600 });
+    const publicUrl = `https://${this.bucket}.s3.${this.region}.amazonaws.com/${key}`;
+    return { uploadUrl, publicUrl, key };
+  }
 
   async get(key: string): Promise<string | null> {
     const setting = await this.prisma.siteSetting.findUnique({ where: { key } });
@@ -45,7 +85,15 @@ export class SettingsService {
    * Returns only settings safe for public consumption (no secrets).
    */
   async getPublicSettings(): Promise<Record<string, string>> {
-    const publicKeys = ['logoMode', 'pledgePricing', 'next_batch_date'];
+    const publicKeys = [
+      'logoMode',
+      'pledgePricing',
+      'next_batch_date',
+      'homepageSections', // CMS-driven /startup landing content
+      'social_twitter',
+      'social_linkedin',
+      'social_instagram',
+    ];
     const settings = await this.prisma.siteSetting.findMany({
       where: { key: { in: publicKeys } },
     });

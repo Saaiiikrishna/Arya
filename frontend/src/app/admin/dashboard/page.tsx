@@ -11,6 +11,7 @@ import {
   AlertCircle, CheckCircle2, UserPlus, Scale, Calendar,
   Briefcase, Heart, GraduationCap, Zap, Film, Trophy,
   Inbox, ShoppingBag, Boxes, ShoppingCart, Newspaper, Ticket, Undo2, Receipt, Star, Store,
+  LayoutTemplate,
 } from 'lucide-react';
 
 interface Stats {
@@ -270,6 +271,13 @@ export default function DashboardPage() {
                   <span className="font-serif text-lg font-bold group-hover:text-forest transition-colors">Pitch Calendar</span>
                 </div>
                 <span className="text-[10px] uppercase tracking-widest text-ink/60 leading-relaxed mt-auto">Investor pitches & funding decisions</span>
+              </Link>
+              <Link href="/admin/homepage" className="border border-hairline p-5 bg-white hover:border-forest transition-all group flex flex-col">
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="group-hover:scale-110 transition-transform text-ink/40 group-hover:text-forest"><LayoutTemplate size={22} strokeWidth={1.5} /></span>
+                  <span className="font-serif text-lg font-bold group-hover:text-forest transition-colors">Homepage CMS</span>
+                </div>
+                <span className="text-[10px] uppercase tracking-widest text-ink/60 leading-relaxed mt-auto">Edit the public /startup landing sections</span>
               </Link>
               <Link href="/admin/settings" className="border border-hairline p-5 bg-white hover:border-forest transition-all group flex flex-col xl:col-span-2">
                 <div className="flex items-center gap-3 mb-3">
