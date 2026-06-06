@@ -14,7 +14,12 @@ interface ManifestoProps {
 }
 
 // ─── Batch status badge logic (dynamic, not CMS) ─────────────────────────────
-
+// Matte eyebrow pill (.mkt-pill): solid alabaster surface + 1px hairline, NO
+// backdrop-blur, NO glow (DESIGN.md §1/§7 — blur/glow are NOT part of this
+// design). Healthy "open" state pops in saffron; the urgency ramp climbs
+// marigold → terracotta-warm; closed states fall back to muted ink. Only the
+// dot colour, label colour, and the semantic border tint vary.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getBatchBadge(batchInfo: any) {
   const filled = batchInfo?.currentCount || 0;
   const total = batchInfo?.capacity || 1;
@@ -26,9 +31,7 @@ function getBatchBadge(batchInfo: any) {
       bannerText: 'Registrations Currently Closed',
       badgeBorder: 'border-ink/10',
       dotColor: 'bg-ink/30',
-      bgClass: 'bg-alabaster/90 backdrop-blur-xl',
       textColor: 'text-ink/60',
-      glowColor: 'transparent',
       isClosed: true,
     };
   }
@@ -37,58 +40,49 @@ function getBatchBadge(batchInfo: any) {
       bannerText: `Batch #${batchNum} Registrations Closed`,
       badgeBorder: 'border-ink/10',
       dotColor: 'bg-ink/30',
-      bgClass: 'bg-alabaster/90 backdrop-blur-xl',
       textColor: 'text-ink/60',
-      glowColor: 'transparent',
       isClosed: true,
     };
   }
   if (fillPercent >= 90) {
     return {
       bannerText: `Almost Full — Batch #${batchNum}`,
-      badgeBorder: 'border-red-900/30',
-      dotColor: 'bg-red-600',
-      bgClass: 'bg-red-50/95 backdrop-blur-xl',
-      textColor: 'text-red-900',
-      glowColor: 'rgba(220,38,38,0.7)',
+      badgeBorder: 'border-terracotta-warm/40',
+      dotColor: 'bg-terracotta-warm',
+      textColor: 'text-terracotta',
       isClosed: false,
     };
   }
   if (fillPercent >= 75) {
     return {
       bannerText: `Filling Fast — Batch #${batchNum}`,
-      badgeBorder: 'border-amber-900/30',
-      dotColor: 'bg-amber-600',
-      bgClass: 'bg-amber-50/95 backdrop-blur-xl',
-      textColor: 'text-amber-900',
-      glowColor: 'rgba(217,119,6,0.5)',
+      badgeBorder: 'border-marigold/50',
+      dotColor: 'bg-marigold',
+      textColor: 'text-warning',
       isClosed: false,
     };
   }
   if (fillPercent >= 50) {
     return {
       bannerText: `Applications Open for Batch #${batchNum}`,
-      badgeBorder: 'border-emerald-900/30',
-      dotColor: 'bg-emerald-600',
-      bgClass: 'bg-emerald-50/95 backdrop-blur-xl',
-      textColor: 'text-emerald-900',
-      glowColor: 'rgba(5,150,105,0.4)',
+      badgeBorder: 'border-saffron/30',
+      dotColor: 'bg-saffron',
+      textColor: 'text-saffron-deep',
       isClosed: false,
     };
   }
   return {
     bannerText: `Application Open for Batch #${batchNum}`,
-    badgeBorder: 'border-forest/20',
-    dotColor: 'bg-forest',
-    bgClass: 'bg-white/90 backdrop-blur-xl',
-    textColor: 'text-forest',
-    glowColor: 'rgba(31,60,44,0.4)',
+    badgeBorder: 'border-saffron/30',
+    dotColor: 'bg-saffron',
+    textColor: 'text-saffron-deep',
     isClosed: false,
   };
 }
 
 // ─── Section Renderers ────────────────────────────────────────────────────────
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function HeroSection({ data, onApply, batchInfo }: { data: any; onApply: () => void; batchInfo: any }) {
   const badge = getBatchBadge(batchInfo);
 
@@ -98,64 +92,55 @@ function HeroSection({ data, onApply, batchInfo }: { data: any; onApply: () => v
 
   return (
     <motion.section
-      className="relative min-h-[calc(100vh-80px)] flex flex-col justify-center pt-32 pb-20"
+      className="relative min-h-[calc(100dvh-80px)] flex flex-col justify-center pt-32 pb-20"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.6 }}
     >
-      {/* Batch status badge */}
+      {/* Batch status badge — matte .mkt-pill (alabaster surface + 1px hairline,
+          0 blur, 0 glow); the semantic state only re-tints the border + dot + label. */}
       <div className="absolute top-8 left-1/2 -translate-x-1/2 z-30 flex justify-center mt-4 w-full px-4">
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.2 }}
-          className={`relative group p-[1px] rounded-full flex items-center justify-center shadow-[0_4px_20px_rgb(0,0,0,0.04)] ${badge.isClosed ? '' : 'overflow-hidden'}`}
+          className={`mkt-pill cursor-default transition-colors duration-500 ${badge.badgeBorder}`}
         >
-          {!badge.isClosed && (
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ duration: 4, repeat: Infinity, ease: 'linear' }}
-              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] z-0"
-              style={{ background: `conic-gradient(from 0deg, transparent 0 270deg, ${badge.glowColor} 360deg)` }}
-            />
-          )}
-          <div className={`relative z-10 w-full inline-flex justify-center items-center px-4 md:px-5 py-2 rounded-full border ${badge.badgeBorder} ${badge.bgClass} cursor-default transition-colors duration-500`}>
-            <span className="relative flex items-center justify-center h-2 w-2 mr-3 shrink-0">
-              {!badge.isClosed && <span className={`animate-ping absolute inline-flex h-3 w-3 rounded-full opacity-60 ${badge.dotColor}`} />}
-              <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${badge.dotColor}`} />
-            </span>
-            <motion.span
-              className={`font-sans text-[10px] md:text-[11px] uppercase tracking-[0.2em] font-bold whitespace-nowrap ${badge.textColor}`}
-              animate={!badge.isClosed ? { opacity: [0.8, 1, 0.8] } : { opacity: 1 }}
-              transition={!badge.isClosed ? { duration: 2.5, repeat: Infinity, ease: 'easeInOut' } : {}}
-            >
-              {badge.bannerText}
-            </motion.span>
-          </div>
+          <span className="relative flex items-center justify-center h-2 w-2 shrink-0">
+            {!badge.isClosed && <span className={`animate-ping absolute inline-flex h-3 w-3 rounded-full opacity-60 ${badge.dotColor}`} />}
+            <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${badge.dotColor}`} />
+          </span>
+          <motion.span
+            className={`font-sans text-[10px] md:text-[11px] uppercase tracking-[0.2em] font-bold whitespace-nowrap ${badge.textColor}`}
+            animate={!badge.isClosed ? { opacity: [0.8, 1, 0.8] } : { opacity: 1 }}
+            transition={!badge.isClosed ? { duration: 2.5, repeat: Infinity, ease: 'easeInOut' } : {}}
+          >
+            {badge.bannerText}
+          </motion.span>
         </motion.div>
       </div>
 
-      <div className="flex flex-col items-center text-center max-w-5xl mx-auto mt-16 md:mt-8 px-4 relative z-10">
+      <div className="flex flex-col items-center text-center max-w-4xl 3xl:max-w-5xl mx-auto mt-16 md:mt-8 px-0 sm:px-4 relative z-10">
         {/* Eyebrow */}
         <motion.span
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.4 }}
-          className="font-sans text-[10px] sm:text-[11px] uppercase tracking-[0.3em] text-terracotta block mb-8 font-bold"
+          className="font-sans text-[10px] sm:text-[11px] uppercase tracking-[0.3em] text-terracotta-warm block mb-8 font-bold"
         >
           The Founder&apos;s Club
         </motion.span>
 
-        {/* Headline */}
+        {/* Headline — display serif, saffron accent */}
         <motion.h1
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.55 }}
-          className="text-[3.5rem] sm:text-6xl md:text-7xl lg:text-[7.5rem] font-serif leading-[0.88] text-forest tracking-tighter mb-8 md:mb-10"
+          className="text-[3rem] sm:text-6xl md:text-7xl lg:text-[7.5rem] 3xl:text-[8rem] font-serif-display font-bold leading-[0.9] text-forest tracking-[-0.025em] mb-8 md:mb-10"
         >
           {headlinePrefix}
           <br className="hidden sm:block" />
-          {' '}<span className="text-terracotta italic">{headlineAccent}</span>
+          {' '}<span className="text-saffron italic">{headlineAccent}</span>
         </motion.h1>
 
         {/* Hairline divider */}
@@ -188,7 +173,7 @@ function HeroSection({ data, onApply, batchInfo }: { data: any; onApply: () => v
           {data.body}
         </motion.p>
 
-        {/* CTAs */}
+        {/* CTAs — matte mkt buttons (saffron primary, ghost secondary) */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -196,16 +181,18 @@ function HeroSection({ data, onApply, batchInfo }: { data: any; onApply: () => v
           className="flex flex-col sm:flex-row gap-4 justify-center w-full sm:w-auto"
         >
           <button
+            type="button"
             onClick={onApply}
-            className="px-8 py-4 md:px-10 md:py-5 bg-forest text-parchment font-sans text-[10px] uppercase tracking-widest font-bold hover:bg-forest/90 transition-all shadow-[4px_4px_0px_0px_rgba(91,9,2,0.2)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none w-full sm:w-auto"
+            className="mkt-btn w-full sm:w-auto"
           >
             {data.cta_primary_label || 'Apply Now'}
           </button>
           <button
+            type="button"
             onClick={() =>
               document.getElementById(data.cta_secondary_anchor || 'how-it-works')?.scrollIntoView({ behavior: 'smooth' })
             }
-            className="px-8 py-4 md:px-10 md:py-5 border border-forest text-forest font-sans text-[10px] uppercase tracking-widest font-bold hover:bg-forest/5 transition-all outline-none w-full sm:w-auto"
+            className="mkt-btn-ghost w-full sm:w-auto"
           >
             {data.cta_secondary_label || 'How It Works'}
           </button>
@@ -215,6 +202,7 @@ function HeroSection({ data, onApply, batchInfo }: { data: any; onApply: () => v
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function HowItWorksSection({ data }: { data: any }) {
   const STAGES = data.steps || [];
   const [activeStep, setActiveStep] = useState(0);
@@ -232,23 +220,23 @@ function HowItWorksSection({ data }: { data: any }) {
   return (
     <motion.section
       id="how-it-works"
-      className="py-24 -mx-8 px-8 border-b border-hairline overflow-hidden relative"
+      className="py-24 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 border-b border-hairline overflow-hidden relative"
       initial={{ opacity: 0, y: 40 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, amount: 0.1 }}
       transition={{ duration: 0.8 }}
     >
-      <div className="max-w-screen-2xl mx-auto">
+      <div className="max-w-[1600px] mx-auto">
         <h2 className="text-4xl md:text-5xl font-serif text-forest mb-20 text-center tracking-tighter">
           {data.title?.split(' ').slice(0, -1).join(' ')}{' '}
-          <span className="text-terracotta italic">{data.title?.split(' ').slice(-1)}</span>
+          <span className="text-terracotta-warm italic">{data.title?.split(' ').slice(-1)}</span>
         </h2>
 
         {/* Desktop Timeline */}
         <div className="hidden md:block relative pt-12 pb-16">
           <div className="absolute top-[60px] left-0 w-full h-[2px] bg-forest/10" />
           <motion.div
-            className="absolute top-[59px] left-0 h-[4px] bg-gradient-to-r from-terracotta/80 to-terracotta rounded-r-full shadow-[0_0_12px_rgba(201,74,56,0.3)] origin-left"
+            className="absolute top-[59px] left-0 h-[4px] bg-saffron origin-left"
             initial={{ width: '10%' }}
             animate={{ width: `${(activeStep * (100 / Math.max(STAGES.length, 1))) + (100 / Math.max(STAGES.length * 2, 1))}%` }}
             transition={{ duration: 0.6, type: 'spring', bounce: 0.2 }}
@@ -261,14 +249,14 @@ function HowItWorksSection({ data }: { data: any }) {
                 <div key={item.id || i} className="relative pt-12 text-center group cursor-pointer select-none" onClick={() => setActiveStep(i)}>
                   <div className="absolute top-[-6px] left-1/2 -translate-x-1/2 z-10 flex flex-col items-center justify-center">
                     <motion.div
-                      className={`rounded-full shadow-md flex items-center justify-center transition-colors duration-300 ${isActive ? 'w-8 h-8 bg-terracotta border-4 border-white' : isPassed ? 'w-5 h-5 bg-terracotta border-2 border-white mt-1.5' : 'w-4 h-4 bg-forest/20 mt-2 border-2 border-white'}`}
+                      className={`rounded-full flex items-center justify-center transition-colors duration-300 ${isActive ? 'w-8 h-8 bg-saffron border-4 border-alabaster' : isPassed ? 'w-5 h-5 bg-saffron border-2 border-alabaster mt-1.5' : 'w-4 h-4 bg-forest/20 mt-2 border-2 border-alabaster'}`}
                       whileHover={{ scale: 1.15 }}
                     >
-                      {isActive && <div className="w-2 h-2 bg-white rounded-full" />}
-                      {isPassed && !isActive && <CheckCircle2 className="w-3 h-3 text-white" strokeWidth={3} />}
+                      {isActive && <div className="w-2 h-2 bg-alabaster rounded-full" />}
+                      {isPassed && !isActive && <CheckCircle2 className="w-3 h-3 text-alabaster" strokeWidth={3} />}
                     </motion.div>
                   </div>
-                  <motion.span className="font-serif text-sm italic block mb-2 transition-colors duration-300" animate={{ color: isActive ? '#C94A38' : '#8B8B8B' }}>
+                  <motion.span className="font-serif text-sm italic block mb-2 transition-colors duration-300" animate={{ color: isActive ? '#E85D04' : '#8B8B8B' }}>
                     {item.step}
                   </motion.span>
                   <motion.h4 className="font-serif text-xl mb-2 transition-colors duration-300 truncate px-2" animate={{ color: isActive ? '#1F3C2C' : '#8B8B8B' }}>
@@ -291,14 +279,14 @@ function HowItWorksSection({ data }: { data: any }) {
               <div key={item.id || i} className="flex gap-6 relative z-10 cursor-pointer" onClick={() => setActiveStep(i)}>
                 <div className="flex flex-col items-center mt-1">
                   <motion.div
-                    className={`rounded-full border-2 border-white shadow-sm flex items-center justify-center transition-colors duration-300 ${isActive ? 'w-6 h-6 bg-terracotta' : isPassed ? 'w-5 h-5 bg-terracotta' : 'w-4 h-4 bg-forest/20'} shrink-0`}
+                    className={`rounded-full border-2 border-alabaster flex items-center justify-center transition-colors duration-300 ${isActive ? 'w-6 h-6 bg-saffron' : isPassed ? 'w-5 h-5 bg-saffron' : 'w-4 h-4 bg-forest/20'} shrink-0`}
                   >
-                    {isActive && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
-                    {isPassed && !isActive && <CheckCircle2 className="w-3 h-3 text-white" strokeWidth={3} />}
+                    {isActive && <div className="w-1.5 h-1.5 bg-alabaster rounded-full" />}
+                    {isPassed && !isActive && <CheckCircle2 className="w-3 h-3 text-alabaster" strokeWidth={3} />}
                   </motion.div>
                 </div>
                 <div>
-                  <span className={`font-serif text-xs italic block mb-1 transition-colors duration-300 ${isActive ? 'text-terracotta' : 'text-ink/40'}`}>{item.step}</span>
+                  <span className={`font-serif text-xs italic block mb-1 transition-colors duration-300 ${isActive ? 'text-saffron' : 'text-ink/40'}`}>{item.step}</span>
                   <h4 className={`font-serif text-xl mb-1 transition-colors duration-300 ${isActive ? 'text-forest' : 'text-ink/60'}`}>{item.title}</h4>
                 </div>
               </div>
@@ -306,7 +294,7 @@ function HowItWorksSection({ data }: { data: any }) {
           })}
         </div>
 
-        {/* Swipable Stack Cards */}
+        {/* Swipable Stack Cards — matte alabaster frames, 1px hairline, NO shadow */}
         <div className="relative w-full h-[550px] flex items-center justify-center overflow-hidden">
           <AnimatePresence initial={false}>
             {STAGES.map((stage: any, i: number) => {
@@ -320,7 +308,7 @@ function HowItWorksSection({ data }: { data: any }) {
                   dragConstraints={{ left: 0, right: 0 }}
                   dragElastic={1}
                   onDragEnd={isCenter ? handleDragEnd : undefined}
-                  className="absolute w-full max-w-lg lg:max-w-2xl bg-white border border-hairline/40 overflow-hidden flex flex-col shadow-2xl cursor-grab active:cursor-grabbing will-change-[transform,opacity,filter]"
+                  className="absolute w-full max-w-lg lg:max-w-2xl bg-alabaster border border-hairline/40 overflow-hidden flex flex-col cursor-grab active:cursor-grabbing will-change-[transform,opacity,filter]"
                   animate={{
                     x: `${offset * 70}%`,
                     y: `${Math.abs(offset) * 4}%`,
@@ -343,18 +331,19 @@ function HowItWorksSection({ data }: { data: any }) {
                       )
                     ) : (
                       <>
-                        <div className="absolute inset-0 bg-gradient-to-tr from-forest/10 to-transparent mix-blend-multiply opacity-50" />
-                        <div className="w-24 h-24 rounded-full border border-terracotta/30 flex items-center justify-center opacity-70">
-                          <span className="font-serif text-terracotta italic text-3xl">{stage.step}</span>
+                        {/* Abstract placeholder visual — flat forest tint (no gradient) */}
+                        <div className="absolute inset-0 bg-forest/[0.06]" />
+                        <div className="relative w-24 h-24 rounded-full border border-saffron/30 flex items-center justify-center opacity-70">
+                          <span className="font-serif text-saffron italic text-3xl">{stage.step}</span>
                         </div>
                       </>
                     )}
                   </div>
                   {/* Card content */}
-                  <div className="p-8 md:p-10 flex flex-col flex-1 bg-white">
+                  <div className="p-8 md:p-10 flex flex-col flex-1 bg-alabaster">
                     <div className="flex items-center justify-between mb-4">
                       <span className="font-sans text-[10px] uppercase tracking-widest text-ink/40">Phase {stage.step}</span>
-                      <span className="w-8 h-px bg-terracotta/30" />
+                      <span className="w-8 h-px bg-saffron/30" />
                     </div>
                     <h3 className="font-serif text-3xl md:text-4xl text-forest mb-4 leading-tight">{stage.title}</h3>
                     <p className="font-sans text-ink/70 leading-relaxed text-sm md:text-base">{stage.longDesc}</p>
@@ -370,8 +359,9 @@ function HowItWorksSection({ data }: { data: any }) {
           {STAGES.map((_: any, i: number) => (
             <button
               key={i}
+              type="button"
               onClick={() => setActiveStep(i)}
-              className={`transition-all duration-300 ${i === activeStep ? 'w-8 h-2 bg-terracotta' : 'w-2 h-2 bg-forest/20 hover:bg-forest/40'}`}
+              className={`transition-all duration-300 ${i === activeStep ? 'w-8 h-2 bg-saffron' : 'w-2 h-2 bg-forest/20 hover:bg-forest/40'}`}
             />
           ))}
         </div>
@@ -380,6 +370,7 @@ function HowItWorksSection({ data }: { data: any }) {
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function PromiseSection({ data }: { data: any }) {
   const items = data.items || [];
   return (
@@ -408,6 +399,7 @@ function PromiseSection({ data }: { data: any }) {
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function QuoteSection({ data }: { data: any }) {
   return (
     <motion.section
@@ -418,7 +410,7 @@ function QuoteSection({ data }: { data: any }) {
       transition={{ duration: 0.8 }}
     >
       <div className="max-w-5xl mx-auto">
-        <blockquote className="border-l-2 border-terracotta pl-8">
+        <blockquote className="border-l-2 border-terracotta-warm pl-8">
           <p className="font-serif text-4xl text-forest italic leading-snug">&ldquo;{data.quote}&rdquo;</p>
           {data.attribution && (
             <footer className="mt-6 font-sans text-[10px] uppercase tracking-widest text-ink/40">{data.attribution}</footer>
@@ -429,6 +421,7 @@ function QuoteSection({ data }: { data: any }) {
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function StatsBarSection({ data }: { data: any }) {
   const items = data.items || [];
   return (
@@ -439,7 +432,7 @@ function StatsBarSection({ data }: { data: any }) {
       viewport={{ once: true, amount: 0.1 }}
       transition={{ duration: 0.8 }}
     >
-      <div className={`grid gap-0 divide-x divide-hairline`} style={{ gridTemplateColumns: `repeat(${items.length}, 1fr)` }}>
+      <div className="grid gap-0 divide-x divide-hairline" style={{ gridTemplateColumns: `repeat(${items.length}, 1fr)` }}>
         {items.map((item: any, i: number) => (
           <motion.div
             key={item.id || i}
@@ -462,17 +455,18 @@ function StatsBarSection({ data }: { data: any }) {
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function BuilderModelSection({ data }: { data: any }) {
   const items = data.items || [];
   return (
     <motion.section
-      className="py-32 bg-forest -mx-8 px-8 text-parchment"
+      className="py-32 bg-forest -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 text-parchment"
       initial={{ opacity: 0, y: 40 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, amount: 0.1 }}
       transition={{ duration: 0.8 }}
     >
-      <div className="max-w-screen-2xl mx-auto text-center">
+      <div className="max-w-[1600px] mx-auto text-center">
         <h2 className="text-5xl md:text-7xl font-serif tracking-tighter mb-16 leading-tight">
           {data.headline} <span className="italic text-alabaster">{data.subheadline}</span>
         </h2>
@@ -482,7 +476,7 @@ function BuilderModelSection({ data }: { data: any }) {
               {i === 0 ? (
                 <div className="text-6xl font-serif text-alabaster italic font-bold">{item.stat}</div>
               ) : (
-                <div className="h-[2px] bg-alabaster/30 w-12" />
+                <div className="h-[2px] bg-saffron w-12" />
               )}
               <h3 className="font-sans text-[10px] uppercase tracking-[0.3em] opacity-80">{item.label}</h3>
               <p className="font-sans text-parchment/60 leading-relaxed text-sm">{item.description}</p>
@@ -499,6 +493,7 @@ function BuilderModelSection({ data }: { data: any }) {
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function PhilosophySection({ data }: { data: any }) {
   return (
     <motion.section
@@ -520,7 +515,6 @@ function PhilosophySection({ data }: { data: any }) {
             viewport={{ once: true, amount: 0.2 }}
             transition={{ duration: 0.7, delay: 0.2 }}
           >
-            <div className="absolute inset-0 bg-gradient-to-tr from-forest/20 to-transparent mix-blend-overlay z-10 pointer-events-none" />
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={data.imageUrl}
@@ -529,12 +523,12 @@ function PhilosophySection({ data }: { data: any }) {
             />
           </motion.div>
         )}
-        <div className="w-32 h-[2px] bg-terracotta mx-auto mb-12 opacity-30" />
+        <div className="w-32 h-[2px] bg-terracotta-warm mx-auto mb-12 opacity-30" />
         <p className="text-2xl md:text-3xl font-sans text-ink/80 leading-relaxed mb-6">
           {data.heading?.includes('women') ? (
             <>
               {data.heading.split('women')[0]}
-              <span className="italic text-forest"> women leaders.</span>
+              <span className="editorial-underline italic text-forest"> women leaders.</span>
             </>
           ) : (
             data.heading
@@ -547,31 +541,34 @@ function PhilosophySection({ data }: { data: any }) {
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function CtaSection({ data, onApply }: { data: any; onApply: () => void }) {
   return (
     <motion.section
-      className="border-t border-hairline relative overflow-hidden bg-forest -mx-8 px-8"
+      className="border-t border-hairline relative overflow-hidden bg-forest -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8"
       initial={{ opacity: 0, y: 40 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, amount: 0.1 }}
       transition={{ duration: 0.8 }}
     >
       <div className="py-40 flex flex-col items-center text-center">
-        <h2 className="font-serif text-6xl md:text-8xl text-parchment mb-16 max-w-5xl tracking-tighter leading-[0.9]">
+        <h2 className="font-serif-display font-bold text-6xl md:text-8xl text-parchment mb-16 max-w-5xl tracking-[-0.025em] leading-[0.9]">
           {data.headline}
         </h2>
         <button
+          type="button"
           onClick={onApply}
-          className="group relative inline-flex items-center justify-center px-16 py-8 bg-parchment text-forest font-sans text-sm uppercase tracking-[0.2em] font-bold hover:bg-parchment/90 transition-all duration-300 shadow-[8px_8px_0px_0px_rgba(91,9,2,0.3)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
+          className="mkt-btn group max-w-full text-xs sm:text-sm px-10 py-5 sm:px-16 sm:py-7"
         >
-          {data.cta_label || 'Apply Now'}
-          <ArrowRight className="ml-6 w-5 h-5 group-hover:translate-x-2 transition-transform" />
+          <span>{data.cta_label || 'Apply Now'}</span>
+          <ArrowRight className="w-5 h-5 shrink-0 group-hover:translate-x-1 transition-transform" />
         </button>
       </div>
     </motion.section>
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function CardCarouselSection({ data }: { data: any }) {
   const cards = data.cards || [];
   const [activeCard, setActiveCard] = useState(0);
@@ -610,7 +607,7 @@ function CardCarouselSection({ data }: { data: any }) {
                 dragConstraints={{ left: 0, right: 0 }}
                 dragElastic={1}
                 onDragEnd={isCenter ? handleDragEnd : undefined}
-                className="absolute w-full max-w-lg lg:max-w-2xl bg-white border border-hairline/40 overflow-hidden flex flex-col cursor-grab active:cursor-grabbing"
+                className="absolute w-full max-w-lg lg:max-w-2xl bg-alabaster border border-hairline/40 overflow-hidden flex flex-col cursor-grab active:cursor-grabbing"
                 animate={{
                   x: `${offset * 70}%`,
                   y: `${Math.abs(offset) * 4}%`,
@@ -634,12 +631,12 @@ function CardCarouselSection({ data }: { data: any }) {
                     <div className="text-forest/20 font-serif text-6xl font-bold">{i + 1}</div>
                   )}
                   {card.tag && (
-                    <span className="absolute top-4 right-4 bg-terracotta text-parchment font-sans text-[9px] uppercase tracking-widest px-3 py-1">
+                    <span className="absolute top-4 right-4 bg-saffron text-parchment font-sans text-[9px] uppercase tracking-widest px-3 py-1">
                       {card.tag}
                     </span>
                   )}
                 </div>
-                <div className="p-8 md:p-10 bg-white flex-1">
+                <div className="p-8 md:p-10 bg-alabaster flex-1">
                   <h3 className="font-serif text-3xl text-forest mb-4">{card.title}</h3>
                   <p className="font-sans text-ink/70 leading-relaxed text-sm">{card.description}</p>
                 </div>
@@ -652,8 +649,9 @@ function CardCarouselSection({ data }: { data: any }) {
         {cards.map((_: any, i: number) => (
           <button
             key={i}
+            type="button"
             onClick={() => setActiveCard(i)}
-            className={`transition-all duration-300 ${i === activeCard ? 'w-8 h-2 bg-terracotta' : 'w-2 h-2 bg-forest/20 hover:bg-forest/40'}`}
+            className={`transition-all duration-300 ${i === activeCard ? 'w-8 h-2 bg-saffron' : 'w-2 h-2 bg-forest/20 hover:bg-forest/40'}`}
           />
         ))}
       </div>
@@ -661,6 +659,7 @@ function CardCarouselSection({ data }: { data: any }) {
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function RichTextSection({ data }: { data: any }) {
   const bgMap: Record<string, string> = {
     parchment: 'bg-parchment',
@@ -674,7 +673,7 @@ function RichTextSection({ data }: { data: any }) {
   };
   return (
     <motion.section
-      className={`py-24 -mx-8 px-8 ${bgMap[data.background] || 'bg-parchment'}`}
+      className={`py-24 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 ${bgMap[data.background] || 'bg-parchment'}`}
       initial={{ opacity: 0, y: 40 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, amount: 0.1 }}
@@ -687,6 +686,7 @@ function RichTextSection({ data }: { data: any }) {
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function StepsSection({ data }: { data: any }) {
   const steps = data.steps || [];
   return (
@@ -709,7 +709,7 @@ function StepsSection({ data }: { data: any }) {
             transition={{ duration: 0.5, delay: i * 0.1 }}
           >
             <div className="col-span-2 md:col-span-1">
-              <span className="font-serif text-5xl text-terracotta italic font-bold leading-none">{step.number}</span>
+              <span className="font-serif text-5xl text-saffron italic font-bold leading-none">{step.number}</span>
             </div>
             <div className="col-span-10 md:col-span-11">
               <h3 className="font-serif text-2xl text-forest mb-3">{step.title}</h3>
@@ -782,14 +782,18 @@ export default function Manifesto({ onApply, batchInfo, settings }: ManifestoPro
     .sort((a, b) => a.order - b.order);
 
   return (
-    <div className="max-w-screen-2xl mx-auto px-8 relative">
+    <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 relative">
       {visibleSections.map((section) => renderSection(section, onApply, batchInfo))}
 
-      {/* Sticky Apply Button (Mobile) */}
+      {/* Sticky Apply Button (Mobile) — icon-only FAB on the matte saffron
+          contract (.mkt-btn colour/hover/active), padding overridden to a
+          fixed 64×64 square so the icon centres without text padding. */}
       <div className="fixed bottom-8 right-8 z-40 md:hidden">
         <button
+          type="button"
           onClick={onApply}
-          className="bg-forest text-parchment w-16 h-16 flex items-center justify-center shadow-2xl"
+          aria-label="Apply Now"
+          className="mkt-btn !p-0 w-16 h-16"
         >
           <Edit3 className="w-6 h-6" />
         </button>

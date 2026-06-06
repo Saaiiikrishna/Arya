@@ -86,7 +86,7 @@ function HeroEditor({ data, onChange }: { data: any; onChange: (d: any) => void 
     <div>
       <div className="grid grid-cols-2 gap-4">
         <Field><Label>Headline Prefix</Label><input className={inputCls} value={data.headline_prefix || ''} onChange={(e) => u('headline_prefix', e.target.value)} placeholder="Build a Startup in" /></Field>
-        <Field><Label>Headline Accent (shown in terracotta italic)</Label><input className={inputCls} value={data.headline_accent || ''} onChange={(e) => u('headline_accent', e.target.value)} placeholder="180 Days." /></Field>
+        <Field><Label>Headline Accent (shown in saffron italic)</Label><input className={inputCls} value={data.headline_accent || ''} onChange={(e) => u('headline_accent', e.target.value)} placeholder="180 Days." /></Field>
       </div>
       <Field><Label>Tagline (italic serif, shown below headline)</Label><input className={inputCls} value={data.tagline || ''} onChange={(e) => u('tagline', e.target.value)} /></Field>
       <Field><Label>Body</Label><textarea className={textareaCls} value={data.body || ''} onChange={(e) => u('body', e.target.value)} /></Field>
