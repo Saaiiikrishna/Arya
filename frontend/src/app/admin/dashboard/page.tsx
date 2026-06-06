@@ -249,6 +249,15 @@ export default function DashboardPage() {
                 </div>
                 <span className="text-[10px] uppercase tracking-widest text-ink/60 leading-relaxed mt-auto">Investor pitches & funding decisions</span>
               </Link>
+              <Link href="/admin/homepage" className="border border-hairline p-5 bg-white hover:border-terracotta hover:shadow-md shadow-sm transition-all group flex flex-col border-t-4 border-t-terracotta/40">
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="group-hover:scale-110 transition-transform text-ink/40 group-hover:text-terracotta">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                  </span>
+                  <span className="font-serif text-lg font-bold group-hover:text-terracotta transition-colors">Homepage CMS</span>
+                </div>
+                <span className="text-[10px] uppercase tracking-widest text-ink/60 leading-relaxed mt-auto">Design, content & section management</span>
+              </Link>
               <Link href="/admin/settings" className="border border-hairline p-5 bg-white hover:border-forest hover:shadow-md shadow-sm transition-all group flex flex-col xl:col-span-2">
                 <div className="flex items-center gap-3 mb-3">
                   <span className="group-hover:rotate-90 transition-transform text-ink/40 group-hover:text-forest"><Settings size={22} strokeWidth={1.5} /></span>

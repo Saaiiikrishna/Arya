@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Patch,
+  Post,
   Body,
   UseGuards,
   Query,
@@ -37,6 +38,14 @@ export class SettingsController {
   async updateSettings(@Body() body: Record<string, string>) {
     await this.settingsService.bulkSet(body);
     return { success: true };
+  }
+
+  @Post('admin/settings/media-upload-url')
+  @UseGuards(AdminGuard)
+  async getMediaUploadUrl(
+    @Body() body: { fileName: string; mimeType: string },
+  ) {
+    return this.settingsService.getMediaUploadUrl(body.fileName, body.mimeType);
   }
 
   // ─── Admin: Visitor Analytics ─────────────────────────

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { ScheduleModule } from '@nestjs/schedule';
+import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from '../../prisma';
 import { SettingsService } from './settings.service';
 import { VisitorService } from './visitor.service';
@@ -15,6 +16,7 @@ import { DataDeletionController } from './data-deletion.controller';
 @Module({
   imports: [
     PrismaModule,
+    ConfigModule,
     BullModule.registerQueue({ name: 'visitor-queue' }),
     ScheduleModule.forRoot(),
   ],

@@ -1038,6 +1038,14 @@ class ApiClient {
   async whatsappSendOne(data: { phone: string; templateName: string; parameters: string[] }) {
     return this.request<{ sent: boolean }>('/admin/whatsapp/send', { method: 'POST', body: data });
   }
+
+  // ─── Homepage CMS Media ───────────────────────────────────────
+  async getAdminMediaUploadUrl(fileName: string, mimeType: string) {
+    return this.request<{ uploadUrl: string; publicUrl: string; key: string }>(
+      '/admin/settings/media-upload-url',
+      { method: 'POST', body: { fileName, mimeType } },
+    );
+  }
 }
 
 export const api = new ApiClient();

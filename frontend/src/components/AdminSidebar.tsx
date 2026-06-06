@@ -13,6 +13,7 @@ const navItems = [
   { href: '/admin/batches', label: 'Batches', icon: '📦' },
   { href: '/admin/users', label: 'Users', icon: '👥' },
   { href: '/admin/consent', label: 'Consent', icon: '📝' },
+  { href: '/admin/homepage', label: 'Homepage CMS', icon: '🏠' },
   { href: '/admin/settings', label: 'Settings', icon: '⚙️' },
 ];
 

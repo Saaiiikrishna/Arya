@@ -52,7 +52,7 @@ export default function Layout({ children, activeTab = 'manifesto', onTabChange,
     <div className="min-h-screen flex flex-col selection:bg-forest selection:text-parchment">
       {showNav && (
         <header className="bg-parchment border-b border-hairline sticky top-0 z-50">
-          <nav className="flex justify-between items-center w-full px-8 py-6 max-w-screen-2xl mx-auto">
+          <nav className="flex justify-between items-center w-full px-4 sm:px-6 lg:px-8 py-4 md:py-6 max-w-screen-2xl min-[1920px]:max-w-[1800px] mx-auto">
             <div
               className={`flex cursor-pointer relative ${logoMode === 'svg' ? 'h-16 items-center w-48 md:w-64' : 'flex-col items-end'}`}
               onClick={() => handleNavigation('manifesto')}
@@ -113,7 +113,7 @@ export default function Layout({ children, activeTab = 'manifesto', onTabChange,
                 <img 
                   src={user.avatarUrl} 
                   alt="Profile" 
-                  className="w-8 h-8 rounded-full border border-hairline cursor-pointer hover:ring-2 hover:ring-forest/20 transition-all"
+                  className="w-8 h-8 rounded-full border border-hairline cursor-pointer hover:border-forest/50 transition-colors"
                   onClick={() => router.push('/profile')}
                 />
               ) : (
@@ -141,9 +141,9 @@ export default function Layout({ children, activeTab = 'manifesto', onTabChange,
         </AnimatePresence>
       </main>
 
-      <footer className="bg-parchment border-t border-hairline relative z-10 pt-16 pb-12 px-8">
-        <div className="max-w-screen-2xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-16">
+      <footer className="bg-parchment border-t border-hairline relative z-10 pt-16 pb-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-screen-2xl min-[1920px]:max-w-[1800px] mx-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-12 mb-16">
             <div className="flex flex-col border-l border-forest/20 pl-6">
               <div className="mb-6">
                 {logoMode === 'text' ? (
@@ -209,12 +209,50 @@ export default function Layout({ children, activeTab = 'manifesto', onTabChange,
             </div>
           </div>
 
+          {/* DPIIT Recognition */}
+          <div className="border-t border-hairline pt-10 mt-6 mb-8">
+            <div className="flex flex-col md:flex-row items-start md:items-center gap-6 md:gap-10">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="https://www.startupindia.gov.in/content/dam/invest-india/newhomepage/Logo1.png"
+                alt="Startup India"
+                className="h-10 object-contain opacity-80 hover:opacity-100 transition-opacity"
+              />
+              <div className="w-px h-10 bg-hairline hidden md:block" />
+              <div className="flex flex-col gap-1">
+                <span className="font-sans text-[10px] uppercase tracking-[0.18em] text-forest font-bold">
+                  DPIIT Recognized Startup
+                </span>
+                <span className="font-sans text-xs text-ink/60 leading-relaxed max-w-sm">
+                  Recognized by the Department for Promotion of Industry &amp; Internal Trade,
+                  Government of India
+                </span>
+                <span className="font-mono text-[9px] text-ink/35 uppercase tracking-widest mt-1">
+                  Recognition ID: DIPP197163
+                </span>
+              </div>
+              <div className="md:ml-auto flex flex-col items-start md:items-end gap-1">
+                <span className="font-sans text-[9px] uppercase tracking-widest text-ink/40">
+                  Verified under Startup India Programme
+                </span>
+                <a
+                  href="https://www.startupindia.gov.in/content/sih/en/blockchainverify/verify.html"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-sans text-[9px] uppercase tracking-widest text-terracotta/70 hover:text-terracotta transition-colors"
+                >
+                  Verify Certificate →
+                </a>
+              </div>
+            </div>
+          </div>
+
           <div className="flex flex-col md:flex-row justify-between items-center pt-8 border-t border-hairline gap-6">
-            <div className="flex gap-8">
+            <div className="flex flex-wrap justify-center gap-x-8 gap-y-2">
                <a href="/privacy" className="text-ink/40 font-sans text-[10px] uppercase tracking-widest hover:text-forest transition-colors">Privacy Policy</a>
                <a href="/terms" className="text-ink/40 font-sans text-[10px] uppercase tracking-widest hover:text-forest transition-colors">Terms of Service</a>
             </div>
-            <div className="text-ink/40 font-sans text-[10px] uppercase tracking-widest text-center md:text-right">
+            <div className="text-ink/40 font-sans text-[10px] uppercase tracking-widest text-center md:text-right break-words max-w-full">
               © {new Date().getFullYear()} Aryavartham. All rights reserved.
             </div>
           </div>
