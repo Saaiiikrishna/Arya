@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Patch,
+  Post,
   Body,
   UseGuards,
   Query,
@@ -30,6 +31,13 @@ export class SettingsController {
   @UseGuards(AdminGuard)
   async getAllSettings() {
     return this.settingsService.getAll();
+  }
+
+  /** Presign an S3 PUT for Homepage-CMS section media (admin only). */
+  @Post('admin/settings/media-upload-url')
+  @UseGuards(AdminGuard)
+  async getMediaUploadUrl(@Body() body: { fileName: string; mimeType: string }) {
+    return this.settingsService.getMediaUploadUrl(body.fileName, body.mimeType);
   }
 
   @Patch('admin/settings')

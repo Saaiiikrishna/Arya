@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   LogOut, Menu, X,
   LayoutDashboard, FileQuestion, ShieldCheck, Package, Users, FileSignature,
-  Megaphone, Briefcase, Heart, Settings, Inbox,
+  Megaphone, Briefcase, Heart, Settings, Inbox, LayoutTemplate,
   ShoppingBag, Tags, Receipt, ShoppingCart, Undo2, Ticket, LineChart,
   PenSquare, Star, Store,
   type LucideIcon,
@@ -41,6 +41,7 @@ const navSections: NavSection[] = [
       { href: '/admin/users', label: 'Users', Icon: Users },
       { href: '/admin/consent', label: 'Consent', Icon: FileSignature },
       { href: '/admin/communications', label: 'Communications', Icon: Megaphone },
+      { href: '/admin/homepage', label: 'Homepage CMS', Icon: LayoutTemplate },
       { href: '/admin/investors', label: 'Investors', Icon: Briefcase },
       { href: '/admin/donations', label: 'Donations', Icon: Heart },
       { href: '/admin/settings', label: 'Settings', Icon: Settings },
